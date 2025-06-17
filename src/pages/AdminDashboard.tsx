@@ -9,8 +9,7 @@ import {
   Settings, 
   Play, 
   LogOut, 
-  Monitor, 
-  MessageSquare
+  Monitor
 } from 'lucide-react';
 import StudentManagement from '@/components/admin/StudentManagement';
 import ActivityManagement from '@/components/admin/ActivityManagement';
@@ -18,7 +17,6 @@ import StudentRecords from '@/components/admin/StudentRecords';
 import AISettings from '@/components/admin/AISettings';
 import ClassManagement from '@/components/admin/ClassManagement';
 import RealTimeMonitoring from '@/components/admin/RealTimeMonitoring';
-import PromptManagement from '@/components/admin/PromptManagement';
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -41,8 +39,7 @@ const AdminDashboard = () => {
     { id: 'activities', label: '학습활동', icon: BookOpen, description: '학습 활동 생성 및 관리' },
     { id: 'records', label: '학생기록', icon: Monitor, description: '학생 활동 기록 열람' },
     { id: 'monitoring', label: '실시간모니터링', icon: Monitor, description: '실시간 학생 활동 모니터링' },
-    { id: 'prompts', label: '프롬프트관리', icon: MessageSquare, description: 'AI 프롬프트 템플릿 관리' },
-    { id: 'settings', label: 'AI설정', icon: Settings, description: 'AI 모델 및 프롬프트 설정' },
+    { id: 'settings', label: 'AI설정', icon: Settings, description: 'AI 모델, 프롬프트 및 템플릿 관리' },
     { id: 'class', label: '수업하기', icon: Play, description: '실시간 수업 관리' },
   ];
 
@@ -56,8 +53,6 @@ const AdminDashboard = () => {
         return <StudentRecords />;
       case 'monitoring':
         return <RealTimeMonitoring />;
-      case 'prompts':
-        return <PromptManagement />;
       case 'settings':
         return <AISettings />;
       case 'class':
