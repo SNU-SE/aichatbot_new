@@ -9,7 +9,176 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      [_ in never]: never
+      activities: {
+        Row: {
+          content: Json
+          created_at: string
+          file_url: string | null
+          id: string
+          title: string
+          type: string
+          updated_at: string
+        }
+        Insert: {
+          content?: Json
+          created_at?: string
+          file_url?: string | null
+          id?: string
+          title: string
+          type: string
+          updated_at?: string
+        }
+        Update: {
+          content?: Json
+          created_at?: string
+          file_url?: string | null
+          id?: string
+          title?: string
+          type?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      admin_settings: {
+        Row: {
+          anthropic_api_key: string | null
+          created_at: string
+          id: string
+          openai_api_key: string | null
+          rag_enabled: boolean | null
+          selected_model: string | null
+          selected_provider: string | null
+          system_prompt: string | null
+          updated_at: string
+        }
+        Insert: {
+          anthropic_api_key?: string | null
+          created_at?: string
+          id?: string
+          openai_api_key?: string | null
+          rag_enabled?: boolean | null
+          selected_model?: string | null
+          selected_provider?: string | null
+          system_prompt?: string | null
+          updated_at?: string
+        }
+        Update: {
+          anthropic_api_key?: string | null
+          created_at?: string
+          id?: string
+          openai_api_key?: string | null
+          rag_enabled?: boolean | null
+          selected_model?: string | null
+          selected_provider?: string | null
+          system_prompt?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      chat_logs: {
+        Row: {
+          activity_id: string | null
+          id: string
+          message: string
+          sender: string
+          student_id: string
+          timestamp: string
+        }
+        Insert: {
+          activity_id?: string | null
+          id?: string
+          message: string
+          sender: string
+          student_id: string
+          timestamp?: string
+        }
+        Update: {
+          activity_id?: string | null
+          id?: string
+          message?: string
+          sender?: string
+          student_id?: string
+          timestamp?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_logs_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_logs_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["student_id"]
+          },
+        ]
+      }
+      student_sessions: {
+        Row: {
+          created_at: string
+          id: string
+          is_online: boolean | null
+          last_active: string
+          student_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_online?: boolean | null
+          last_active?: string
+          student_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_online?: boolean | null
+          last_active?: string
+          student_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "student_sessions_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["student_id"]
+          },
+        ]
+      }
+      students: {
+        Row: {
+          class_name: string
+          created_at: string
+          id: string
+          mother_tongue: string | null
+          name: string | null
+          student_id: string
+          updated_at: string
+        }
+        Insert: {
+          class_name: string
+          created_at?: string
+          id?: string
+          mother_tongue?: string | null
+          name?: string | null
+          student_id: string
+          updated_at?: string
+        }
+        Update: {
+          class_name?: string
+          created_at?: string
+          id?: string
+          mother_tongue?: string | null
+          name?: string | null
+          student_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
