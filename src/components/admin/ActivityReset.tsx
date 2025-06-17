@@ -48,14 +48,6 @@ const ActivityReset = () => {
     setIsLoading(true);
     
     try {
-      // 활동과 관련된 모든 데이터 삭제
-      const { error: chatError } = await supabase
-        .from('chat_logs')
-        .delete()
-        .eq('activity_id', selectedActivity);
-
-      if (chatError) throw chatError;
-
       // 먼저 checklist_items의 ID들을 가져온 후 삭제
       const { data: checklistItems, error: checklistItemsError } = await supabase
         .from('checklist_items')
@@ -98,7 +90,7 @@ const ActivityReset = () => {
 
       toast({
         title: "성공",
-        description: "활동 데이터가 초기화되었습니다."
+        description: "활동 데이터가 초기화되었습니다. 채팅 로그는 보존되었습니다."
       });
 
       setSelectedActivity('');
@@ -126,7 +118,7 @@ const ActivityReset = () => {
     <div className="space-y-6">
       <div>
         <h2 className="text-3xl font-bold text-gray-900 mb-2">활동 초기화</h2>
-        <p className="text-gray-600">학습 활동의 모든 학생 데이터를 초기화합니다.</p>
+        <p className="text-gray-600">학습 활동의 학생 데이터를 초기화합니다. 채팅 로그는 보존됩니다.</p>
       </div>
 
       <Card>
@@ -143,15 +135,17 @@ const ActivityReset = () => {
               <div>
                 <h4 className="font-medium text-yellow-800">주의사항</h4>
                 <p className="text-sm text-yellow-700 mt-1">
-                  이 작업은 선택한 활동의 모든 학생 데이터를 영구적으로 삭제합니다:
+                  이 작업은 선택한 활동의 다음 학생 데이터를 영구적으로 삭제합니다:
                 </p>
                 <ul className="text-sm text-yellow-700 mt-2 ml-4 list-disc">
-                  <li>채팅 기록</li>
                   <li>체크리스트 진행 상황</li>
                   <li>논증 응답</li>
                   <li>동료 평가</li>
                   <li>평가 반성문</li>
                 </ul>
+                <p className="text-sm text-green-700 mt-2 font-medium">
+                  ✓ 채팅 기록은 보존됩니다
+                </p>
               </div>
             </div>
           </div>
@@ -191,7 +185,7 @@ const ActivityReset = () => {
                 <AlertDialogHeader>
                   <AlertDialogTitle>정말로 초기화하시겠습니까?</AlertDialogTitle>
                   <AlertDialogDescription>
-                    이 작업은 되돌릴 수 없습니다. 선택한 활동의 모든 학생 데이터가 영구적으로 삭제됩니다.
+                    이 작업은 되돌릴 수 없습니다. 선택한 활동의 학생 데이터가 영구적으로 삭제됩니다. 단, 채팅 로그는 보존됩니다.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
