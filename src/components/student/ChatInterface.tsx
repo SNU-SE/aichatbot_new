@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -53,7 +52,16 @@ const ChatInterface = ({ activity, studentId, onBack }: ChatInterfaceProps) => {
         .order('timestamp', { ascending: true });
 
       if (error) throw error;
-      setMessages(data || []);
+      
+      // Type cast the database response to match our Message interface
+      const typedMessages: Message[] = (data || []).map(item => ({
+        id: item.id,
+        sender: item.sender as 'student' | 'bot',
+        message: item.message,
+        timestamp: item.timestamp
+      }));
+      
+      setMessages(typedMessages);
     } catch (error: any) {
       toast({
         title: "오류",
