@@ -3,7 +3,20 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Users, BookOpen, BarChart3, Settings, Play, LogOut, Monitor, TrendingUp, MessageSquare } from 'lucide-react';
+import { 
+  Users, 
+  BookOpen, 
+  BarChart3, 
+  Settings, 
+  Play, 
+  LogOut, 
+  Monitor, 
+  TrendingUp, 
+  MessageSquare,
+  Database,
+  Shield,
+  Lock
+} from 'lucide-react';
 import StudentManagement from '@/components/admin/StudentManagement';
 import ActivityManagement from '@/components/admin/ActivityManagement';
 import StudentRecords from '@/components/admin/StudentRecords';
@@ -12,6 +25,9 @@ import ClassManagement from '@/components/admin/ClassManagement';
 import RealTimeMonitoring from '@/components/admin/RealTimeMonitoring';
 import AnalyticsDashboard from '@/components/admin/AnalyticsDashboard';
 import PromptManagement from '@/components/admin/PromptManagement';
+import DataBackupManager from '@/components/admin/DataBackupManager';
+import PrivacyManager from '@/components/admin/PrivacyManager';
+import SecurityLogger from '@/components/admin/SecurityLogger';
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -36,6 +52,9 @@ const AdminDashboard = () => {
     { id: 'monitoring', label: '실시간모니터링', icon: Monitor, description: '실시간 학생 활동 모니터링' },
     { id: 'analytics', label: '학습분석', icon: TrendingUp, description: '학습 데이터 분석 및 통계' },
     { id: 'prompts', label: '프롬프트관리', icon: MessageSquare, description: 'AI 프롬프트 템플릿 관리' },
+    { id: 'backup', label: '데이터백업', icon: Database, description: '데이터 백업 및 복원 관리' },
+    { id: 'privacy', label: '개인정보보호', icon: Shield, description: '개인정보 보호 및 데이터 관리' },
+    { id: 'security', label: '보안로그', icon: Lock, description: '세션 및 보안 이벤트 모니터링' },
     { id: 'settings', label: 'AI설정', icon: Settings, description: 'AI 모델 및 프롬프트 설정' },
     { id: 'class', label: '수업하기', icon: Play, description: '실시간 수업 관리' },
   ];
@@ -54,6 +73,12 @@ const AdminDashboard = () => {
         return <AnalyticsDashboard />;
       case 'prompts':
         return <PromptManagement />;
+      case 'backup':
+        return <DataBackupManager />;
+      case 'privacy':
+        return <PrivacyManager />;
+      case 'security':
+        return <SecurityLogger />;
       case 'settings':
         return <AISettings />;
       case 'class':
