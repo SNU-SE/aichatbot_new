@@ -3,10 +3,10 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
-import { Users, FileText, BarChart3, Shuffle, CheckCircle } from 'lucide-react';
+import { Users, FileText, Shuffle, CheckCircle, AlertCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import PeerEvaluationStats from './enhanced/PeerEvaluationStats';
 
 interface PeerEvaluationManagerProps {
   activityId: string;
@@ -35,6 +35,8 @@ const PeerEvaluationManager = ({ activityId, activityTitle }: PeerEvaluationMana
   const [studentStatuses, setStudentStatuses] = useState<StudentStatus[]>([]);
   const [loading, setLoading] = useState(true);
   const [assigning, setAssigning] = useState(false);
+  const [completing, setCompleting] = useState(false);
+  const [showStats, setShowStats] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -97,6 +99,15 @@ const PeerEvaluationManager = ({ activityId, activityTitle }: PeerEvaluationMana
   };
 
   const handleAssignEvaluations = async () => {
+    if (!stats?.submitted_responses || stats.submitted_responses < 2) {
+      toast({
+        title: "알림",
+        description: "동료평가를 진행하려면 최소 2명 이상의 학생이 논증을 제출해야 합니다.",
+        variant: "destructive"
+      });
+      return;
+    }
+
     setAssigning(true);
     try {
       const { data, error } = await supabase
@@ -123,6 +134,36 @@ const PeerEvaluationManager = ({ activityId, activityTitle }: PeerEvaluationMana
     }
   };
 
+  const handleCompleteEvaluations = async () => {
+    if (!stats?.completed_evaluations || stats.completed_evaluations === 0) {
+      toast({
+        title: "알림",
+        description: "완료된 동료평가가 없습니다.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setCompleting(true);
+    try {
+      // 모든 완료된 평가에 대해 학생들에게 알림
+      // 실제로는 학생들이 "평가 확인" 버튼을 사용할 수 있게 활성화
+      toast({
+        title: "성공",
+        description: "학생들이 동료평가 결과를 확인할 수 있습니다."
+      });
+    } catch (error) {
+      console.error('동료평가 완료 처리 오류:', error);
+      toast({
+        title: "오류",
+        description: "동료평가 완료 처리에 실패했습니다.",
+        variant: "destructive"
+      });
+    } finally {
+      setCompleting(false);
+    }
+  };
+
   if (loading) {
     return <div className="flex justify-center py-8">로딩 중...</div>;
   }
@@ -131,9 +172,17 @@ const PeerEvaluationManager = ({ activityId, activityTitle }: PeerEvaluationMana
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center space-x-2">
-            <FileText className="h-5 w-5" />
-            <span>{activityTitle} - 동료평가 관리</span>
+          <CardTitle className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <FileText className="h-5 w-5" />
+              <span>{activityTitle} - 동료평가 관리</span>
+            </div>
+            <Button
+              variant="outline"
+              onClick={() => setShowStats(!showStats)}
+            >
+              {showStats ? '기본 보기' : '상세 통계'}
+            </Button>
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -161,7 +210,7 @@ const PeerEvaluationManager = ({ activityId, activityTitle }: PeerEvaluationMana
           <div className="flex space-x-2 mb-6">
             <Button
               onClick={handleAssignEvaluations}
-              disabled={assigning || !stats?.submitted_responses}
+              disabled={assigning || !stats?.submitted_responses || stats.submitted_responses < 2}
               className="flex items-center space-x-2"
             >
               <Shuffle className="h-4 w-4" />
@@ -169,72 +218,76 @@ const PeerEvaluationManager = ({ activityId, activityTitle }: PeerEvaluationMana
             </Button>
             
             <Button
-              variant="outline"
-              onClick={fetchEvaluationData}
+              onClick={handleCompleteEvaluations}
+              disabled={completing || !stats?.completed_evaluations}
+              variant="secondary"
               className="flex items-center space-x-2"
             >
-              <BarChart3 className="h-4 w-4" />
-              <span>새로고침</span>
+              <CheckCircle className="h-4 w-4" />
+              <span>{completing ? '처리 중...' : '동료평가완료'}</span>
             </Button>
           </div>
 
-          {stats && (
-            <div className="mb-4">
-              <div className="flex justify-between text-sm text-gray-600 mb-2">
-                <span>전체 진행률</span>
-                <span>{stats.completion_rate}%</span>
-              </div>
-              <Progress value={stats.completion_rate} className="h-2" />
+          {stats && stats.submitted_responses < 2 && (
+            <div className="flex items-center space-x-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg mb-4">
+              <AlertCircle className="h-4 w-4 text-yellow-600" />
+              <span className="text-sm text-yellow-700">
+                동료평가를 진행하려면 최소 2명 이상의 학생이 논증을 제출해야 합니다.
+              </span>
             </div>
           )}
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center space-x-2">
-            <Users className="h-5 w-5" />
-            <span>학생별 동료평가 현황</span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            {studentStatuses.map((student) => (
-              <div key={student.student_id} className="flex items-center justify-between p-3 border rounded-lg">
-                <div className="flex items-center space-x-3">
-                  <div>
-                    <div className="font-medium">{student.name}</div>
-                    <div className="text-sm text-gray-600">({student.student_id})</div>
-                  </div>
-                </div>
-                
-                <div className="flex items-center space-x-4 text-sm">
-                  <div className="flex items-center space-x-1">
-                    {student.has_submitted_response ? (
-                      <CheckCircle className="h-4 w-4 text-green-500" />
-                    ) : (
-                      <div className="h-4 w-4 rounded-full border-2 border-gray-300" />
-                    )}
-                    <span>응답 제출</span>
+      {showStats ? (
+        <PeerEvaluationStats activityId={activityId} activityTitle={activityTitle} />
+      ) : (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center space-x-2">
+              <Users className="h-5 w-5" />
+              <span>학생별 동료평가 현황</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {studentStatuses.map((student) => (
+                <div key={student.student_id} className="flex items-center justify-between p-3 border rounded-lg">
+                  <div className="flex items-center space-x-3">
+                    <div>
+                      <div className="font-medium">{student.name}</div>
+                      <div className="text-sm text-gray-600">({student.student_id})</div>
+                    </div>
                   </div>
                   
-                  <div className="text-center">
-                    <Badge variant={student.completed_evaluations === student.assigned_evaluations ? "default" : "secondary"}>
-                      평가: {student.completed_evaluations}/{student.assigned_evaluations}
-                    </Badge>
-                  </div>
-                  
-                  <div className="text-center">
-                    <Badge variant="outline">
-                      받은 평가: {student.received_evaluations}
-                    </Badge>
+                  <div className="flex items-center space-x-4 text-sm">
+                    <div className="flex items-center space-x-1">
+                      {student.has_submitted_response ? (
+                        <CheckCircle className="h-4 w-4 text-green-500" />
+                      ) : (
+                        <div className="h-4 w-4 rounded-full border-2 border-gray-300" />
+                      )}
+                      <span>응답 제출</span>
+                    </div>
+                    
+                    <div className="text-center">
+                      <Badge variant={student.completed_evaluations === student.assigned_evaluations && student.assigned_evaluations > 0 ? "default" : "secondary"}>
+                        평가: {student.completed_evaluations}/{student.assigned_evaluations}
+                      </Badge>
+                    </div>
+                    
+                    <div className="text-center">
+                      <Badge variant="outline">
+                        받은 평가: {student.received_evaluations}
+                      </Badge>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 };

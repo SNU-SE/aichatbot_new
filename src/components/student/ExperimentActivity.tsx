@@ -3,9 +3,10 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Star, CheckCircle, Clock, Circle } from 'lucide-react';
+import { CheckCircle, Clock, Circle } from 'lucide-react';
 import { useChecklistProgress } from '@/hooks/useChecklistProgress';
 import ChatInterface from './ChatInterface';
+import ModuleProgress from './ModuleProgress';
 import { supabase } from '@/integrations/supabase/client';
 
 interface ExperimentActivityProps {
@@ -21,34 +22,38 @@ const ExperimentActivity = ({ activity, studentId, onBack }: ExperimentActivityP
   });
   const [modules, setModules] = useState<any[]>([]);
   const [currentModule, setCurrentModule] = useState(1);
-  const [stars, setStars] = useState(0);
+  const [completedModules, setCompletedModules] = useState(0);
 
   useEffect(() => {
     fetchModules();
   }, [activity.id]);
 
   useEffect(() => {
-    // Calculate completed modules and stars
+    // Calculate completed modules and update current module
     if (modules.length > 0 && items.length > 0) {
       const moduleItems = items.filter(item => item.module_id);
-      const completedByModule = modules.map(module => {
+      const moduleCompletionStatus = modules.map(module => {
         const moduleItemsList = moduleItems.filter(item => item.module_id === module.id);
         const completedCount = moduleItemsList.filter(item => item.is_completed).length;
         return {
           moduleId: module.id,
+          moduleNumber: module.module_number,
           total: moduleItemsList.length,
           completed: completedCount,
           isComplete: moduleItemsList.length > 0 && completedCount === moduleItemsList.length
         };
       });
       
-      const completedModules = completedByModule.filter(m => m.isComplete).length;
-      setStars(completedModules);
+      const completedCount = moduleCompletionStatus.filter(m => m.isComplete).length;
+      setCompletedModules(completedCount);
       
       // Update current module to first incomplete
-      const firstIncomplete = completedByModule.findIndex(m => !m.isComplete);
-      if (firstIncomplete !== -1) {
-        setCurrentModule(firstIncomplete + 1);
+      const firstIncomplete = moduleCompletionStatus.find(m => !m.isComplete);
+      if (firstIncomplete) {
+        setCurrentModule(firstIncomplete.moduleNumber);
+      } else if (completedCount === modules.length) {
+        // All modules completed
+        setCurrentModule(modules.length);
       }
     }
   }, [modules, items]);
@@ -104,21 +109,16 @@ const ExperimentActivity = ({ activity, studentId, onBack }: ExperimentActivityP
       <Card>
         <CardHeader>
           <div className="flex justify-between items-center">
-            <div className="flex items-center space-x-4">
-              <h2 className="text-xl font-bold">{activity.title}</h2>
-              <span className="text-sm text-gray-500">
-                모듈 {currentModule} / {modules.length}
-              </span>
-            </div>
-            <div className="flex items-center space-x-1">
-              {[...Array(Math.max(modules.length, 3))].map((_, i) => (
-                <Star 
-                  key={i} 
-                  className={`h-5 w-5 ${i < stars ? 'text-yellow-400 fill-current' : 'text-gray-300'}`} 
-                />
-              ))}
-            </div>
+            <h2 className="text-xl font-bold">{activity.title}</h2>
+            <Button variant="outline" onClick={onBack}>
+              목록으로
+            </Button>
           </div>
+          <ModuleProgress 
+            currentModule={currentModule}
+            totalModules={modules.length}
+            completedModules={completedModules}
+          />
         </CardHeader>
       </Card>
 
