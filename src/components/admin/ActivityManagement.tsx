@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Edit, Trash2, Search, Upload } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, Upload, FileText, X } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
@@ -17,7 +17,23 @@ interface Activity {
   type: string;
   content: any;
   file_url: string | null;
+  final_question: string | null;
+  modules_count: number | null;
   created_at: string;
+}
+
+interface Module {
+  id?: string;
+  module_number: number;
+  title: string;
+  steps: ChecklistItem[];
+}
+
+interface ChecklistItem {
+  id?: string;
+  step_number: number;
+  description: string;
+  module_id?: string;
 }
 
 const ActivityManagement = () => {
@@ -31,14 +47,20 @@ const ActivityManagement = () => {
   const [formData, setFormData] = useState({
     title: '',
     type: 'experiment',
-    content: {
-      description: '',
-      instructions: '',
-      materials: '',
-      expected_outcome: ''
-    },
+    final_question: '',
+    modules_count: 1,
     file_url: ''
   });
+
+  // 실험용 모듈 데이터
+  const [modules, setModules] = useState<Module[]>([
+    { module_number: 1, title: '', steps: [{ step_number: 1, description: '' }] }
+  ]);
+
+  // 논증/토의용 체크리스트
+  const [checklist, setChecklist] = useState<ChecklistItem[]>([
+    { step_number: 1, description: '' }
+  ]);
 
   useEffect(() => {
     fetchActivities();
@@ -68,38 +90,53 @@ const ActivityManagement = () => {
     e.preventDefault();
     
     try {
+      let activityData = {
+        title: formData.title,
+        type: formData.type,
+        content: {},
+        file_url: formData.file_url || null,
+        final_question: formData.type === 'argumentation' ? formData.final_question : null,
+        modules_count: formData.type === 'experiment' ? formData.modules_count : null
+      };
+
+      let activityId: string;
+
       if (editingActivity) {
         const { error } = await supabase
           .from('activities')
-          .update({
-            title: formData.title,
-            type: formData.type,
-            content: formData.content,
-            file_url: formData.file_url || null
-          })
+          .update(activityData)
           .eq('id', editingActivity.id);
 
         if (error) throw error;
-        toast({
-          title: "성공",
-          description: "활동이 수정되었습니다."
-        });
+        activityId = editingActivity.id;
+        
+        // 기존 모듈과 체크리스트 삭제
+        await supabase.from('checklist_items').delete().eq('activity_id', activityId);
+        await supabase.from('activity_modules').delete().eq('activity_id', activityId);
       } else {
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('activities')
-          .insert([{
-            title: formData.title,
-            type: formData.type,
-            content: formData.content,
-            file_url: formData.file_url || null
-          }]);
+          .insert([activityData])
+          .select()
+          .single();
 
         if (error) throw error;
-        toast({
-          title: "성공",
-          description: "새 활동이 생성되었습니다."
-        });
+        activityId = data.id;
       }
+
+      // 활동 타입에 따라 세부 데이터 저장
+      if (formData.type === 'experiment') {
+        await saveExperimentData(activityId);
+      } else if (formData.type === 'argumentation') {
+        await saveArgumentationData(activityId);
+      } else if (formData.type === 'discussion') {
+        await saveDiscussionData(activityId);
+      }
+
+      toast({
+        title: "성공",
+        description: editingActivity ? "활동이 수정되었습니다." : "새 활동이 생성되었습니다."
+      });
 
       resetForm();
       fetchActivities();
@@ -112,15 +149,117 @@ const ActivityManagement = () => {
     }
   };
 
-  const handleEdit = (activity: Activity) => {
+  const saveExperimentData = async (activityId: string) => {
+    for (const module of modules) {
+      const { data: moduleData, error: moduleError } = await supabase
+        .from('activity_modules')
+        .insert({
+          activity_id: activityId,
+          module_number: module.module_number,
+          title: module.title
+        })
+        .select()
+        .single();
+
+      if (moduleError) throw moduleError;
+
+      for (const step of module.steps) {
+        await supabase
+          .from('checklist_items')
+          .insert({
+            activity_id: activityId,
+            module_id: moduleData.id,
+            step_number: step.step_number,
+            description: step.description
+          });
+      }
+    }
+  };
+
+  const saveArgumentationData = async (activityId: string) => {
+    for (const item of checklist) {
+      await supabase
+        .from('checklist_items')
+        .insert({
+          activity_id: activityId,
+          step_number: item.step_number,
+          description: item.description
+        });
+    }
+  };
+
+  const saveDiscussionData = async (activityId: string) => {
+    for (const item of checklist) {
+      await supabase
+        .from('checklist_items')
+        .insert({
+          activity_id: activityId,
+          step_number: item.step_number,
+          description: item.description
+        });
+    }
+  };
+
+  const handleEdit = async (activity: Activity) => {
     setEditingActivity(activity);
     setFormData({
       title: activity.title,
       type: activity.type,
-      content: activity.content,
+      final_question: activity.final_question || '',
+      modules_count: activity.modules_count || 1,
       file_url: activity.file_url || ''
     });
+
+    // 기존 데이터 로드
+    if (activity.type === 'experiment') {
+      await loadExperimentData(activity.id);
+    } else {
+      await loadChecklistData(activity.id);
+    }
+    
     setShowForm(true);
+  };
+
+  const loadExperimentData = async (activityId: string) => {
+    const { data: moduleData } = await supabase
+      .from('activity_modules')
+      .select('*')
+      .eq('activity_id', activityId)
+      .order('module_number');
+
+    if (moduleData) {
+      const loadedModules: Module[] = [];
+      
+      for (const module of moduleData) {
+        const { data: steps } = await supabase
+          .from('checklist_items')
+          .select('*')
+          .eq('module_id', module.id)
+          .order('step_number');
+
+        loadedModules.push({
+          id: module.id,
+          module_number: module.module_number,
+          title: module.title,
+          steps: steps || []
+        });
+      }
+      
+      setModules(loadedModules);
+    }
+  };
+
+  const loadChecklistData = async (activityId: string) => {
+    const { data: items } = await supabase
+      .from('checklist_items')
+      .select('*')
+      .eq('activity_id', activityId)
+      .is('module_id', null)
+      .order('step_number');
+
+    if (items) {
+      setChecklist(items);
+    }
   };
 
   const handleDelete = async (activityId: string) => {
@@ -152,16 +291,70 @@ const ActivityManagement = () => {
     setFormData({
       title: '',
       type: 'experiment',
-      content: {
-        description: '',
-        instructions: '',
-        materials: '',
-        expected_outcome: ''
-      },
+      final_question: '',
+      modules_count: 1,
       file_url: ''
     });
+    setModules([{ module_number: 1, title: '', steps: [{ step_number: 1, description: '' }] }]);
+    setChecklist([{ step_number: 1, description: '' }]);
     setEditingActivity(null);
     setShowForm(false);
+  };
+
+  const addModule = () => {
+    const newModuleNumber = modules.length + 1;
+    setModules([...modules, {
+      module_number: newModuleNumber,
+      title: '',
+      steps: [{ step_number: 1, description: '' }]
+    }]);
+    setFormData({...formData, modules_count: newModuleNumber});
+  };
+
+  const removeModule = (moduleIndex: number) => {
+    if (modules.length > 1) {
+      const newModules = modules.filter((_, index) => index !== moduleIndex);
+      setModules(newModules.map((module, index) => ({
+        ...module,
+        module_number: index + 1
+      })));
+      setFormData({...formData, modules_count: newModules.length});
+    }
+  };
+
+  const addStep = (moduleIndex: number) => {
+    const newModules = [...modules];
+    const newStepNumber = newModules[moduleIndex].steps.length + 1;
+    newModules[moduleIndex].steps.push({
+      step_number: newStepNumber,
+      description: ''
+    });
+    setModules(newModules);
+  };
+
+  const removeStep = (moduleIndex: number, stepIndex: number) => {
+    const newModules = [...modules];
+    if (newModules[moduleIndex].steps.length > 1) {
+      newModules[moduleIndex].steps = newModules[moduleIndex].steps
+        .filter((_, index) => index !== stepIndex)
+        .map((step, index) => ({ ...step, step_number: index + 1 }));
+      setModules(newModules);
+    }
+  };
+
+  const addChecklistItem = () => {
+    setChecklist([...checklist, {
+      step_number: checklist.length + 1,
+      description: ''
+    }]);
+  };
+
+  const removeChecklistItem = (index: number) => {
+    if (checklist.length > 1) {
+      setChecklist(checklist
+        .filter((_, i) => i !== index)
+        .map((item, i) => ({ ...item, step_number: i + 1 })));
+    }
   };
 
   const filteredActivities = activities.filter(activity =>
@@ -214,10 +407,15 @@ const ActivityManagement = () => {
       {showForm && (
         <Card>
           <CardHeader>
-            <CardTitle>{editingActivity ? '활동 수정' : '새 활동 생성'}</CardTitle>
+            <CardTitle className="flex justify-between items-center">
+              {editingActivity ? '활동 수정' : '새 활동 생성'}
+              <Button variant="ghost" size="sm" onClick={resetForm}>
+                <X className="h-4 w-4" />
+              </Button>
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-6">
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="title">활동 제목</Label>
@@ -243,68 +441,153 @@ const ActivityManagement = () => {
                   </Select>
                 </div>
               </div>
-              
-              <div>
-                <Label htmlFor="description">활동 설명</Label>
-                <Textarea
-                  id="description"
-                  value={formData.content.description}
-                  onChange={(e) => setFormData({
-                    ...formData, 
-                    content: {...formData.content, description: e.target.value}
-                  })}
-                  placeholder="이 활동의 목적과 개요를 설명해주세요"
-                />
-              </div>
 
+              {/* 파일 업로드 */}
               <div>
-                <Label htmlFor="instructions">활동 지침</Label>
-                <Textarea
-                  id="instructions"
-                  value={formData.content.instructions}
-                  onChange={(e) => setFormData({
-                    ...formData, 
-                    content: {...formData.content, instructions: e.target.value}
-                  })}
-                  placeholder="학생들이 따라야 할 단계별 지침을 작성해주세요"
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="materials">필요 자료</Label>
-                <Textarea
-                  id="materials"
-                  value={formData.content.materials}
-                  onChange={(e) => setFormData({
-                    ...formData, 
-                    content: {...formData.content, materials: e.target.value}
-                  })}
-                  placeholder="이 활동에 필요한 자료나 준비물을 나열해주세요"
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="expected_outcome">기대 결과</Label>
-                <Textarea
-                  id="expected_outcome"
-                  value={formData.content.expected_outcome}
-                  onChange={(e) => setFormData({
-                    ...formData, 
-                    content: {...formData.content, expected_outcome: e.target.value}
-                  })}
-                  placeholder="이 활동을 통해 학생들이 얻을 수 있는 학습 결과"
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="file_url">첨부 파일 URL (선택)</Label>
+                <Label htmlFor="file_url">관련 파일 첨부 (RAG용 PDF)</Label>
                 <Input
                   id="file_url"
                   value={formData.file_url}
                   onChange={(e) => setFormData({...formData, file_url: e.target.value})}
-                  placeholder="관련 자료 링크나 파일 URL"
+                  placeholder="PDF 파일 URL 입력"
                 />
               </div>
+
+              {/* 논증 활동용 최종 질문 */}
+              {formData.type === 'argumentation' && (
+                <div>
+                  <Label htmlFor="final_question">최종 질문</Label>
+                  <Textarea
+                    id="final_question"
+                    value={formData.final_question}
+                    onChange={(e) => setFormData({...formData, final_question: e.target.value})}
+                    placeholder="논증 활동의 최종 질문을 입력하세요"
+                    required
+                  />
+                </div>
+              )}
+
+              {/* 실험 활동용 모듈 관리 */}
+              {formData.type === 'experiment' && (
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <Label>실험 모듈 ({modules.length}개)</Label>
+                    <Button type="button" onClick={addModule} size="sm">
+                      <Plus className="h-4 w-4 mr-1" />
+                      모듈 추가
+                    </Button>
+                  </div>
+                  
+                  {modules.map((module, moduleIndex) => (
+                    <Card key={moduleIndex} className="p-4">
+                      <div className="space-y-3">
+                        <div className="flex justify-between items-center">
+                          <Label>모듈 {module.module_number}</Label>
+                          {modules.length > 1 && (
+                            <Button 
+                              type="button" 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => removeModule(moduleIndex)}
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
+                        
+                        <Input
+                          value={module.title}
+                          onChange={(e) => {
+                            const newModules = [...modules];
+                            newModules[moduleIndex].title = e.target.value;
+                            setModules(newModules);
+                          }}
+                          placeholder="모듈 제목"
+                          required
+                        />
+                        
+                        <div className="space-y-2">
+                          <div className="flex justify-between items-center">
+                            <Label className="text-sm">실험 단계</Label>
+                            <Button 
+                              type="button" 
+                              onClick={() => addStep(moduleIndex)} 
+                              size="sm"
+                              variant="outline"
+                            >
+                              <Plus className="h-3 w-3 mr-1" />
+                              단계 추가
+                            </Button>
+                          </div>
+                          
+                          {module.steps.map((step, stepIndex) => (
+                            <div key={stepIndex} className="flex gap-2">
+                              <Input
+                                value={step.description}
+                                onChange={(e) => {
+                                  const newModules = [...modules];
+                                  newModules[moduleIndex].steps[stepIndex].description = e.target.value;
+                                  setModules(newModules);
+                                }}
+                                placeholder={`단계 ${step.step_number} 설명`}
+                                required
+                              />
+                              {module.steps.length > 1 && (
+                                <Button 
+                                  type="button" 
+                                  variant="outline" 
+                                  size="sm"
+                                  onClick={() => removeStep(moduleIndex, stepIndex)}
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              )}
+
+              {/* 논증/토의 활동용 체크리스트 */}
+              {(formData.type === 'argumentation' || formData.type === 'discussion') && (
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <Label>체크리스트 항목</Label>
+                    <Button type="button" onClick={addChecklistItem} size="sm">
+                      <Plus className="h-4 w-4 mr-1" />
+                      항목 추가
+                    </Button>
+                  </div>
+                  
+                  {checklist.map((item, index) => (
+                    <div key={index} className="flex gap-2">
+                      <Input
+                        value={item.description}
+                        onChange={(e) => {
+                          const newChecklist = [...checklist];
+                          newChecklist[index].description = e.target.value;
+                          setChecklist(newChecklist);
+                        }}
+                        placeholder={`체크리스트 ${item.step_number}`}
+                        required
+                      />
+                      {checklist.length > 1 && (
+                        <Button 
+                          type="button" 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => removeChecklistItem(index)}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
 
               <div className="flex justify-end space-x-2">
                 <Button type="button" variant="outline" onClick={resetForm}>
@@ -333,7 +616,8 @@ const ActivityManagement = () => {
               <TableRow>
                 <TableHead>제목</TableHead>
                 <TableHead>유형</TableHead>
-                <TableHead>설명</TableHead>
+                <TableHead>모듈/질문</TableHead>
+                <TableHead>파일</TableHead>
                 <TableHead>생성일</TableHead>
                 <TableHead>작업</TableHead>
               </TableRow>
@@ -343,8 +627,18 @@ const ActivityManagement = () => {
                 <TableRow key={activity.id}>
                   <TableCell className="font-medium">{activity.title}</TableCell>
                   <TableCell>{getTypeLabel(activity.type)}</TableCell>
-                  <TableCell className="max-w-xs truncate">
-                    {activity.content?.description || '-'}
+                  <TableCell>
+                    {activity.type === 'experiment' ? 
+                      `${activity.modules_count || 1}개 모듈` : 
+                      activity.final_question ? '최종질문 설정됨' : '-'
+                    }
+                  </TableCell>
+                  <TableCell>
+                    {activity.file_url ? (
+                      <FileText className="h-4 w-4 text-green-600" />
+                    ) : (
+                      <span className="text-gray-400">없음</span>
+                    )}
                   </TableCell>
                   <TableCell>{new Date(activity.created_at).toLocaleDateString('ko-KR')}</TableCell>
                   <TableCell>
@@ -370,7 +664,7 @@ const ActivityManagement = () => {
               ))}
               {filteredActivities.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center py-8 text-gray-500">
+                  <TableCell colSpan={6} className="text-center py-8 text-gray-500">
                     {searchTerm ? '검색 결과가 없습니다.' : '생성된 활동이 없습니다.'}
                   </TableCell>
                 </TableRow>

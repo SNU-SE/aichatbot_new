@@ -14,7 +14,9 @@ export type Database = {
           content: Json
           created_at: string
           file_url: string | null
+          final_question: string | null
           id: string
+          modules_count: number | null
           title: string
           type: string
           updated_at: string
@@ -23,7 +25,9 @@ export type Database = {
           content?: Json
           created_at?: string
           file_url?: string | null
+          final_question?: string | null
           id?: string
+          modules_count?: number | null
           title: string
           type: string
           updated_at?: string
@@ -32,12 +36,46 @@ export type Database = {
           content?: Json
           created_at?: string
           file_url?: string | null
+          final_question?: string | null
           id?: string
+          modules_count?: number | null
           title?: string
           type?: string
           updated_at?: string
         }
         Relationships: []
+      }
+      activity_modules: {
+        Row: {
+          activity_id: string
+          created_at: string
+          id: string
+          module_number: number
+          title: string
+        }
+        Insert: {
+          activity_id: string
+          created_at?: string
+          id?: string
+          module_number: number
+          title: string
+        }
+        Update: {
+          activity_id?: string
+          created_at?: string
+          id?: string
+          module_number?: number
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_modules_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "activities"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       admin_settings: {
         Row: {
@@ -74,6 +112,55 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      argumentation_responses: {
+        Row: {
+          activity_id: string
+          id: string
+          is_submitted: boolean | null
+          response_text: string
+          student_id: string
+          submitted_at: string
+        }
+        Insert: {
+          activity_id: string
+          id?: string
+          is_submitted?: boolean | null
+          response_text: string
+          student_id: string
+          submitted_at?: string
+        }
+        Update: {
+          activity_id?: string
+          id?: string
+          is_submitted?: boolean | null
+          response_text?: string
+          student_id?: string
+          submitted_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "argumentation_responses_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "argumentation_responses_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "student_activity_view"
+            referencedColumns: ["student_id"]
+          },
+          {
+            foreignKeyName: "argumentation_responses_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["student_id"]
+          },
+        ]
       }
       chat_logs: {
         Row: {
@@ -133,6 +220,159 @@ export type Database = {
           },
         ]
       }
+      checklist_items: {
+        Row: {
+          activity_id: string
+          created_at: string
+          description: string
+          id: string
+          module_id: string | null
+          step_number: number
+        }
+        Insert: {
+          activity_id: string
+          created_at?: string
+          description: string
+          id?: string
+          module_id?: string | null
+          step_number: number
+        }
+        Update: {
+          activity_id?: string
+          created_at?: string
+          description?: string
+          id?: string
+          module_id?: string | null
+          step_number?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "checklist_items_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "checklist_items_module_id_fkey"
+            columns: ["module_id"]
+            isOneToOne: false
+            referencedRelation: "activity_modules"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      evaluation_reflections: {
+        Row: {
+          activity_id: string
+          id: string
+          reflection_text: string
+          student_id: string
+          submitted_at: string
+          usefulness_rating: number | null
+        }
+        Insert: {
+          activity_id: string
+          id?: string
+          reflection_text: string
+          student_id: string
+          submitted_at?: string
+          usefulness_rating?: number | null
+        }
+        Update: {
+          activity_id?: string
+          id?: string
+          reflection_text?: string
+          student_id?: string
+          submitted_at?: string
+          usefulness_rating?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "evaluation_reflections_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "evaluation_reflections_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "student_activity_view"
+            referencedColumns: ["student_id"]
+          },
+          {
+            foreignKeyName: "evaluation_reflections_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["student_id"]
+          },
+        ]
+      }
+      peer_evaluations: {
+        Row: {
+          activity_id: string
+          created_at: string
+          evaluation_text: string | null
+          evaluator_id: string
+          id: string
+          is_completed: boolean | null
+          submitted_at: string | null
+          target_response_id: string
+        }
+        Insert: {
+          activity_id: string
+          created_at?: string
+          evaluation_text?: string | null
+          evaluator_id: string
+          id?: string
+          is_completed?: boolean | null
+          submitted_at?: string | null
+          target_response_id: string
+        }
+        Update: {
+          activity_id?: string
+          created_at?: string
+          evaluation_text?: string | null
+          evaluator_id?: string
+          id?: string
+          is_completed?: boolean | null
+          submitted_at?: string | null
+          target_response_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "peer_evaluations_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "peer_evaluations_evaluator_id_fkey"
+            columns: ["evaluator_id"]
+            isOneToOne: false
+            referencedRelation: "student_activity_view"
+            referencedColumns: ["student_id"]
+          },
+          {
+            foreignKeyName: "peer_evaluations_evaluator_id_fkey"
+            columns: ["evaluator_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["student_id"]
+          },
+          {
+            foreignKeyName: "peer_evaluations_target_response_id_fkey"
+            columns: ["target_response_id"]
+            isOneToOne: false
+            referencedRelation: "argumentation_responses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       prompt_templates: {
         Row: {
           category: string
@@ -156,6 +396,55 @@ export type Database = {
           prompt?: string
         }
         Relationships: []
+      }
+      student_checklist_progress: {
+        Row: {
+          checklist_item_id: string
+          completed_at: string | null
+          created_at: string
+          id: string
+          is_completed: boolean | null
+          student_id: string
+        }
+        Insert: {
+          checklist_item_id: string
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          is_completed?: boolean | null
+          student_id: string
+        }
+        Update: {
+          checklist_item_id?: string
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          is_completed?: boolean | null
+          student_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "student_checklist_progress_checklist_item_id_fkey"
+            columns: ["checklist_item_id"]
+            isOneToOne: false
+            referencedRelation: "checklist_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "student_checklist_progress_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "student_activity_view"
+            referencedColumns: ["student_id"]
+          },
+          {
+            foreignKeyName: "student_checklist_progress_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["student_id"]
+          },
+        ]
       }
       student_sessions: {
         Row: {
