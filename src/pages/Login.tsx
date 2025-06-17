@@ -6,11 +6,13 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { GraduationCap } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 
 const Login = () => {
   const [studentId, setStudentId] = useState('');
   const [password, setPassword] = useState('');
   const [showPasswordField, setShowPasswordField] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -23,41 +25,93 @@ const Login = () => {
     }
   };
 
-  const handleLogin = () => {
-    if (studentId === 'admin') {
-      if (password === '38874') {
-        localStorage.setItem('userType', 'admin');
-        navigate('/admin');
+  const validateStudentExists = async (studentId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('students')
+        .select('student_id, name, class_name')
+        .eq('student_id', studentId)
+        .single();
+
+      if (error && error.code === 'PGRST116') {
+        // No rows returned
+        return null;
+      }
+
+      if (error) {
+        console.error('Student validation error:', error);
+        throw error;
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Error validating student:', error);
+      return null;
+    }
+  };
+
+  const handleLogin = async () => {
+    if (isLoading) return;
+    
+    setIsLoading(true);
+
+    try {
+      if (studentId === 'admin') {
+        if (password === '38874') {
+          localStorage.setItem('userType', 'admin');
+          navigate('/admin');
+          toast({
+            title: "로그인 성공",
+            description: "관리자 모드로 로그인되었습니다.",
+          });
+        } else {
+          toast({
+            variant: "destructive",
+            title: "로그인 실패",
+            description: "비밀번호가 올바르지 않습니다.",
+          });
+        }
+      } else if (studentId.trim()) {
+        // 학생 존재 여부 확인
+        const student = await validateStudentExists(studentId);
+        
+        if (!student) {
+          toast({
+            variant: "destructive",
+            title: "로그인 실패",
+            description: "등록되지 않은 학번입니다. 관리자에게 문의하세요.",
+          });
+          return;
+        }
+
+        localStorage.setItem('userType', 'student');
+        localStorage.setItem('studentId', studentId);
+        navigate('/student');
         toast({
           title: "로그인 성공",
-          description: "관리자 모드로 로그인되었습니다.",
+          description: `${student.name}님 (${student.class_name}반)으로 로그인되었습니다.`,
         });
       } else {
         toast({
           variant: "destructive",
           title: "로그인 실패",
-          description: "비밀번호가 올바르지 않습니다.",
+          description: "학번을 입력해주세요.",
         });
       }
-    } else if (studentId.trim()) {
-      localStorage.setItem('userType', 'student');
-      localStorage.setItem('studentId', studentId);
-      navigate('/student');
-      toast({
-        title: "로그인 성공",
-        description: `학번 ${studentId}로 로그인되었습니다.`,
-      });
-    } else {
+    } catch (error) {
+      console.error('Login error:', error);
       toast({
         variant: "destructive",
         title: "로그인 실패",
-        description: "학번을 입력해주세요.",
+        description: "로그인 중 오류가 발생했습니다. 다시 시도해주세요.",
       });
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
+    if (e.key === 'Enter' && !isLoading) {
       handleLogin();
     }
   };
@@ -88,6 +142,7 @@ const Login = () => {
               value={studentId}
               onChange={handleStudentIdChange}
               onKeyPress={handleKeyPress}
+              disabled={isLoading}
               className="border-gray-300 focus:border-[rgb(15,15,112)] focus:ring-[rgb(15,15,112)]"
             />
           </div>
@@ -104,6 +159,7 @@ const Login = () => {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 onKeyPress={handleKeyPress}
+                disabled={isLoading}
                 className="border-gray-300 focus:border-[rgb(15,15,112)] focus:ring-[rgb(15,15,112)]"
               />
             </div>
@@ -111,9 +167,10 @@ const Login = () => {
           
           <Button 
             onClick={handleLogin}
+            disabled={isLoading}
             className="w-full bg-[rgb(15,15,112)] hover:bg-[rgb(12,12,90)] text-white font-medium py-2.5"
           >
-            로그인
+            {isLoading ? '로그인 중...' : '로그인'}
           </Button>
         </CardContent>
       </Card>
