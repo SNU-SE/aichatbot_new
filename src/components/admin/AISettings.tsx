@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -97,7 +98,12 @@ const AISettings = () => {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setTemplates(data || []);
+      // Ensure all templates have the is_active field with a default value
+      const templatesWithActive = (data || []).map(template => ({
+        ...template,
+        is_active: template.is_active ?? false
+      }));
+      setTemplates(templatesWithActive);
     } catch (error: any) {
       console.error('Error fetching templates:', error);
       toast({
