@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -122,8 +121,8 @@ const SecurityLogger = () => {
         .update({ is_online: false })
         .eq('student_id', studentId);
 
-      // 보안 로그 추가
-      logSecurityEvent('session_terminated', studentId, 'student', `세션 강제 종료: ${studentId}`);
+      // 보안 로그 추가 - logout 타입으로 변경
+      logSecurityEvent('logout', studentId, 'student', `세션 강제 종료: ${studentId}`);
       
       await fetchActiveSessions();
       
