@@ -56,17 +56,24 @@ const ActivityReset = () => {
 
       if (chatError) throw chatError;
 
-      const { error: checklistError } = await supabase
-        .from('student_checklist_progress')
-        .delete()
-        .in('checklist_item_id', 
-          supabase
-            .from('checklist_items')
-            .select('id')
-            .eq('activity_id', selectedActivity)
-        );
+      // 먼저 checklist_items의 ID들을 가져온 후 삭제
+      const { data: checklistItems, error: checklistItemsError } = await supabase
+        .from('checklist_items')
+        .select('id')
+        .eq('activity_id', selectedActivity);
 
-      if (checklistError) throw checklistError;
+      if (checklistItemsError) throw checklistItemsError;
+
+      if (checklistItems && checklistItems.length > 0) {
+        const checklistItemIds = checklistItems.map(item => item.id);
+        
+        const { error: checklistError } = await supabase
+          .from('student_checklist_progress')
+          .delete()
+          .in('checklist_item_id', checklistItemIds);
+
+        if (checklistError) throw checklistError;
+      }
 
       const { error: argError } = await supabase
         .from('argumentation_responses')
