@@ -5,6 +5,10 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Users, BookOpen, BarChart3, Settings, Play, LogOut } from 'lucide-react';
 import StudentManagement from '@/components/admin/StudentManagement';
+import ActivityManagement from '@/components/admin/ActivityManagement';
+import StudentRecords from '@/components/admin/StudentRecords';
+import AISettings from '@/components/admin/AISettings';
+import ClassManagement from '@/components/admin/ClassManagement';
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -24,7 +28,7 @@ const AdminDashboard = () => {
 
   const menuItems = [
     { id: 'students', label: '학생정보', icon: Users, description: '학생 계정 생성 및 관리' },
-    { id: 'activities', label: '학생활동', icon: BookOpen, description: '학습 활동 생성 및 관리' },
+    { id: 'activities', label: '학습활동', icon: BookOpen, description: '학습 활동 생성 및 관리' },
     { id: 'records', label: '학생기록', icon: BarChart3, description: '학생 활동 기록 열람' },
     { id: 'settings', label: 'AI설정', icon: Settings, description: 'AI 모델 및 프롬프트 설정' },
     { id: 'class', label: '수업하기', icon: Play, description: '실시간 수업 관리' },
@@ -34,6 +38,14 @@ const AdminDashboard = () => {
     switch (activeMenu) {
       case 'students':
         return <StudentManagement />;
+      case 'activities':
+        return <ActivityManagement />;
+      case 'records':
+        return <StudentRecords />;
+      case 'settings':
+        return <AISettings />;
+      case 'class':
+        return <ClassManagement />;
       case 'dashboard':
       default:
         return (
