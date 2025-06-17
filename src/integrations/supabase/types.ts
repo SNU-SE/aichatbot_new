@@ -262,6 +262,41 @@ export type Database = {
           },
         ]
       }
+      class_prompt_settings: {
+        Row: {
+          active_prompt_id: string | null
+          class_name: string
+          created_at: string
+          id: string
+          system_prompt: string | null
+          updated_at: string
+        }
+        Insert: {
+          active_prompt_id?: string | null
+          class_name: string
+          created_at?: string
+          id?: string
+          system_prompt?: string | null
+          updated_at?: string
+        }
+        Update: {
+          active_prompt_id?: string | null
+          class_name?: string
+          created_at?: string
+          id?: string
+          system_prompt?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "class_prompt_settings_active_prompt_id_fkey"
+            columns: ["active_prompt_id"]
+            isOneToOne: false
+            referencedRelation: "prompt_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       evaluation_reflections: {
         Row: {
           activity_id: string
@@ -378,25 +413,25 @@ export type Database = {
           category: string
           created_at: string
           id: string
-          is_active: boolean | null
           name: string
           prompt: string
+          target_class: string | null
         }
         Insert: {
           category?: string
           created_at?: string
           id?: string
-          is_active?: boolean | null
           name: string
           prompt: string
+          target_class?: string | null
         }
         Update: {
           category?: string
           created_at?: string
           id?: string
-          is_active?: boolean | null
           name?: string
           prompt?: string
+          target_class?: string | null
         }
         Relationships: []
       }

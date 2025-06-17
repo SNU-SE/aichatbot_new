@@ -8,7 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Save, Key, Bot, Settings, MessageSquare, Plus, Trash2, Copy, CheckCircle } from 'lucide-react';
+import { Save, Key, Bot, Settings, MessageSquare, Plus, Trash2, Copy, CheckCircle, Users } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
@@ -27,13 +27,25 @@ interface PromptTemplate {
   name: string;
   prompt: string;
   category: string;
-  is_active: boolean;
+  target_class: string | null;
   created_at: string;
+}
+
+interface ClassPromptSetting {
+  id: string;
+  class_name: string;
+  active_prompt_id: string | null;
+  system_prompt: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 const AISettings = () => {
   const [settings, setSettings] = useState<AdminSettings | null>(null);
   const [templates, setTemplates] = useState<PromptTemplate[]>([]);
+  const [classSettings, setClassSettings] = useState<ClassPromptSetting[]>([]);
+  const [classes, setClasses] = useState<string[]>([]);
+  const [selectedClass, setSelectedClass] = useState<string>('all');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const { toast } = useToast();
@@ -50,7 +62,8 @@ const AISettings = () => {
   const [newTemplate, setNewTemplate] = useState({
     name: '',
     prompt: '',
-    category: 'general'
+    category: 'general',
+    target_class: 'all'
   });
   const [selectedTemplate, setSelectedTemplate] = useState<PromptTemplate | null>(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -58,7 +71,18 @@ const AISettings = () => {
   useEffect(() => {
     fetchSettings();
     fetchTemplates();
+    fetchClasses();
+    fetchClassSettings();
   }, []);
+
+  useEffect(() => {
+    if (selectedClass && selectedClass !== 'all') {
+      const classSetting = classSettings.find(cs => cs.class_name === selectedClass);
+      if (classSetting) {
+        setFormData(prev => ({ ...prev, system_prompt: classSetting.system_prompt || '' }));
+      }
+    }
+  }, [selectedClass, classSettings]);
 
   const fetchSettings = async () => {
     try {
@@ -98,12 +122,7 @@ const AISettings = () => {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      // Ensure all templates have the is_active field with a default value
-      const templatesWithActive = (data || []).map(template => ({
-        ...template,
-        is_active: template.is_active ?? false
-      }));
-      setTemplates(templatesWithActive);
+      setTemplates(data || []);
     } catch (error: any) {
       console.error('Error fetching templates:', error);
       toast({
@@ -111,6 +130,35 @@ const AISettings = () => {
         description: "프롬프트 템플릿을 불러오는데 실패했습니다.",
         variant: "destructive"
       });
+    }
+  };
+
+  const fetchClasses = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('students')
+        .select('class_name')
+        .group('class_name');
+
+      if (error) throw error;
+      const uniqueClasses = [...new Set((data || []).map(item => item.class_name))];
+      setClasses(uniqueClasses);
+    } catch (error: any) {
+      console.error('Error fetching classes:', error);
+    }
+  };
+
+  const fetchClassSettings = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('class_prompt_settings')
+        .select('*')
+        .order('class_name');
+
+      if (error) throw error;
+      setClassSettings(data || []);
+    } catch (error: any) {
+      console.error('Error fetching class settings:', error);
     }
   };
 
@@ -160,7 +208,8 @@ const AISettings = () => {
           .update({
             name: newTemplate.name,
             prompt: newTemplate.prompt,
-            category: newTemplate.category
+            category: newTemplate.category,
+            target_class: newTemplate.target_class
           })
           .eq('id', selectedTemplate.id);
 
@@ -172,14 +221,14 @@ const AISettings = () => {
             name: newTemplate.name,
             prompt: newTemplate.prompt,
             category: newTemplate.category,
-            is_active: false
+            target_class: newTemplate.target_class
           }]);
 
         if (error) throw error;
       }
 
       await fetchTemplates();
-      setNewTemplate({ name: '', prompt: '', category: 'general' });
+      setNewTemplate({ name: '', prompt: '', category: 'general', target_class: 'all' });
       setSelectedTemplate(null);
       setIsEditing(false);
 
@@ -223,34 +272,49 @@ const AISettings = () => {
 
   const activateTemplate = async (template: PromptTemplate) => {
     try {
-      // 모든 템플릿을 비활성화
-      await supabase
-        .from('prompt_templates')
-        .update({ is_active: false })
-        .neq('id', '00000000-0000-0000-0000-000000000000');
+      const targetClass = selectedClass === 'all' ? 'all' : selectedClass;
+      
+      // Check if class setting exists
+      const existingSetting = classSettings.find(cs => cs.class_name === targetClass);
+      
+      if (existingSetting) {
+        const { error } = await supabase
+          .from('class_prompt_settings')
+          .update({
+            active_prompt_id: template.id,
+            system_prompt: template.prompt,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', existingSetting.id);
 
-      // 선택된 템플릿을 활성화
-      const { error } = await supabase
-        .from('prompt_templates')
-        .update({ is_active: true })
-        .eq('id', template.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('class_prompt_settings')
+          .insert([{
+            class_name: targetClass,
+            active_prompt_id: template.id,
+            system_prompt: template.prompt
+          }]);
 
-      if (error) throw error;
+        if (error) throw error;
+      }
 
-      // AI 설정의 시스템 프롬프트 업데이트
-      if (settings) {
+      // If global setting (all), also update admin_settings
+      if (targetClass === 'all' && settings) {
         await supabase
           .from('admin_settings')
           .update({ system_prompt: template.prompt })
           .eq('id', settings.id);
+        
+        setFormData(prev => ({ ...prev, system_prompt: template.prompt }));
       }
 
-      setFormData(prev => ({ ...prev, system_prompt: template.prompt }));
-      await fetchTemplates();
-
+      await fetchClassSettings();
+      
       toast({
         title: "성공",
-        description: `'${template.name}' 템플릿이 활성화되었습니다.`
+        description: `'${template.name}' 템플릿이 ${targetClass === 'all' ? '전체' : targetClass} 클래스에 활성화되었습니다.`
       });
     } catch (error: any) {
       console.error('Error activating template:', error);
@@ -267,7 +331,8 @@ const AISettings = () => {
     setNewTemplate({
       name: template.name,
       prompt: template.prompt,
-      category: template.category
+      category: template.category,
+      target_class: template.target_class || 'all'
     });
     setIsEditing(true);
   };
@@ -276,16 +341,33 @@ const AISettings = () => {
     setNewTemplate({
       name: `${template.name} (복사본)`,
       prompt: template.prompt,
-      category: template.category
+      category: template.category,
+      target_class: template.target_class || 'all'
     });
     setIsEditing(false);
     setSelectedTemplate(null);
   };
 
   const cancelEdit = () => {
-    setNewTemplate({ name: '', prompt: '', category: 'general' });
+    setNewTemplate({ name: '', prompt: '', category: 'general', target_class: 'all' });
     setSelectedTemplate(null);
     setIsEditing(false);
+  };
+
+  const getActiveTemplate = () => {
+    const targetClass = selectedClass === 'all' ? 'all' : selectedClass;
+    const classSetting = classSettings.find(cs => cs.class_name === targetClass);
+    if (classSetting && classSetting.active_prompt_id) {
+      return templates.find(t => t.id === classSetting.active_prompt_id);
+    }
+    return null;
+  };
+
+  const getFilteredTemplates = () => {
+    if (selectedClass === 'all') {
+      return templates;
+    }
+    return templates.filter(t => t.target_class === 'all' || t.target_class === selectedClass);
   };
 
   const getModelOptions = () => {
@@ -316,7 +398,7 @@ const AISettings = () => {
       <Tabs defaultValue="settings" className="w-full">
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="settings">AI 설정</TabsTrigger>
-          <TabsTrigger value="prompts">프롬프트 템플릿</TabsTrigger>
+          <TabsTrigger value="prompts">클래스별 프롬프트 템플릿</TabsTrigger>
         </TabsList>
 
         <TabsContent value="settings" className="space-y-6">
@@ -412,16 +494,16 @@ const AISettings = () => {
               </div>
 
               <div>
-                <Label htmlFor="system_prompt">현재 시스템 프롬프트</Label>
+                <Label htmlFor="system_prompt">기본 시스템 프롬프트</Label>
                 <Textarea
                   id="system_prompt"
                   value={formData.system_prompt}
                   onChange={(e) => setFormData({...formData, system_prompt: e.target.value})}
-                  placeholder="AI가 학생들과 상호작용할 때 따라야 할 지침을 입력하세요..."
+                  placeholder="AI가 학생들과 상호작용할 때 따라야 할 기본 지침을 입력하세요..."
                   rows={6}
                 />
                 <p className="text-sm text-gray-500 mt-1">
-                  직접 수정하거나 프롬프트 템플릿 탭에서 템플릿을 활성화하여 설정할 수 있습니다.
+                  클래스별 프롬프트가 설정되지 않은 경우 사용되는 기본 프롬프트입니다.
                 </p>
               </div>
             </CardContent>
@@ -466,6 +548,42 @@ const AISettings = () => {
         </TabsContent>
 
         <TabsContent value="prompts" className="space-y-6">
+          {/* 클래스 선택 */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center space-x-2">
+                <Users className="h-5 w-5" />
+                <span>클래스 선택</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center space-x-4">
+                <Label htmlFor="class-select">관리할 클래스:</Label>
+                <Select value={selectedClass} onValueChange={setSelectedClass}>
+                  <SelectTrigger className="w-48">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">전체 (기본값)</SelectItem>
+                    {classes.map(className => (
+                      <SelectItem key={className} value={className}>
+                        {className}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <div className="text-sm text-gray-500">
+                  {(() => {
+                    const activeTemplate = getActiveTemplate();
+                    return activeTemplate 
+                      ? `현재 활성: ${activeTemplate.name}`
+                      : '활성화된 템플릿 없음';
+                  })()}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* 템플릿 생성/편집 */}
             <Card>
@@ -486,23 +604,45 @@ const AISettings = () => {
                   />
                 </div>
 
-                <div>
-                  <Label htmlFor="template-category">카테고리</Label>
-                  <Select
-                    value={newTemplate.category}
-                    onValueChange={(value) => setNewTemplate({ ...newTemplate, category: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="general">일반</SelectItem>
-                      <SelectItem value="math">수학</SelectItem>
-                      <SelectItem value="science">과학</SelectItem>
-                      <SelectItem value="language">언어</SelectItem>
-                      <SelectItem value="creative">창의적 사고</SelectItem>
-                    </SelectContent>
-                  </Select>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="template-category">카테고리</Label>
+                    <Select
+                      value={newTemplate.category}
+                      onValueChange={(value) => setNewTemplate({ ...newTemplate, category: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="general">일반</SelectItem>
+                        <SelectItem value="math">수학</SelectItem>
+                        <SelectItem value="science">과학</SelectItem>
+                        <SelectItem value="language">언어</SelectItem>
+                        <SelectItem value="creative">창의적 사고</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="template-target-class">대상 클래스</Label>
+                    <Select
+                      value={newTemplate.target_class}
+                      onValueChange={(value) => setNewTemplate({ ...newTemplate, target_class: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">전체</SelectItem>
+                        {classes.map(className => (
+                          <SelectItem key={className} value={className}>
+                            {className}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
 
                 <div>
@@ -539,72 +679,83 @@ const AISettings = () => {
               <CardHeader>
                 <CardTitle className="flex items-center space-x-2">
                   <MessageSquare className="h-5 w-5" />
-                  <span>저장된 프롬프트 템플릿</span>
+                  <span>프롬프트 템플릿 목록</span>
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-3 max-h-96 overflow-y-auto">
-                  {templates.map((template) => (
-                    <div
-                      key={template.id}
-                      className={`p-3 border rounded-lg hover:bg-gray-50 ${
-                        template.is_active ? 'ring-2 ring-[rgb(15,15,112)] bg-blue-50' : ''
-                      }`}
-                    >
-                      <div className="flex justify-between items-start">
-                        <div className="flex-1">
-                          <div className="flex items-center space-x-2">
-                            <h4 className="font-medium text-gray-900">{template.name}</h4>
-                            {template.is_active && (
-                              <CheckCircle className="h-4 w-4 text-[rgb(15,15,112)]" />
+                  {getFilteredTemplates().map((template) => {
+                    const activeTemplate = getActiveTemplate();
+                    const isActive = activeTemplate?.id === template.id;
+                    
+                    return (
+                      <div
+                        key={template.id}
+                        className={`p-3 border rounded-lg hover:bg-gray-50 ${
+                          isActive ? 'ring-2 ring-[rgb(15,15,112)] bg-blue-50' : ''
+                        }`}
+                      >
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1">
+                            <div className="flex items-center space-x-2">
+                              <h4 className="font-medium text-gray-900">{template.name}</h4>
+                              {isActive && (
+                                <CheckCircle className="h-4 w-4 text-[rgb(15,15,112)]" />
+                              )}
+                            </div>
+                            <div className="flex items-center space-x-2 text-sm text-gray-500">
+                              <span className="capitalize">{template.category}</span>
+                              <span>•</span>
+                              <span>{template.target_class === 'all' ? '전체' : template.target_class}</span>
+                            </div>
+                            <p className="text-xs text-gray-400 mt-1 truncate">
+                              {template.prompt.substring(0, 100)}...
+                            </p>
+                          </div>
+                          <div className="flex flex-col space-y-1 ml-2">
+                            <div className="flex space-x-1">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => copyTemplate(template)}
+                              >
+                                <Copy className="h-3 w-3" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => editTemplate(template)}
+                              >
+                                편집
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => deleteTemplate(template.id)}
+                                className="text-red-600 hover:text-red-700"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </div>
+                            {!isActive && (
+                              <Button
+                                size="sm"
+                                onClick={() => activateTemplate(template)}
+                                className="bg-[rgb(15,15,112)] hover:bg-[rgb(15,15,112)]/90 text-white text-xs"
+                              >
+                                활성화
+                              </Button>
                             )}
                           </div>
-                          <p className="text-sm text-gray-500 capitalize">{template.category}</p>
-                          <p className="text-xs text-gray-400 mt-1 truncate">
-                            {template.prompt.substring(0, 100)}...
-                          </p>
-                        </div>
-                        <div className="flex flex-col space-y-1 ml-2">
-                          <div className="flex space-x-1">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => copyTemplate(template)}
-                            >
-                              <Copy className="h-3 w-3" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => editTemplate(template)}
-                            >
-                              편집
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => deleteTemplate(template.id)}
-                              className="text-red-600 hover:text-red-700"
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </Button>
-                          </div>
-                          {!template.is_active && (
-                            <Button
-                              size="sm"
-                              onClick={() => activateTemplate(template)}
-                              className="bg-[rgb(15,15,112)] hover:bg-[rgb(15,15,112)]/90 text-white text-xs"
-                            >
-                              활성화
-                            </Button>
-                          )}
                         </div>
                       </div>
-                    </div>
-                  ))}
-                  {templates.length === 0 && (
+                    );
+                  })}
+                  {getFilteredTemplates().length === 0 && (
                     <p className="text-center text-gray-500 py-8">
-                      저장된 프롬프트 템플릿이 없습니다.
+                      {selectedClass === 'all' 
+                        ? '저장된 프롬프트 템플릿이 없습니다.' 
+                        : `${selectedClass} 클래스에 사용 가능한 템플릿이 없습니다.`}
                     </p>
                   )}
                 </div>
