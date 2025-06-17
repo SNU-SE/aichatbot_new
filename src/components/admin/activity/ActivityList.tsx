@@ -1,9 +1,11 @@
 
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Edit, Trash2, FileText } from 'lucide-react';
 import { Activity } from '@/types/activity';
+import { supabase } from '@/integrations/supabase/client';
 
 interface ActivityListProps {
   activities: Activity[];
@@ -11,7 +13,36 @@ interface ActivityListProps {
   onDelete: (activityId: string) => void;
 }
 
+interface ActivityWithModuleCount extends Activity {
+  actualModuleCount?: number;
+}
+
 const ActivityList = ({ activities, onEdit, onDelete }: ActivityListProps) => {
+  const [activitiesWithCounts, setActivitiesWithCounts] = useState<ActivityWithModuleCount[]>([]);
+
+  useEffect(() => {
+    const loadModuleCounts = async () => {
+      const updatedActivities = await Promise.all(
+        activities.map(async (activity) => {
+          if (activity.type === 'experiment') {
+            const { data, error } = await supabase
+              .from('activity_modules')
+              .select('id')
+              .eq('activity_id', activity.id);
+            
+            if (!error && data) {
+              return { ...activity, actualModuleCount: data.length };
+            }
+          }
+          return { ...activity, actualModuleCount: activity.modules_count };
+        })
+      );
+      setActivitiesWithCounts(updatedActivities);
+    };
+
+    loadModuleCounts();
+  }, [activities]);
+
   const getTypeLabel = (type: string) => {
     switch (type) {
       case 'experiment': return '실험';
@@ -39,13 +70,13 @@ const ActivityList = ({ activities, onEdit, onDelete }: ActivityListProps) => {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {activities.map((activity) => (
+            {activitiesWithCounts.map((activity) => (
               <TableRow key={activity.id}>
                 <TableCell className="font-medium">{activity.title}</TableCell>
                 <TableCell>{getTypeLabel(activity.type)}</TableCell>
                 <TableCell>
                   {activity.type === 'experiment' ? 
-                    `${activity.modules_count || 1}개 모듈` : 
+                    `${activity.actualModuleCount || 1}개 모듈` : 
                     activity.final_question ? '최종질문 설정됨' : '-'
                   }
                 </TableCell>
