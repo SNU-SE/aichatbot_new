@@ -112,6 +112,13 @@ export type Database = {
             foreignKeyName: "chat_logs_student_id_fkey"
             columns: ["student_id"]
             isOneToOne: false
+            referencedRelation: "student_activity_view"
+            referencedColumns: ["student_id"]
+          },
+          {
+            foreignKeyName: "chat_logs_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
             referencedRelation: "students"
             referencedColumns: ["student_id"]
           },
@@ -140,6 +147,13 @@ export type Database = {
           student_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "student_sessions_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "student_activity_view"
+            referencedColumns: ["student_id"]
+          },
           {
             foreignKeyName: "student_sessions_student_id_fkey"
             columns: ["student_id"]
@@ -181,7 +195,19 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      student_activity_view: {
+        Row: {
+          activities_participated: number | null
+          class_name: string | null
+          is_online: boolean | null
+          last_active: string | null
+          last_message_time: string | null
+          name: string | null
+          student_id: string | null
+          total_messages: number | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       [_ in never]: never
