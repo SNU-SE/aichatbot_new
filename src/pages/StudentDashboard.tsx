@@ -1,176 +1,82 @@
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { BookOpen, MessageCircle, LogOut, Users, Clock } from 'lucide-react';
+import { LogOut, GraduationCap } from 'lucide-react';
+import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/integrations/supabase/client';
 import ActivitySelection from '@/components/student/ActivitySelection';
 import ChatInterface from '@/components/student/ChatInterface';
-import ExperimentActivity from '@/components/student/ExperimentActivity';
-import ArgumentationActivity from '@/components/student/ArgumentationActivity';
-import DiscussionActivity from '@/components/student/DiscussionActivity';
-import { supabase } from '@/integrations/supabase/client';
+import { Activity } from '@/types/activity';
 
 const StudentDashboard = () => {
-  const navigate = useNavigate();
-  const [activeView, setActiveView] = useState('activities');
-  const [selectedActivity, setSelectedActivity] = useState(null);
-  const [studentId, setStudentId] = useState('');
+  const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
+  const [studentData, setStudentData] = useState<any>(null);
+  const { signOut, user } = useAuth();
 
   useEffect(() => {
-    const userType = localStorage.getItem('userType');
-    const storedStudentId = localStorage.getItem('studentId');
-    
-    if (userType !== 'student' || !storedStudentId) {
-      navigate('/');
-    } else {
-      setStudentId(storedStudentId);
-      updateStudentSession(storedStudentId);
-    }
-  }, [navigate]);
-
-  const updateStudentSession = async (studentId: string) => {
-    try {
-      const { data: existingSession } = await supabase
-        .from('student_sessions')
-        .select('*')
-        .eq('student_id', studentId)
-        .single();
-
-      if (existingSession) {
-        await supabase
-          .from('student_sessions')
-          .update({
-            is_online: true,
-            last_active: new Date().toISOString()
-          })
-          .eq('student_id', studentId);
-      } else {
-        await supabase
-          .from('student_sessions')
-          .insert({
-            student_id: studentId,
-            is_online: true,
-            last_active: new Date().toISOString()
-          });
+    const fetchStudentData = async () => {
+      if (user) {
+        const { data } = await supabase
+          .from('students')
+          .select('*')
+          .eq('user_id', user.id)
+          .single();
+        
+        setStudentData(data);
       }
-    } catch (error) {
-      console.error('세션 업데이트 오류:', error);
-    }
-  };
+    };
+
+    fetchStudentData();
+  }, [user]);
 
   const handleLogout = async () => {
-    try {
-      if (studentId) {
-        await supabase
-          .from('student_sessions')
-          .update({ is_online: false })
-          .eq('student_id', studentId);
-      }
-    } catch (error) {
-      console.error('로그아웃 처리 오류:', error);
-    }
-    
-    localStorage.removeItem('userType');
-    localStorage.removeItem('studentId');
-    navigate('/');
-  };
-
-  const handleActivitySelect = (activity: any) => {
-    setSelectedActivity(activity);
-    
-    // Set view based on activity type
-    if (activity.type === 'reading') {
-      setActiveView('discussion');
-    } else if (activity.type === 'experiment') {
-      setActiveView('experiment');
-    } else if (activity.type === 'argumentation') {
-      setActiveView('argumentation');
-    } else if (activity.type === 'discussion') {
-      setActiveView('discussion');
-    } else {
-      setActiveView('chat'); // fallback to basic chat
-    }
-  };
-
-  const handleBackToActivities = () => {
-    setSelectedActivity(null);
-    setActiveView('activities');
-  };
-
-  const renderContent = () => {
-    switch (activeView) {
-      case 'experiment':
-        return (
-          <ExperimentActivity 
-            activity={selectedActivity}
-            studentId={studentId}
-            onBack={handleBackToActivities}
-          />
-        );
-      case 'argumentation':
-        return (
-          <ArgumentationActivity 
-            activity={selectedActivity}
-            studentId={studentId}
-            onBack={handleBackToActivities}
-          />
-        );
-      case 'discussion':
-        return (
-          <DiscussionActivity 
-            activity={selectedActivity}
-            studentId={studentId}
-            onBack={handleBackToActivities}
-          />
-        );
-      case 'chat':
-        return (
-          <ChatInterface 
-            activity={selectedActivity}
-            studentId={studentId}
-            onBack={handleBackToActivities}
-          />
-        );
-      case 'activities':
-      default:
-        return <ActivitySelection onActivitySelect={handleActivitySelect} />;
-    }
+    await signOut();
   };
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-[rgb(15,15,112)] text-white shadow-lg">
+      {/* Header */}
+      <div className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-4">
             <div className="flex items-center space-x-4">
-              <h1 className="text-2xl font-bold">AI 학습 도우미 - 학생</h1>
-              {activeView === 'chat' && selectedActivity && (
-                <Button 
-                  variant="ghost" 
-                  onClick={handleBackToActivities}
-                  className="text-white hover:bg-white/10"
-                >
-                  ← 활동 선택으로
-                </Button>
-              )}
+              <div className="w-10 h-10 bg-[rgb(15,15,112)] rounded-full flex items-center justify-center">
+                <GraduationCap className="h-6 w-6 text-white" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">AI 학습 도우미</h1>
+                {studentData && (
+                  <p className="text-sm text-gray-600">
+                    {studentData.name} ({studentData.student_id}) - {studentData.class_name}
+                  </p>
+                )}
+              </div>
             </div>
-            <div className="flex items-center space-x-4">
-              <span className="text-sm opacity-90">학번: {studentId}</span>
-              <Button 
-                variant="ghost" 
-                onClick={handleLogout}
-                className="text-white hover:bg-white/10"
-              >
-                <LogOut className="h-4 w-4 mr-2" />
-                로그아웃
-              </Button>
-            </div>
+            <Button 
+              onClick={handleLogout}
+              variant="outline"
+              className="flex items-center space-x-2"
+            >
+              <LogOut className="h-4 w-4" />
+              <span>로그아웃</span>
+            </Button>
           </div>
         </div>
-      </header>
+      </div>
 
+      {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {renderContent()}
+        {!selectedActivity ? (
+          <ActivitySelection 
+            onSelectActivity={setSelectedActivity}
+          />
+        ) : (
+          <ChatInterface
+            activity={selectedActivity}
+            studentId={studentData?.student_id}
+            onBack={() => setSelectedActivity(null)}
+          />
+        )}
       </div>
     </div>
   );

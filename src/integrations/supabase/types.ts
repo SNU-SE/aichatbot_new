@@ -79,10 +79,8 @@ export type Database = {
       }
       admin_settings: {
         Row: {
-          anthropic_api_key: string | null
           created_at: string
           id: string
-          openai_api_key: string | null
           rag_enabled: boolean | null
           selected_model: string | null
           selected_provider: string | null
@@ -90,10 +88,8 @@ export type Database = {
           updated_at: string
         }
         Insert: {
-          anthropic_api_key?: string | null
           created_at?: string
           id?: string
-          openai_api_key?: string | null
           rag_enabled?: boolean | null
           selected_model?: string | null
           selected_provider?: string | null
@@ -101,10 +97,8 @@ export type Database = {
           updated_at?: string
         }
         Update: {
-          anthropic_api_key?: string | null
           created_at?: string
           id?: string
-          openai_api_key?: string | null
           rag_enabled?: boolean | null
           selected_model?: string | null
           selected_provider?: string | null
@@ -541,6 +535,7 @@ export type Database = {
           name: string | null
           student_id: string
           updated_at: string
+          user_id: string | null
         }
         Insert: {
           class_name: string
@@ -550,6 +545,7 @@ export type Database = {
           name?: string | null
           student_id: string
           updated_at?: string
+          user_id?: string | null
         }
         Update: {
           class_name?: string
@@ -559,6 +555,28 @@ export type Database = {
           name?: string | null
           student_id?: string
           updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
         }
         Relationships: []
       }
@@ -583,6 +601,10 @@ export type Database = {
         Args: { activity_id_param: string }
         Returns: number
       }
+      get_current_user_role: {
+        Args: Record<PropertyKey, never>
+        Returns: Database["public"]["Enums"]["app_role"]
+      }
       get_peer_evaluation_stats: {
         Args: { activity_id_param: string }
         Returns: {
@@ -602,9 +624,16 @@ export type Database = {
           received_evaluations: number
         }[]
       }
+      has_role: {
+        Args: {
+          _user_id: string
+          _role: Database["public"]["Enums"]["app_role"]
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "student"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -719,6 +748,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "student"],
+    },
   },
 } as const

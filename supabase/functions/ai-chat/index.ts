@@ -22,6 +22,14 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseKey)
 
+    // Get OpenAI and Anthropic API keys from environment variables (Supabase Secrets)
+    const openaiApiKey = Deno.env.get('OPENAI_API_KEY')
+    const anthropicApiKey = Deno.env.get('ANTHROPIC_API_KEY')
+
+    if (!openaiApiKey && !anthropicApiKey) {
+      throw new Error('API 키가 설정되지 않았습니다. 관리자에게 문의하세요.')
+    }
+
     // Get student info to determine class
     const { data: student, error: studentError } = await supabase
       .from('students')
@@ -58,10 +66,6 @@ serve(async (req) => {
       throw new Error('시스템 설정을 불러올 수 없습니다.')
     }
 
-    if (!globalSettings?.openai_api_key && !globalSettings?.anthropic_api_key) {
-      throw new Error('API 키가 설정되지 않았습니다.')
-    }
-
     // Determine which settings to use (class-specific or global)
     const useClassSettings = classSettings && (classSettings.selected_provider || classSettings.selected_model)
     const selectedProvider = useClassSettings ? 
@@ -69,8 +73,8 @@ serve(async (req) => {
       (globalSettings.selected_provider || 'openai')
     
     const selectedModel = useClassSettings ? 
-      (classSettings.selected_model || globalSettings.selected_model || 'gpt-4.1-2025-04-14') : 
-      (globalSettings.selected_model || 'gpt-4.1-2025-04-14')
+      (classSettings.selected_model || globalSettings.selected_model || 'gpt-4o') : 
+      (globalSettings.selected_model || 'gpt-4o')
 
     // Get active prompt template for the class
     let systemPrompt = globalSettings.system_prompt || '학생의 질문에 직접적으로 답을 하지 말고, 그 답이 나오기까지 필요한 최소한의 정보를 제공해. 단계별로 학생들이 생각하고 질문할 수 있도록 유도해줘.'
@@ -162,12 +166,12 @@ serve(async (req) => {
 
     let aiResponse: string
 
-    if (selectedProvider === 'anthropic') {
+    if (selectedProvider === 'anthropic' && anthropicApiKey) {
       // Call Anthropic API
       const anthropicResponse = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
-          'x-api-key': globalSettings.anthropic_api_key,
+          'x-api-key': anthropicApiKey,
           'Content-Type': 'application/json',
           'anthropic-version': '2023-06-01'
         },
@@ -196,12 +200,12 @@ serve(async (req) => {
       if (!aiResponse) {
         throw new Error('Anthropic AI 응답을 받을 수 없습니다.')
       }
-    } else {
+    } else if (openaiApiKey) {
       // Call OpenAI API
       const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${globalSettings.openai_api_key}`,
+          'Authorization': `Bearer ${openaiApiKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -233,6 +237,8 @@ serve(async (req) => {
       if (!aiResponse) {
         throw new Error('OpenAI AI 응답을 받을 수 없습니다.')
       }
+    } else {
+      throw new Error('사용 가능한 AI API 키가 없습니다.')
     }
 
     // Save AI response to database
