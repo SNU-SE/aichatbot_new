@@ -300,6 +300,38 @@ export type Database = {
           },
         ]
       }
+      document_chunks: {
+        Row: {
+          activity_id: string
+          chunk_index: number
+          chunk_text: string
+          created_at: string
+          id: string
+        }
+        Insert: {
+          activity_id: string
+          chunk_index: number
+          chunk_text: string
+          created_at?: string
+          id?: string
+        }
+        Update: {
+          activity_id?: string
+          chunk_index?: number
+          chunk_text?: string
+          created_at?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "document_chunks_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "activities"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       evaluation_reflections: {
         Row: {
           activity_id: string
@@ -437,6 +469,47 @@ export type Database = {
           target_class?: string | null
         }
         Relationships: []
+      }
+      question_frequency: {
+        Row: {
+          activity_id: string
+          count: number
+          created_at: string
+          id: string
+          last_asked: string
+          question_hash: string
+          question_text: string
+          student_id: string
+        }
+        Insert: {
+          activity_id: string
+          count?: number
+          created_at?: string
+          id?: string
+          last_asked?: string
+          question_hash: string
+          question_text: string
+          student_id: string
+        }
+        Update: {
+          activity_id?: string
+          count?: number
+          created_at?: string
+          id?: string
+          last_asked?: string
+          question_hash?: string
+          question_text?: string
+          student_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "question_frequency_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "activities"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       student_checklist_progress: {
         Row: {

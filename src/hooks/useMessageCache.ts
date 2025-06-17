@@ -17,6 +17,16 @@ interface UseMessageCacheProps {
   activityId: string;
 }
 
+interface ChatResponse {
+  success: boolean;
+  response: string;
+  provider?: string;
+  model?: string;
+  questionCount?: number;
+  ragUsed?: boolean;
+  combinedResponse?: boolean;
+}
+
 export const useMessageCache = ({ studentId, activityId }: UseMessageCacheProps) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -80,6 +90,43 @@ export const useMessageCache = ({ studentId, activityId }: UseMessageCacheProps)
     setMessages([]);
   }, [cacheKey]);
 
+  // 질문 빈도 정보 가져오기
+  const getQuestionFrequency = useCallback(async (question: string) => {
+    try {
+      // 간단한 해시 생성 (실제로는 utils에서 가져와야 함)
+      const generateHash = (text: string) => {
+        const normalized = text.toLowerCase().replace(/[^\w\s가-힣]/g, '').replace(/\s+/g, ' ').trim();
+        let hash = 0;
+        for (let i = 0; i < normalized.length; i++) {
+          const char = normalized.charCodeAt(i);
+          hash = ((hash << 5) - hash) + char;
+          hash = hash & hash;
+        }
+        return Math.abs(hash).toString(16);
+      };
+
+      const questionHash = generateHash(question);
+      
+      const { data, error } = await supabase
+        .from('question_frequency')
+        .select('count')
+        .eq('student_id', studentId)
+        .eq('activity_id', activityId)
+        .eq('question_hash', questionHash)
+        .single();
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('Error getting question frequency:', error);
+        return 0;
+      }
+
+      return data?.count || 0;
+    } catch (error) {
+      console.error('Error in getQuestionFrequency:', error);
+      return 0;
+    }
+  }, [studentId, activityId]);
+
   useEffect(() => {
     fetchMessages();
   }, [fetchMessages]);
@@ -90,7 +137,8 @@ export const useMessageCache = ({ studentId, activityId }: UseMessageCacheProps)
     error,
     fetchMessages,
     addMessage,
-    clearCache
+    clearCache,
+    getQuestionFrequency
   };
 };
 
