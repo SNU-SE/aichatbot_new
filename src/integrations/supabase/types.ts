@@ -268,6 +268,7 @@ export type Database = {
           class_name: string
           created_at: string
           id: string
+          rag_enabled: boolean | null
           selected_model: string | null
           selected_provider: string | null
           system_prompt: string | null
@@ -278,6 +279,7 @@ export type Database = {
           class_name: string
           created_at?: string
           id?: string
+          rag_enabled?: boolean | null
           selected_model?: string | null
           selected_provider?: string | null
           system_prompt?: string | null
@@ -288,6 +290,7 @@ export type Database = {
           class_name?: string
           created_at?: string
           id?: string
+          rag_enabled?: boolean | null
           selected_model?: string | null
           selected_provider?: string | null
           system_prompt?: string | null
