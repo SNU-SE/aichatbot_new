@@ -180,6 +180,7 @@ serve(async (req) => {
 
     // RAG context if enabled and applicable
     let ragContext = ''
+    let ragSearchType = ''
     if (useRAG) {
       try {
         const ragResponse = await fetch(`${supabaseUrl}/functions/v1/rag-search`, {
@@ -197,9 +198,12 @@ serve(async (req) => {
         const ragData = await ragResponse.json()
         
         if (ragData.success && ragData.relevantChunks.length > 0) {
+          ragSearchType = ragData.searchType || 'unknown'
           ragContext = '\n관련 문서 내용:\n'
           ragData.relevantChunks.forEach((chunk: any, index: number) => {
-            ragContext += `${index + 1}. ${chunk.text}\n`
+            const score = chunk.similarity ? `(유사도: ${(chunk.similarity * 100).toFixed(1)}%)` : 
+                         chunk.score ? `(점수: ${chunk.score})` : ''
+            ragContext += `${index + 1}. ${chunk.text} ${score}\n`
           })
           
           if (useCombined) {
@@ -207,6 +211,12 @@ serve(async (req) => {
           } else {
             ragContext += '\n위 문서 내용을 바탕으로 답변해주세요.\n'
           }
+          
+          // Add search type info for transparency
+          const searchTypeMsg = ragSearchType === 'vector_similarity' ? '벡터 유사도 검색' :
+                               ragSearchType === 'vector_similarity_low_threshold' ? '벡터 유사도 검색 (낮은 임계값)' :
+                               ragSearchType === 'keyword_fallback' ? '키워드 기반 대체 검색' : '알 수 없는 검색'
+          ragContext += `\n[검색 방식: ${searchTypeMsg}]\n`
         }
       } catch (ragError) {
         console.error('RAG search error:', ragError)
@@ -370,7 +380,8 @@ serve(async (req) => {
         model: selectedModel,
         questionCount: questionCount,
         ragUsed: useRAG,
-        combinedResponse: useCombined
+        combinedResponse: useCombined,
+        ragSearchType: ragSearchType
       }),
       { 
         headers: { 
