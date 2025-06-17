@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Upload, FileText, X } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { parseCSV } from '@/utils/csvUtils';
+import { parseCSV, generateCSV, downloadCSV } from '@/utils/csvUtils';
 
 interface CSVUploaderProps {
   onDataParsed: (data: any[]) => void;
@@ -78,18 +78,32 @@ const CSVUploader = ({ onDataParsed, expectedHeaders, templateData, title }: CSV
   };
 
   const downloadTemplate = () => {
-    if (!templateData || templateData.length === 0) {
-      // 빈 템플릿 생성
-      const csvContent = expectedHeaders.join(',') + '\n';
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const link = document.createElement('a');
-      const url = URL.createObjectURL(blob);
-      link.setAttribute('href', url);
-      link.setAttribute('download', `${title}_template.csv`);
-      link.style.visibility = 'hidden';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+    try {
+      let csvContent: string;
+      
+      if (templateData && templateData.length > 0) {
+        // 예시 데이터가 있는 경우
+        csvContent = generateCSV(templateData, expectedHeaders);
+      } else {
+        // 빈 템플릿 생성
+        csvContent = expectedHeaders.join(',') + '\n';
+      }
+
+      const today = new Date().toISOString().split('T')[0];
+      const filename = `${title}_template_${today}.csv`;
+      
+      downloadCSV(csvContent, filename);
+      
+      toast({
+        title: "다운로드 완료",
+        description: `${filename} 템플릿이 다운로드되었습니다.`
+      });
+    } catch (error) {
+      toast({
+        title: "오류",
+        description: "템플릿 다운로드에 실패했습니다.",
+        variant: "destructive"
+      });
     }
   };
 

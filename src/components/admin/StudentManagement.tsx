@@ -34,6 +34,30 @@ const StudentManagement = () => {
     mother_tongue: 'Korean'
   });
 
+  // CSV 템플릿용 예시 데이터
+  const csvTemplateData = [
+    {
+      student_id: '2024001',
+      class_name: '3학년 1반',
+      name: '김철수',
+      mother_tongue: 'Korean'
+    },
+    {
+      student_id: '2024002',
+      class_name: '3학년 1반',
+      name: '이영희',
+      mother_tongue: 'Korean'
+    },
+    {
+      student_id: '2024003',
+      class_name: '3학년 2반',
+      name: 'John Smith',
+      mother_tongue: 'English'
+    }
+  ];
+
+  const csvExpectedHeaders = ['student_id', 'class_name', 'name', 'mother_tongue'];
+
   useEffect(() => {
     fetchStudents();
   }, []);
@@ -222,7 +246,8 @@ const StudentManagement = () => {
       {showCSVUpload && (
         <CSVUploader
           onDataParsed={handleCSVData}
-          expectedHeaders={['student_id', 'class_name', 'name', 'mother_tongue']}
+          expectedHeaders={csvExpectedHeaders}
+          templateData={csvTemplateData}
           title="학생"
         />
       )}

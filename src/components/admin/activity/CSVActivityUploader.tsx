@@ -14,8 +14,20 @@ const CSVActivityUploader = ({ onClose, onDataParsed }: CSVActivityUploaderProps
     {
       '제목': '물의 상태 변화 실험',
       '유형': 'experiment',
-      '파일URL': 'https://example.com/file.pdf',
-      '체크리스트': '실험 준비하기;온도 측정하기;결과 기록하기'
+      '파일URL': 'https://example.com/water-experiment.pdf',
+      '체크리스트': '실험 준비하기;온도 측정하기;결과 기록하기;결론 도출하기'
+    },
+    {
+      '제목': '지구 온난화 토론',
+      '유형': 'discussion',
+      '파일URL': '',
+      '체크리스트': '자료 조사하기;의견 정리하기;토론 참여하기'
+    },
+    {
+      '제목': '환경 보호 주장',
+      '유형': 'argumentation',
+      '파일URL': 'https://example.com/environment.pdf',
+      '체크리스트': '근거 수집하기;논리 구성하기;반박 예상하기;최종 주장 작성하기'
     }
   ];
 
