@@ -1,13 +1,11 @@
-
 import { useState, useEffect } from 'react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Play, Pause, Users, MessageCircle, Activity, Clock, Eye } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
+import { Users, MessageCircle, Activity, Clock } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import ClassControlPanel from './enhanced/ClassControlPanel';
+import StudentStatusGrid from './enhanced/StudentStatusGrid';
+import RealTimeChatMonitor from './enhanced/RealTimeChatMonitor';
 
 interface StudentSession {
   id: string;
@@ -166,7 +164,6 @@ const ClassManagement = () => {
       return;
     }
 
-    // 실제로는 학생들에게 푸시 알림이나 실시간 업데이트를 보낼 수 있습니다
     toast({
       title: "활동 배정 완료",
       description: "선택된 활동이 온라인 학생들에게 배정되었습니다."
@@ -186,28 +183,9 @@ const ClassManagement = () => {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold text-[rgb(15,15,112)]">실시간 수업 관리</h2>
-        <div className="flex space-x-2">
-          {!isClassActive ? (
-            <Button 
-              onClick={startClass}
-              className="bg-green-600 hover:bg-green-700"
-            >
-              <Play className="h-4 w-4 mr-2" />
-              수업 시작
-            </Button>
-          ) : (
-            <Button 
-              onClick={endClass}
-              variant="destructive"
-            >
-              <Pause className="h-4 w-4 mr-2" />
-              수업 종료
-            </Button>
-          )}
-        </div>
       </div>
 
-      {/* 수업 상태 카드 */}
+      {/* 통계 카드 */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
           <CardContent className="pt-4">
@@ -226,10 +204,8 @@ const ClassManagement = () => {
             <div className="flex items-center space-x-2">
               <Activity className="h-5 w-5 text-[rgb(15,15,112)]" />
               <div>
-                <p className="text-sm text-gray-600">수업 상태</p>
-                <Badge variant={isClassActive ? "default" : "secondary"}>
-                  {isClassActive ? "진행 중" : "대기 중"}
-                </Badge>
+                <p className="text-sm text-gray-600">활성 활동</p>
+                <p className="text-2xl font-bold">{activities.length}</p>
               </div>
             </div>
           </CardContent>
@@ -252,8 +228,8 @@ const ClassManagement = () => {
             <div className="flex items-center space-x-2">
               <Clock className="h-5 w-5 text-[rgb(15,15,112)]" />
               <div>
-                <p className="text-sm text-gray-600">활동 수</p>
-                <p className="text-2xl font-bold">{activities.length}</p>
+                <p className="text-sm text-gray-600">수업 상태</p>
+                <p className="text-lg font-bold">{isClassActive ? "진행 중" : "대기 중"}</p>
               </div>
             </div>
           </CardContent>
@@ -261,158 +237,34 @@ const ClassManagement = () => {
       </div>
 
       {/* 수업 제어 패널 */}
-      <Card>
-        <CardHeader>
-          <CardTitle>수업 제어</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="text-sm font-medium">반 선택</label>
-              <Select value={selectedClass} onValueChange={setSelectedClass}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">모든 반</SelectItem>
-                  {getUniqueClasses().map(className => (
-                    <SelectItem key={className} value={className}>
-                      {className}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+      <ClassControlPanel
+        isClassActive={isClassActive}
+        onStartClass={startClass}
+        onEndClass={endClass}
+        selectedClass={selectedClass}
+        onClassChange={setSelectedClass}
+        selectedActivity={selectedActivity}
+        onActivityChange={setSelectedActivity}
+        onAssignActivity={assignActivity}
+        activities={activities}
+        classes={getUniqueClasses()}
+        onlineCount={onlineStudents.length}
+        totalCount={totalStudents}
+      />
 
-            <div>
-              <label className="text-sm font-medium">활동 선택</label>
-              <Select value={selectedActivity} onValueChange={setSelectedActivity}>
-                <SelectTrigger>
-                  <SelectValue placeholder="활동을 선택하세요" />
-                </SelectTrigger>
-                <SelectContent>
-                  {activities.map(activity => (
-                    <SelectItem key={activity.id} value={activity.id}>
-                      {activity.title}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="flex items-end">
-              <Button 
-                onClick={assignActivity}
-                disabled={!selectedActivity || !isClassActive}
-                className="w-full bg-[rgb(15,15,112)] hover:bg-[rgb(15,15,112)]/90"
-              >
-                활동 배정
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* 온라인 학생 목록 */}
-      <Card>
-        <CardHeader>
-          <CardTitle>온라인 학생 ({onlineStudents.length}명)</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>학생</TableHead>
-                <TableHead>반</TableHead>
-                <TableHead>상태</TableHead>
-                <TableHead>마지막 활동</TableHead>
-                <TableHead>작업</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {onlineStudents.map((session) => {
-                const studentInfo = getStudentInfo(session.student_id);
-                return (
-                  <TableRow key={session.id}>
-                    <TableCell className="font-medium">
-                      {studentInfo.full}
-                    </TableCell>
-                    <TableCell>{studentInfo.class}</TableCell>
-                    <TableCell>
-                      <Badge variant="default" className="bg-green-600">
-                        온라인
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      {new Date(session.last_active).toLocaleTimeString('ko-KR')}
-                    </TableCell>
-                    <TableCell>
-                      <Button size="sm" variant="outline">
-                        <Eye className="h-3 w-3 mr-1" />
-                        모니터
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-              {onlineStudents.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center py-8 text-gray-500">
-                    현재 온라인 학생이 없습니다.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-
-      {/* 최근 채팅 활동 */}
-      <Card>
-        <CardHeader>
-          <CardTitle>최근 채팅 활동</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>시간</TableHead>
-                <TableHead>학생</TableHead>
-                <TableHead>활동</TableHead>
-                <TableHead>메시지</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {recentChats.slice(0, 10).map((chat) => (
-                <TableRow key={chat.id}>
-                  <TableCell className="text-sm">
-                    {new Date(chat.timestamp).toLocaleTimeString('ko-KR')}
-                  </TableCell>
-                  <TableCell>
-                    {getStudentInfo(chat.student_id).full}
-                  </TableCell>
-                  <TableCell className="text-sm">
-                    {getActivityInfo(chat.activity_id)}
-                  </TableCell>
-                  <TableCell className="max-w-md truncate">
-                    <Badge variant={chat.sender === 'student' ? 'default' : 'secondary'} className="mr-2">
-                      {chat.sender === 'student' ? '학생' : 'AI'}
-                    </Badge>
-                    {chat.message}
-                  </TableCell>
-                </TableRow>
-              ))}
-              {recentChats.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={4} className="text-center py-8 text-gray-500">
-                    최근 채팅 활동이 없습니다.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      {/* 학생 상태 그리드와 채팅 모니터 */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <StudentStatusGrid
+          onlineStudents={onlineStudents}
+          students={students}
+          selectedClass={selectedClass}
+        />
+        
+        <RealTimeChatMonitor
+          recentChats={recentChats}
+          activities={activities}
+        />
+      </div>
     </div>
   );
 };
