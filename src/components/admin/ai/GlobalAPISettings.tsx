@@ -2,7 +2,6 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -18,8 +17,6 @@ interface GlobalAPISettingsProps {
 
 const GlobalAPISettings = ({ settings, onSettingsUpdate }: GlobalAPISettingsProps) => {
   const [globalSettings, setGlobalSettings] = useState({
-    openai_api_key: settings?.openai_api_key || '',
-    anthropic_api_key: settings?.anthropic_api_key || '',
     selected_provider: settings?.selected_provider || 'openai',
     selected_model: settings?.selected_model || 'gpt-4.1-2025-04-14',
     system_prompt: settings?.system_prompt || '학생의 질문에 직접적으로 답을 하지 말고, 그 답이 나오기까지 필요한 최소한의 정보를 제공해. 단계별로 학생들이 생각하고 질문할 수 있도록 유도해줘.',
@@ -103,28 +100,11 @@ const GlobalAPISettings = ({ settings, onSettingsUpdate }: GlobalAPISettingsProp
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <Label htmlFor="openai_api_key">OpenAI API 키</Label>
-            <Input
-              id="openai_api_key"
-              type="password"
-              value={globalSettings.openai_api_key}
-              onChange={(e) => setGlobalSettings({...globalSettings, openai_api_key: e.target.value})}
-              placeholder="sk-..."
-            />
-          </div>
-
-          <div>
-            <Label htmlFor="anthropic_api_key">Anthropic API 키</Label>
-            <Input
-              id="anthropic_api_key"
-              type="password"
-              value={globalSettings.anthropic_api_key}
-              onChange={(e) => setGlobalSettings({...globalSettings, anthropic_api_key: e.target.value})}
-              placeholder="sk-ant-..."
-            />
-          </div>
+        <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+          <p className="text-sm text-blue-800">
+            <strong>보안 알림:</strong> API 키는 이제 Supabase Secrets에서 안전하게 관리됩니다. 
+            관리자는 프로젝트 설정에서 OPENAI_API_KEY와 ANTHROPIC_API_KEY를 설정할 수 있습니다.
+          </p>
         </div>
 
         <div className="grid grid-cols-2 gap-4">

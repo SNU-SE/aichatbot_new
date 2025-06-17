@@ -5,12 +5,12 @@ import { useToast } from '@/hooks/use-toast';
 
 interface AdminSettings {
   id: string;
-  openai_api_key: string | null;
-  anthropic_api_key: string | null;
   selected_provider: string | null;
   selected_model: string | null;
   system_prompt: string | null;
   rag_enabled: boolean | null;
+  created_at: string;
+  updated_at: string;
 }
 
 interface PromptTemplate {
