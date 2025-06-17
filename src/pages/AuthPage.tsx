@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { GraduationCap } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 
 const AuthPage = () => {
   const [loginId, setLoginId] = useState('');
@@ -45,8 +46,25 @@ const AuthPage = () => {
         }, 500);
       }
     } else {
-      // 학생 로그인 - 학번만으로 로그인
-      setTimeout(() => {
+      // 학생 로그인 - 등록된 학번 확인
+      try {
+        const { data: student, error } = await supabase
+          .from('students')
+          .select('student_id, class_name, name')
+          .eq('student_id', loginId)
+          .single();
+
+        if (error || !student) {
+          toast({
+            title: "로그인 실패",
+            description: "등록되지 않은 학번입니다.",
+            variant: "destructive"
+          });
+          setIsLoading(false);
+          return;
+        }
+
+        // 등록된 학생인 경우 로그인 성공
         localStorage.setItem('userType', 'student');
         localStorage.setItem('studentId', loginId);
         toast({
@@ -55,7 +73,14 @@ const AuthPage = () => {
         });
         navigate('/student');
         setIsLoading(false);
-      }, 500);
+      } catch (error) {
+        toast({
+          title: "로그인 실패",
+          description: "로그인 중 오류가 발생했습니다.",
+          variant: "destructive"
+        });
+        setIsLoading(false);
+      }
     }
   };
 
