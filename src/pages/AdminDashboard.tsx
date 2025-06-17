@@ -74,7 +74,7 @@ const AdminDashboard = () => {
             </TabsTrigger>
             <TabsTrigger value="activities" className="flex items-center space-x-2">
               <BookOpen className="h-4 w-4" />
-              <span>활동 관리</span>
+              <span>수업 활동</span>
             </TabsTrigger>
             <TabsTrigger value="records" className="flex items-center space-x-2">
               <BarChart3 className="h-4 w-4" />

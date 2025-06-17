@@ -1,5 +1,5 @@
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -45,6 +45,72 @@ const ActivityForm = ({
   const [checklist, setChecklist] = useState<ChecklistItem[]>([
     { step_number: 1, description: '' }
   ]);
+
+  // 기존 활동 데이터 로드
+  useEffect(() => {
+    if (editingActivity) {
+      loadActivityData(editingActivity.id);
+    }
+  }, [editingActivity]);
+
+  const loadActivityData = async (activityId: string) => {
+    try {
+      // 모듈 데이터 로드 (실험 활동인 경우)
+      if (editingActivity?.type === 'experiment') {
+        const { data: moduleData, error: moduleError } = await supabase
+          .from('activity_modules')
+          .select('*')
+          .eq('activity_id', activityId)
+          .order('module_number');
+
+        if (moduleError) throw moduleError;
+
+        if (moduleData && moduleData.length > 0) {
+          const loadedModules: Module[] = [];
+          
+          for (const module of moduleData) {
+            const { data: stepData, error: stepError } = await supabase
+              .from('checklist_items')
+              .select('*')
+              .eq('module_id', module.id)
+              .order('step_number');
+
+            if (stepError) throw stepError;
+
+            loadedModules.push({
+              id: module.id,
+              module_number: module.module_number,
+              title: module.title,
+              steps: stepData || [{ step_number: 1, description: '' }]
+            });
+          }
+          
+          setModules(loadedModules);
+        }
+      } else {
+        // 체크리스트 데이터 로드 (논증, 토의 활동인 경우)
+        const { data: checklistData, error: checklistError } = await supabase
+          .from('checklist_items')
+          .select('*')
+          .eq('activity_id', activityId)
+          .is('module_id', null)
+          .order('step_number');
+
+        if (checklistError) throw checklistError;
+
+        if (checklistData && checklistData.length > 0) {
+          setChecklist(checklistData);
+        }
+      }
+    } catch (error) {
+      console.error('활동 데이터 로드 오류:', error);
+      toast({
+        title: "오류",
+        description: "활동 데이터를 불러오는데 실패했습니다.",
+        variant: "destructive"
+      });
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

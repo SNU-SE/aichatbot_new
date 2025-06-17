@@ -53,17 +53,57 @@ const ActivityManagement = () => {
           continue;
         }
 
-        const checklistItems = row['체크리스트'] || row['checklist'] || '';
-        if (checklistItems) {
-          const items = checklistItems.split(';').filter((item: string) => item.trim());
-          for (let i = 0; i < items.length; i++) {
-            await supabase
-              .from('checklist_items')
-              .insert({
-                activity_id: activity.id,
-                step_number: i + 1,
-                description: items[i].trim()
-              });
+        // 실험 활동의 경우 모듈 처리
+        if (activityData.type === 'experiment') {
+          const moduleDefinitions = row['모듈정의'] || row['module_definitions'] || '';
+          if (moduleDefinitions) {
+            const modules = moduleDefinitions.split('|').filter((module: string) => module.trim());
+            for (let i = 0; i < modules.length; i++) {
+              const moduleData = modules[i].split(':');
+              const moduleTitle = moduleData[0]?.trim() || `모듈 ${i + 1}`;
+              const moduleSteps = moduleData[1]?.split(';').filter((step: string) => step.trim()) || [`단계 ${i + 1}`];
+
+              const { data: moduleRecord, error: moduleError } = await supabase
+                .from('activity_modules')
+                .insert({
+                  activity_id: activity.id,
+                  module_number: i + 1,
+                  title: moduleTitle
+                })
+                .select()
+                .single();
+
+              if (moduleError) {
+                console.error('Module creation error:', moduleError);
+                continue;
+              }
+
+              for (let j = 0; j < moduleSteps.length; j++) {
+                await supabase
+                  .from('checklist_items')
+                  .insert({
+                    activity_id: activity.id,
+                    module_id: moduleRecord.id,
+                    step_number: j + 1,
+                    description: moduleSteps[j].trim()
+                  });
+              }
+            }
+          }
+        } else {
+          // 기존 체크리스트 처리 (논증, 토의 활동)
+          const checklistItems = row['체크리스트'] || row['checklist'] || '';
+          if (checklistItems) {
+            const items = checklistItems.split(';').filter((item: string) => item.trim());
+            for (let i = 0; i < items.length; i++) {
+              await supabase
+                .from('checklist_items')
+                .insert({
+                  activity_id: activity.id,
+                  step_number: i + 1,
+                  description: items[i].trim()
+                });
+            }
           }
         }
 
@@ -114,7 +154,7 @@ const ActivityManagement = () => {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold text-[rgb(15,15,112)]">학습활동 관리</h2>
+        <h2 className="text-2xl font-bold text-[rgb(15,15,112)]">수업 활동 관리</h2>
         <div className="flex space-x-2">
           <Button 
             onClick={() => setShowCSVUpload(true)}
