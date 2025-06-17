@@ -2,15 +2,21 @@ import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Send, Bot, User, ArrowLeft, BookOpen } from 'lucide-react';
+import { Send, Bot, User, ArrowLeft, BookOpen, Paperclip, Image } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { uploadFile } from '@/utils/fileUpload';
+import FilePreview from './FilePreview';
+import MessageFile from './MessageFile';
 
 interface Message {
   id: string;
   sender: 'student' | 'bot';
   message: string;
   timestamp: string;
+  file_url?: string | null;
+  file_name?: string | null;
+  file_type?: string | null;
 }
 
 interface Activity {
@@ -29,9 +35,11 @@ interface ChatInterfaceProps {
 const ChatInterface = ({ activity, studentId, onBack }: ChatInterfaceProps) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState('');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -53,12 +61,14 @@ const ChatInterface = ({ activity, studentId, onBack }: ChatInterfaceProps) => {
 
       if (error) throw error;
       
-      // Type cast the database response to match our Message interface
       const typedMessages: Message[] = (data || []).map(item => ({
         id: item.id,
         sender: item.sender as 'student' | 'bot',
         message: item.message,
-        timestamp: item.timestamp
+        timestamp: item.timestamp,
+        file_url: item.file_url,
+        file_name: item.file_name,
+        file_type: item.file_type
       }));
       
       setMessages(typedMessages);
@@ -77,20 +87,61 @@ const ChatInterface = ({ activity, studentId, onBack }: ChatInterfaceProps) => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      // Check file size (10MB limit)
+      if (file.size > 10 * 1024 * 1024) {
+        toast({
+          title: "파일 크기 초과",
+          description: "파일 크기는 10MB를 초과할 수 없습니다.",
+          variant: "destructive"
+        });
+        return;
+      }
+      setSelectedFile(file);
+    }
+  };
+
+  const removeSelectedFile = () => {
+    setSelectedFile(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
   const sendMessage = async () => {
-    if (!inputMessage.trim() || isLoading) return;
+    if ((!inputMessage.trim() && !selectedFile) || isLoading) return;
 
     const userMessage = inputMessage.trim();
+    let fileUrl = null;
+    let fileName = null;
+    let fileType = null;
+
     setInputMessage('');
     setIsLoading(true);
 
     try {
+      // Upload file if selected
+      if (selectedFile) {
+        fileUrl = await uploadFile(selectedFile, studentId);
+        fileName = selectedFile.name;
+        fileType = selectedFile.type;
+        setSelectedFile(null);
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
+      }
+
       // AI 채팅 API 호출
       const { data, error } = await supabase.functions.invoke('ai-chat', {
         body: {
-          message: userMessage,
+          message: userMessage || '파일을 업로드했습니다.',
           studentId: studentId,
-          activityId: activity.id
+          activityId: activity.id,
+          fileUrl: fileUrl,
+          fileName: fileName,
+          fileType: fileType
         }
       });
 
@@ -204,6 +255,11 @@ const ChatInterface = ({ activity, studentId, onBack }: ChatInterfaceProps) => {
                         : 'bg-gray-100 text-gray-900'
                     }`}>
                       <p className="whitespace-pre-wrap">{msg.message}</p>
+                      <MessageFile 
+                        fileUrl={msg.file_url || ''}
+                        fileName={msg.file_name}
+                        fileType={msg.file_type}
+                      />
                     </div>
                     <p className="text-xs text-gray-500 mt-1">
                       {new Date(msg.timestamp).toLocaleTimeString('ko-KR')}
@@ -231,9 +287,37 @@ const ChatInterface = ({ activity, studentId, onBack }: ChatInterfaceProps) => {
             <div ref={messagesEndRef} />
           </div>
 
+          {/* 파일 미리보기 */}
+          {selectedFile && (
+            <div className="border-t border-b p-3 bg-gray-50">
+              <div className="flex items-center space-x-2">
+                <span className="text-sm font-medium">첨부된 파일:</span>
+                <FilePreview file={selectedFile} onRemove={removeSelectedFile} />
+              </div>
+            </div>
+          )}
+
           {/* 메시지 입력 영역 */}
           <div className="border-t p-4">
             <div className="flex space-x-2">
+              <div className="flex space-x-1">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  onChange={handleFileSelect}
+                  className="hidden"
+                  accept="image/*,.pdf,.txt,.doc,.docx"
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isLoading}
+                  className="p-2"
+                >
+                  <Paperclip className="h-4 w-4" />
+                </Button>
+              </div>
               <Input
                 value={inputMessage}
                 onChange={(e) => setInputMessage(e.target.value)}
@@ -244,7 +328,7 @@ const ChatInterface = ({ activity, studentId, onBack }: ChatInterfaceProps) => {
               />
               <Button 
                 onClick={sendMessage}
-                disabled={!inputMessage.trim() || isLoading}
+                disabled={(!inputMessage.trim() && !selectedFile) || isLoading}
                 className="bg-[rgb(15,15,112)] hover:bg-[rgb(15,15,112)]/90"
               >
                 <Send className="h-4 w-4" />

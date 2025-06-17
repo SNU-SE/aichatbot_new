@@ -78,6 +78,9 @@ export type Database = {
       chat_logs: {
         Row: {
           activity_id: string | null
+          file_name: string | null
+          file_type: string | null
+          file_url: string | null
           id: string
           message: string
           sender: string
@@ -86,6 +89,9 @@ export type Database = {
         }
         Insert: {
           activity_id?: string | null
+          file_name?: string | null
+          file_type?: string | null
+          file_url?: string | null
           id?: string
           message: string
           sender: string
@@ -94,6 +100,9 @@ export type Database = {
         }
         Update: {
           activity_id?: string | null
+          file_name?: string | null
+          file_type?: string | null
+          file_url?: string | null
           id?: string
           message?: string
           sender?: string
