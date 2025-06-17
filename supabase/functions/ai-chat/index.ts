@@ -20,15 +20,68 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseKey)
 
-    // Get admin settings
-    const { data: settings } = await supabase
+    // Get student info to determine class
+    const { data: student } = await supabase
+      .from('students')
+      .select('class_name')
+      .eq('student_id', studentId)
+      .single()
+
+    if (!student) {
+      throw new Error('학생 정보를 찾을 수 없습니다.')
+    }
+
+    // Get class-specific settings
+    const { data: classSettings } = await supabase
+      .from('class_prompt_settings')
+      .select('*')
+      .eq('class_name', student.class_name)
+      .single()
+
+    // Get global admin settings as fallback
+    const { data: globalSettings } = await supabase
       .from('admin_settings')
       .select('*')
       .single()
 
-    if (!settings?.openai_api_key) {
-      throw new Error('OpenAI API 키가 설정되지 않았습니다.')
+    if (!globalSettings?.openai_api_key && !globalSettings?.anthropic_api_key) {
+      throw new Error('API 키가 설정되지 않았습니다.')
     }
+
+    // Determine which settings to use (class-specific or global)
+    const useClassSettings = classSettings && (classSettings.selected_provider || classSettings.selected_model)
+    const selectedProvider = useClassSettings ? 
+      (classSettings.selected_provider || globalSettings.selected_provider || 'openai') : 
+      (globalSettings.selected_provider || 'openai')
+    
+    const selectedModel = useClassSettings ? 
+      (classSettings.selected_model || globalSettings.selected_model || 'gpt-4o') : 
+      (globalSettings.selected_model || 'gpt-4o')
+
+    // Get active prompt template for the class
+    let systemPrompt = globalSettings.system_prompt || '학생의 질문에 직접적으로 답을 하지 말고, 그 답이 나오기까지 필요한 최소한의 정보를 제공해. 단계별로 학생들이 생각하고 질문할 수 있도록 유도해줘.'
+    
+    if (classSettings?.active_prompt_id) {
+      const { data: activeTemplate } = await supabase
+        .from('prompt_templates')
+        .select('prompt')
+        .eq('id', classSettings.active_prompt_id)
+        .single()
+      
+      if (activeTemplate) {
+        systemPrompt = activeTemplate.prompt
+      }
+    } else if (classSettings?.system_prompt) {
+      systemPrompt = classSettings.system_prompt
+    }
+
+    console.log('Using settings:', {
+      provider: selectedProvider,
+      model: selectedModel,
+      className: student.class_name,
+      hasClassSettings: !!classSettings,
+      activePromptId: classSettings?.active_prompt_id
+    })
 
     // Save student message to database
     const studentMessageData: any = {
@@ -88,43 +141,77 @@ serve(async (req) => {
       contextMessage += `${chat.sender === 'student' ? '학생' : 'AI'}: ${chat.message}\n`
     })
 
-    // Prepare messages for OpenAI
-    const messages = [
-      {
-        role: 'system',
-        content: settings.system_prompt || '학생의 질문에 도움이 되는 답변을 제공해주세요.'
-      },
-      {
-        role: 'user',
-        content: `${contextMessage}\n\n현재 학생 메시지: ${message}`
+    let aiResponse: string
+
+    if (selectedProvider === 'anthropic') {
+      // Call Anthropic API
+      const anthropicResponse = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'x-api-key': globalSettings.anthropic_api_key,
+          'Content-Type': 'application/json',
+          'anthropic-version': '2023-06-01'
+        },
+        body: JSON.stringify({
+          model: selectedModel,
+          max_tokens: 1000,
+          messages: [
+            {
+              role: 'user',
+              content: `${systemPrompt}\n\n${contextMessage}\n\n현재 학생 메시지: ${message}`
+            }
+          ],
+          temperature: 0.7,
+        }),
+      })
+
+      if (!anthropicResponse.ok) {
+        const error = await anthropicResponse.text()
+        throw new Error(`Anthropic API 오류: ${error}`)
       }
-    ]
 
-    // Call OpenAI API
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${settings.openai_api_key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: settings.selected_model || 'gpt-4o',
-        messages: messages,
-        max_tokens: 1000,
-        temperature: 0.7,
-      }),
-    })
+      const anthropicData = await anthropicResponse.json()
+      aiResponse = anthropicData.content[0]?.text
 
-    if (!response.ok) {
-      const error = await response.text()
-      throw new Error(`OpenAI API 오류: ${error}`)
-    }
+      if (!aiResponse) {
+        throw new Error('Anthropic AI 응답을 받을 수 없습니다.')
+      }
+    } else {
+      // Call OpenAI API
+      const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${globalSettings.openai_api_key}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: selectedModel,
+          messages: [
+            {
+              role: 'system',
+              content: systemPrompt
+            },
+            {
+              role: 'user',
+              content: `${contextMessage}\n\n현재 학생 메시지: ${message}`
+            }
+          ],
+          max_tokens: 1000,
+          temperature: 0.7,
+        }),
+      })
 
-    const data = await response.json()
-    const aiResponse = data.choices[0]?.message?.content
+      if (!openaiResponse.ok) {
+        const error = await openaiResponse.text()
+        throw new Error(`OpenAI API 오류: ${error}`)
+      }
 
-    if (!aiResponse) {
-      throw new Error('AI 응답을 받을 수 없습니다.')
+      const openaiData = await openaiResponse.json()
+      aiResponse = openaiData.choices[0]?.message?.content
+
+      if (!aiResponse) {
+        throw new Error('OpenAI AI 응답을 받을 수 없습니다.')
+      }
     }
 
     // Save AI response to database
@@ -139,7 +226,12 @@ serve(async (req) => {
       })
 
     return new Response(
-      JSON.stringify({ success: true, response: aiResponse }),
+      JSON.stringify({ 
+        success: true, 
+        response: aiResponse,
+        provider: selectedProvider,
+        model: selectedModel
+      }),
       { 
         headers: { 
           ...corsHeaders, 
