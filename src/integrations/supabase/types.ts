@@ -133,6 +133,30 @@ export type Database = {
           },
         ]
       }
+      prompt_templates: {
+        Row: {
+          category: string
+          created_at: string
+          id: string
+          name: string
+          prompt: string
+        }
+        Insert: {
+          category?: string
+          created_at?: string
+          id?: string
+          name: string
+          prompt: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          id?: string
+          name?: string
+          prompt?: string
+        }
+        Relationships: []
+      }
       student_sessions: {
         Row: {
           created_at: string

@@ -98,6 +98,7 @@ const VirtualizedMessageList = ({ messages, isLoading }: VirtualizedMessageListP
       <List
         ref={listRef}
         height={384}
+        width="100%"
         itemCount={messages.length + (isLoading ? 1 : 0)}
         itemSize={120}
         itemData={itemData}

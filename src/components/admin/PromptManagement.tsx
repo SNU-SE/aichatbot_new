@@ -43,6 +43,7 @@ const PromptManagement = () => {
       if (error) throw error;
       setTemplates(data || []);
     } catch (error: any) {
+      console.error('Error fetching templates:', error);
       toast({
         title: "오류",
         description: "프롬프트 템플릿을 불러오는데 실패했습니다.",
@@ -86,6 +87,7 @@ const PromptManagement = () => {
         description: `프롬프트 템플릿이 ${isEditing ? '수정' : '저장'}되었습니다.`
       });
     } catch (error: any) {
+      console.error('Error saving template:', error);
       toast({
         title: "오류",
         description: "프롬프트 템플릿 저장에 실패했습니다.",
@@ -109,6 +111,7 @@ const PromptManagement = () => {
         description: "프롬프트 템플릿이 삭제되었습니다."
       });
     } catch (error: any) {
+      console.error('Error deleting template:', error);
       toast({
         title: "오류",
         description: "프롬프트 템플릿 삭제에 실패했습니다.",
