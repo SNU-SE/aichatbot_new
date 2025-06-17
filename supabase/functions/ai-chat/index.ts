@@ -14,6 +14,8 @@ serve(async (req) => {
 
   try {
     const { message, studentId, activityId, fileUrl, fileName, fileType } = await req.json()
+    
+    console.log('Received request:', { studentId, activityId, messageLength: message?.length })
 
     // Initialize Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
@@ -21,28 +23,40 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey)
 
     // Get student info to determine class
-    const { data: student } = await supabase
+    const { data: student, error: studentError } = await supabase
       .from('students')
       .select('class_name')
       .eq('student_id', studentId)
       .single()
 
-    if (!student) {
+    if (studentError) {
+      console.error('Student lookup error:', studentError)
       throw new Error('학생 정보를 찾을 수 없습니다.')
     }
 
+    console.log('Found student:', student)
+
     // Get class-specific settings
-    const { data: classSettings } = await supabase
+    const { data: classSettings, error: classError } = await supabase
       .from('class_prompt_settings')
       .select('*')
       .eq('class_name', student.class_name)
       .single()
 
+    if (classError && classError.code !== 'PGRST116') {
+      console.error('Class settings error:', classError)
+    }
+
     // Get global admin settings as fallback
-    const { data: globalSettings } = await supabase
+    const { data: globalSettings, error: globalError } = await supabase
       .from('admin_settings')
       .select('*')
       .single()
+
+    if (globalError) {
+      console.error('Global settings error:', globalError)
+      throw new Error('시스템 설정을 불러올 수 없습니다.')
+    }
 
     if (!globalSettings?.openai_api_key && !globalSettings?.anthropic_api_key) {
       throw new Error('API 키가 설정되지 않았습니다.')
@@ -55,8 +69,8 @@ serve(async (req) => {
       (globalSettings.selected_provider || 'openai')
     
     const selectedModel = useClassSettings ? 
-      (classSettings.selected_model || globalSettings.selected_model || 'gpt-4o') : 
-      (globalSettings.selected_model || 'gpt-4o')
+      (classSettings.selected_model || globalSettings.selected_model || 'gpt-4o-mini') : 
+      (globalSettings.selected_model || 'gpt-4o-mini')
 
     // Get active prompt template for the class
     let systemPrompt = globalSettings.system_prompt || '학생의 질문에 직접적으로 답을 하지 말고, 그 답이 나오기까지 필요한 최소한의 정보를 제공해. 단계별로 학생들이 생각하고 질문할 수 있도록 유도해줘.'
@@ -83,7 +97,7 @@ serve(async (req) => {
       activePromptId: classSettings?.active_prompt_id
     })
 
-    // Save student message to database
+    // Save student message to database first
     const studentMessageData: any = {
       student_id: studentId,
       activity_id: activityId,
@@ -99,9 +113,14 @@ serve(async (req) => {
       studentMessageData.file_type = fileType
     }
 
-    await supabase
+    const { error: insertError } = await supabase
       .from('chat_logs')
       .insert(studentMessageData)
+
+    if (insertError) {
+      console.error('Error saving student message:', insertError)
+      throw new Error('메시지 저장에 실패했습니다.')
+    }
 
     // Get activity context
     const { data: activity } = await supabase
@@ -167,7 +186,8 @@ serve(async (req) => {
 
       if (!anthropicResponse.ok) {
         const error = await anthropicResponse.text()
-        throw new Error(`Anthropic API 오류: ${error}`)
+        console.error('Anthropic API error:', error)
+        throw new Error(`Anthropic API 오류: ${anthropicResponse.status}`)
       }
 
       const anthropicData = await anthropicResponse.json()
@@ -203,7 +223,8 @@ serve(async (req) => {
 
       if (!openaiResponse.ok) {
         const error = await openaiResponse.text()
-        throw new Error(`OpenAI API 오류: ${error}`)
+        console.error('OpenAI API error:', error)
+        throw new Error(`OpenAI API 오류: ${openaiResponse.status}`)
       }
 
       const openaiData = await openaiResponse.json()
@@ -215,7 +236,7 @@ serve(async (req) => {
     }
 
     // Save AI response to database
-    await supabase
+    const { error: aiInsertError } = await supabase
       .from('chat_logs')
       .insert({
         student_id: studentId,
@@ -224,6 +245,11 @@ serve(async (req) => {
         sender: 'bot',
         timestamp: new Date().toISOString()
       })
+
+    if (aiInsertError) {
+      console.error('Error saving AI response:', aiInsertError)
+      // Don't throw error here, still return the response
+    }
 
     return new Response(
       JSON.stringify({ 
@@ -241,7 +267,7 @@ serve(async (req) => {
     )
 
   } catch (error) {
-    console.error('Error:', error)
+    console.error('Error in ai-chat function:', error)
     return new Response(
       JSON.stringify({ error: error.message }),
       { 

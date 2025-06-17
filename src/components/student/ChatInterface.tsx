@@ -1,8 +1,9 @@
+
 import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Send, Bot, User, ArrowLeft, BookOpen, Paperclip, Image } from 'lucide-react';
+import { Send, Bot, User, ArrowLeft, BookOpen, Paperclip } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { uploadFile } from '@/utils/fileUpload';
@@ -63,7 +64,10 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext }: ChatIn
         .eq('activity_id', activity.id)
         .order('timestamp', { ascending: true });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Chat history error:', error);
+        throw error;
+      }
       
       const typedMessages: Message[] = (data || []).map(item => ({
         id: item.id,
@@ -77,6 +81,7 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext }: ChatIn
       
       setMessages(typedMessages);
     } catch (error: any) {
+      console.error('Error fetching chat history:', error);
       toast({
         title: "오류",
         description: "대화 기록을 불러오는데 실패했습니다.",
@@ -125,19 +130,47 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext }: ChatIn
       finalMessage = `현재 단계에 대해 도움이 필요합니다. 현재 단계: ${checklistContext.currentStep}`;
     }
 
+    // Add user message to UI immediately for better UX
+    if (messageText.trim()) {
+      const userMessage: Message = {
+        id: Date.now().toString(),
+        sender: 'student',
+        message: messageText,
+        timestamp: new Date().toISOString(),
+        file_url: null,
+        file_name: null,
+        file_type: null
+      };
+      setMessages(prev => [...prev, userMessage]);
+    }
+
     setInputMessage('');
     setIsLoading(true);
+    setSelectedFile(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
 
     try {
+      let fileUrl = null;
+      let fileName = null;
+      let fileType = null;
+
       // Upload file if selected
       if (file) {
-        const fileUrl = await uploadFile(file, studentId);
-        setSelectedFile(null);
-        if (fileInputRef.current) {
-          fileInputRef.current.value = '';
-        }
-        return;
+        fileUrl = await uploadFile(file, studentId);
+        fileName = file.name;
+        fileType = file.type;
       }
+
+      console.log('Sending message to AI chat function:', {
+        message: finalMessage || '파일을 업로드했습니다.',
+        studentId,
+        activityId: activity.id,
+        fileUrl,
+        fileName,
+        fileType
+      });
 
       // AI 채팅 API 호출
       const { data, error } = await supabase.functions.invoke('ai-chat', {
@@ -145,22 +178,35 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext }: ChatIn
           message: finalMessage || '파일을 업로드했습니다.',
           studentId: studentId,
           activityId: activity.id,
-          fileUrl: null,
-          fileName: null,
-          fileType: null
+          fileUrl: fileUrl,
+          fileName: fileName,
+          fileType: fileType
         }
       });
 
-      if (error) throw error;
+      console.log('AI chat response:', data);
 
-      if (data.error) {
+      if (error) {
+        console.error('Supabase function error:', error);
+        throw new Error(`Function error: ${error.message}`);
+      }
+
+      if (data?.error) {
+        console.error('AI chat error:', data.error);
         throw new Error(data.error);
       }
 
-      // 대화 기록 새로고침
+      // Refresh chat history to get the latest messages
       await fetchChatHistory();
 
     } catch (error: any) {
+      console.error('Error in handleSendMessage:', error);
+      
+      // Remove the optimistically added message on error
+      if (messageText.trim()) {
+        setMessages(prev => prev.slice(0, -1));
+      }
+      
       toast({
         title: "오류",
         description: error.message || "메시지 전송에 실패했습니다.",
@@ -172,7 +218,7 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext }: ChatIn
   };
 
   const sendMessage = async () => {
-    handleSendMessage(inputMessage.trim(), selectedFile);
+    await handleSendMessage(inputMessage.trim(), selectedFile || undefined);
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -265,11 +311,13 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext }: ChatIn
                         : 'bg-gray-100 text-gray-900'
                     }`}>
                       <p className="whitespace-pre-wrap">{msg.message}</p>
-                      <MessageFile 
-                        fileUrl={msg.file_url || ''}
-                        fileName={msg.file_name}
-                        fileType={msg.file_type}
-                      />
+                      {(msg.file_url || msg.file_name) && (
+                        <MessageFile 
+                          fileUrl={msg.file_url || ''}
+                          fileName={msg.file_name}
+                          fileType={msg.file_type}
+                        />
+                      )}
                     </div>
                     <p className="text-xs text-gray-500 mt-1">
                       {new Date(msg.timestamp).toLocaleTimeString('ko-KR')}
