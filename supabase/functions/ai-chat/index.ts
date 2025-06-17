@@ -69,8 +69,8 @@ serve(async (req) => {
       (globalSettings.selected_provider || 'openai')
     
     const selectedModel = useClassSettings ? 
-      (classSettings.selected_model || globalSettings.selected_model || 'gpt-4o-mini') : 
-      (globalSettings.selected_model || 'gpt-4o-mini')
+      (classSettings.selected_model || globalSettings.selected_model || 'gpt-4.1-2025-04-14') : 
+      (globalSettings.selected_model || 'gpt-4.1-2025-04-14')
 
     // Get active prompt template for the class
     let systemPrompt = globalSettings.system_prompt || '학생의 질문에 직접적으로 답을 하지 말고, 그 답이 나오기까지 필요한 최소한의 정보를 제공해. 단계별로 학생들이 생각하고 질문할 수 있도록 유도해줘.'
