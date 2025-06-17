@@ -1,7 +1,6 @@
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '@/hooks/useAuth';
 
 interface AuthGuardProps {
   children: React.ReactNode;
@@ -10,30 +9,42 @@ interface AuthGuardProps {
 }
 
 const AuthGuard = ({ children, requireRole, redirectTo = '/auth' }: AuthGuardProps) => {
-  const { user, role, loading } = useAuth();
   const navigate = useNavigate();
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    if (!loading) {
-      if (!user) {
-        navigate(redirectTo);
-        return;
-      }
+    const userType = localStorage.getItem('userType');
+    const studentId = localStorage.getItem('studentId');
 
-      if (requireRole && role !== requireRole) {
-        // Redirect based on actual role
-        if (role === 'admin') {
-          navigate('/admin');
-        } else if (role === 'student') {
-          navigate('/student');
-        } else {
-          navigate(redirectTo);
-        }
-      }
+    if (!userType) {
+      navigate(redirectTo);
+      return;
     }
-  }, [user, role, loading, navigate, requireRole, redirectTo]);
 
-  if (loading) {
+    if (requireRole && userType !== requireRole) {
+      // 잘못된 역할로 접근한 경우 올바른 페이지로 리다이렉트
+      if (userType === 'admin') {
+        navigate('/admin');
+      } else if (userType === 'student') {
+        navigate('/student');
+      } else {
+        navigate(redirectTo);
+      }
+      return;
+    }
+
+    // 학생의 경우 학번이 있는지 확인
+    if (userType === 'student' && !studentId) {
+      navigate(redirectTo);
+      return;
+    }
+
+    setIsAuthenticated(true);
+    setIsLoading(false);
+  }, [navigate, requireRole, redirectTo]);
+
+  if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
         <div className="text-center">
@@ -44,8 +55,7 @@ const AuthGuard = ({ children, requireRole, redirectTo = '/auth' }: AuthGuardPro
     );
   }
 
-  if (!user) return null;
-  if (requireRole && role !== requireRole) return null;
+  if (!isAuthenticated) return null;
 
   return <>{children}</>;
 };

@@ -2,35 +2,37 @@
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { LogOut, GraduationCap } from 'lucide-react';
-import { useAuth } from '@/hooks/useAuth';
-import { supabase } from '@/integrations/supabase/client';
+import { useNavigate } from 'react-router-dom';
 import ActivitySelection from '@/components/student/ActivitySelection';
 import ChatInterface from '@/components/student/ChatInterface';
 import { Activity } from '@/types/activity';
+import { useToast } from '@/hooks/use-toast';
 
 const StudentDashboard = () => {
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
-  const [studentData, setStudentData] = useState<any>(null);
-  const { signOut, user } = useAuth();
+  const [studentId, setStudentId] = useState<string>('');
+  const navigate = useNavigate();
+  const { toast } = useToast();
 
   useEffect(() => {
-    const fetchStudentData = async () => {
-      if (user) {
-        const { data } = await supabase
-          .from('students')
-          .select('*')
-          .eq('user_id', user.id)
-          .single();
-        
-        setStudentData(data);
-      }
-    };
+    const storedStudentId = localStorage.getItem('studentId');
+    if (storedStudentId) {
+      setStudentId(storedStudentId);
+    }
+  }, []);
 
-    fetchStudentData();
-  }, [user]);
+  const handleLogout = () => {
+    localStorage.removeItem('userType');
+    localStorage.removeItem('studentId');
+    toast({
+      title: "로그아웃 완료",
+      description: "성공적으로 로그아웃되었습니다."
+    });
+    navigate('/auth');
+  };
 
-  const handleLogout = async () => {
-    await signOut();
+  const handleActivitySelect = (activity: Activity) => {
+    setSelectedActivity(activity);
   };
 
   return (
@@ -45,9 +47,9 @@ const StudentDashboard = () => {
               </div>
               <div>
                 <h1 className="text-2xl font-bold text-gray-900">AI 학습 도우미</h1>
-                {studentData && (
+                {studentId && (
                   <p className="text-sm text-gray-600">
-                    {studentData.name} ({studentData.student_id}) - {studentData.class_name}
+                    학번: {studentId}
                   </p>
                 )}
               </div>
@@ -68,13 +70,13 @@ const StudentDashboard = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {!selectedActivity ? (
           <ActivitySelection 
-            studentId={studentData?.student_id}
-            onActivitySelect={setSelectedActivity}
+            studentId={studentId}
+            onActivitySelect={handleActivitySelect}
           />
         ) : (
           <ChatInterface
             activity={selectedActivity}
-            studentId={studentData?.student_id}
+            studentId={studentId}
             onBack={() => setSelectedActivity(null)}
           />
         )}

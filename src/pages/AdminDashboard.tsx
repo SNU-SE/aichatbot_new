@@ -1,10 +1,10 @@
 
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { LogOut, Users, MessageSquare, Settings, BookOpen, BarChart3, Monitor } from 'lucide-react';
-import { useAuth } from '@/hooks/useAuth';
+import { useNavigate } from 'react-router-dom';
+import { useToast } from '@/hooks/use-toast';
 
 // Import admin components
 import StudentManagement from '@/components/admin/StudentManagement';
@@ -16,10 +16,17 @@ import StudentRecords from '@/components/admin/StudentRecords';
 
 const AdminDashboard = () => {
   const [activeTab, setActiveTab] = useState('monitoring');
-  const { signOut, user } = useAuth();
+  const navigate = useNavigate();
+  const { toast } = useToast();
 
-  const handleLogout = async () => {
-    await signOut();
+  const handleLogout = () => {
+    localStorage.removeItem('userType');
+    localStorage.removeItem('studentId');
+    toast({
+      title: "로그아웃 완료",
+      description: "성공적으로 로그아웃되었습니다."
+    });
+    navigate('/auth');
   };
 
   return (
@@ -34,7 +41,7 @@ const AdminDashboard = () => {
               </div>
               <div>
                 <h1 className="text-2xl font-bold text-gray-900">관리자 대시보드</h1>
-                <p className="text-sm text-gray-600">{user?.email}</p>
+                <p className="text-sm text-gray-600">관리자</p>
               </div>
             </div>
             <Button 
