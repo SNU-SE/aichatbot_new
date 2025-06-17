@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Plus, Edit, Trash2, Search, Upload, FileText, X } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import CSVUploader from '@/components/admin/enhanced/CSVUploader';
 
 interface Activity {
   id: string;
@@ -40,6 +40,7 @@ const ActivityManagement = () => {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [showCSVUpload, setShowCSVUpload] = useState(false);
   const [editingActivity, setEditingActivity] = useState<Activity | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const { toast } = useToast();
@@ -83,6 +84,67 @@ const ActivityManagement = () => {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleCSVDataParsed = async (csvData: any[]) => {
+    try {
+      const processedActivities = [];
+      
+      for (const row of csvData) {
+        // 기본 활동 데이터 처리
+        const activityData = {
+          title: row['제목'] || row['title'] || '',
+          type: row['유형'] || row['type'] || 'experiment',
+          file_url: row['파일URL'] || row['file_url'] || null,
+          final_question: row['최종질문'] || row['final_question'] || null,
+          modules_count: parseInt(row['모듈수'] || row['modules_count'] || '1'),
+          content: {}
+        };
+
+        // 활동 생성
+        const { data: activity, error: activityError } = await supabase
+          .from('activities')
+          .insert([activityData])
+          .select()
+          .single();
+
+        if (activityError) {
+          console.error('Activity creation error:', activityError);
+          continue;
+        }
+
+        // 체크리스트 항목 처리 (CSV에서 세미콜론으로 구분)
+        const checklistItems = row['체크리스트'] || row['checklist'] || '';
+        if (checklistItems) {
+          const items = checklistItems.split(';').filter((item: string) => item.trim());
+          for (let i = 0; i < items.length; i++) {
+            await supabase
+              .from('checklist_items')
+              .insert({
+                activity_id: activity.id,
+                step_number: i + 1,
+                description: items[i].trim()
+              });
+          }
+        }
+
+        processedActivities.push(activity);
+      }
+
+      toast({
+        title: "성공",
+        description: `${processedActivities.length}개의 활동이 생성되었습니다.`
+      });
+
+      setShowCSVUpload(false);
+      fetchActivities();
+    } catch (error: any) {
+      toast({
+        title: "오류",
+        description: "CSV 데이터 처리 중 오류가 발생했습니다.",
+        variant: "destructive"
+      });
     }
   };
 
@@ -371,6 +433,18 @@ const ActivityManagement = () => {
     }
   };
 
+  // CSV 템플릿 데이터
+  const csvTemplateData = [
+    {
+      '제목': '물의 상태 변화 실험',
+      '유형': 'experiment',
+      '파일URL': 'https://example.com/file.pdf',
+      '체크리스트': '실험 준비하기;온도 측정하기;결과 기록하기'
+    }
+  ];
+
+  const csvExpectedHeaders = ['제목', '유형', '파일URL', '체크리스트'];
+
   if (loading) {
     return <div className="flex justify-center py-8">로딩 중...</div>;
   }
@@ -379,14 +453,55 @@ const ActivityManagement = () => {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold text-[rgb(15,15,112)]">학습활동 관리</h2>
-        <Button 
-          onClick={() => setShowForm(true)}
-          className="bg-[rgb(15,15,112)] hover:bg-[rgb(15,15,112)]/90"
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          새 활동 생성
-        </Button>
+        <div className="flex space-x-2">
+          <Button 
+            onClick={() => setShowCSVUpload(true)}
+            variant="outline"
+            className="border-[rgb(15,15,112)] text-[rgb(15,15,112)] hover:bg-[rgb(15,15,112)] hover:text-white"
+          >
+            <Upload className="h-4 w-4 mr-2" />
+            CSV 일괄 등록
+          </Button>
+          <Button 
+            onClick={() => setShowForm(true)}
+            className="bg-[rgb(15,15,112)] hover:bg-[rgb(15,15,112)]/90"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            새 활동 생성
+          </Button>
+        </div>
       </div>
+
+      {/* CSV 업로드 모달 */}
+      {showCSVUpload && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex justify-between items-center">
+              활동 CSV 일괄 등록
+              <Button variant="ghost" size="sm" onClick={() => setShowCSVUpload(false)}>
+                <X className="h-4 w-4" />
+              </Button>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <CSVUploader
+              onDataParsed={handleCSVDataParsed}
+              expectedHeaders={csvExpectedHeaders}
+              templateData={csvTemplateData}
+              title="활동"
+            />
+            <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+              <h4 className="font-medium mb-2">CSV 파일 형식 안내:</h4>
+              <ul className="text-sm text-gray-600 space-y-1">
+                <li>• <strong>제목</strong>: 활동 제목</li>
+                <li>• <strong>유형</strong>: experiment, argumentation, discussion 중 하나</li>
+                <li>• <strong>파일URL</strong>: 관련 파일 URL (선택사항)</li>
+                <li>• <strong>체크리스트</strong>: 세미콜론(;)으로 구분된 체크리스트 항목들</li>
+              </ul>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* 검색 */}
       <Card>
