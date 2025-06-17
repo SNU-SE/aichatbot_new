@@ -35,6 +35,8 @@ interface ClassPromptSetting {
   class_name: string;
   active_prompt_id: string | null;
   system_prompt: string | null;
+  selected_provider: string | null;
+  selected_model: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -58,6 +60,12 @@ const AISettings = () => {
     rag_enabled: false
   });
 
+  const [classFormData, setClassFormData] = useState({
+    selected_provider: 'openai',
+    selected_model: 'gpt-4o',
+    system_prompt: ''
+  });
+
   const [newTemplate, setNewTemplate] = useState({
     name: '',
     prompt: '',
@@ -78,10 +86,28 @@ const AISettings = () => {
     if (selectedClass && selectedClass !== 'all') {
       const classSetting = classSettings.find(cs => cs.class_name === selectedClass);
       if (classSetting) {
-        setFormData(prev => ({ ...prev, system_prompt: classSetting.system_prompt || '' }));
+        setClassFormData({
+          selected_provider: classSetting.selected_provider || 'openai',
+          selected_model: classSetting.selected_model || 'gpt-4o',
+          system_prompt: classSetting.system_prompt || ''
+        });
+      } else {
+        // Reset to defaults if no class setting exists
+        setClassFormData({
+          selected_provider: 'openai',
+          selected_model: 'gpt-4o',
+          system_prompt: ''
+        });
       }
+    } else {
+      // For 'all', use global settings
+      setClassFormData({
+        selected_provider: formData.selected_provider,
+        selected_model: formData.selected_model,
+        system_prompt: formData.system_prompt
+      });
     }
-  }, [selectedClass, classSettings]);
+  }, [selectedClass, classSettings, formData]);
 
   const fetchSettings = async () => {
     try {
@@ -157,6 +183,76 @@ const AISettings = () => {
       setClassSettings(data || []);
     } catch (error: any) {
       console.error('Error fetching class settings:', error);
+    }
+  };
+
+  const saveClassSettings = async () => {
+    setSaving(true);
+    try {
+      const targetClass = selectedClass === 'all' ? 'all' : selectedClass;
+      
+      // Check if class setting exists
+      const existingSetting = classSettings.find(cs => cs.class_name === targetClass);
+      
+      if (existingSetting) {
+        const { error } = await supabase
+          .from('class_prompt_settings')
+          .update({
+            selected_provider: classFormData.selected_provider,
+            selected_model: classFormData.selected_model,
+            system_prompt: classFormData.system_prompt,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', existingSetting.id);
+
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('class_prompt_settings')
+          .insert([{
+            class_name: targetClass,
+            selected_provider: classFormData.selected_provider,
+            selected_model: classFormData.selected_model,
+            system_prompt: classFormData.system_prompt
+          }]);
+
+        if (error) throw error;
+      }
+
+      // If global setting (all), also update admin_settings
+      if (targetClass === 'all' && settings) {
+        await supabase
+          .from('admin_settings')
+          .update({ 
+            selected_provider: classFormData.selected_provider,
+            selected_model: classFormData.selected_model,
+            system_prompt: classFormData.system_prompt 
+          })
+          .eq('id', settings.id);
+        
+        setFormData(prev => ({ 
+          ...prev, 
+          selected_provider: classFormData.selected_provider,
+          selected_model: classFormData.selected_model,
+          system_prompt: classFormData.system_prompt 
+        }));
+      }
+
+      await fetchClassSettings();
+      
+      toast({
+        title: "성공",
+        description: `${targetClass === 'all' ? '전체' : targetClass} 클래스 설정이 저장되었습니다.`
+      });
+    } catch (error: any) {
+      console.error('Error saving class settings:', error);
+      toast({
+        title: "오류",
+        description: "클래스 설정 저장에 실패했습니다.",
+        variant: "destructive"
+      });
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -368,14 +464,14 @@ const AISettings = () => {
     return templates.filter(t => t.target_class === 'all' || t.target_class === selectedClass);
   };
 
-  const getModelOptions = () => {
-    if (formData.selected_provider === 'openai') {
+  const getModelOptions = (provider: string) => {
+    if (provider === 'openai') {
       return [
         { value: 'gpt-4o', label: 'GPT-4o (권장)' },
         { value: 'gpt-4o-mini', label: 'GPT-4o Mini (빠름)' },
         { value: 'gpt-4-turbo', label: 'GPT-4 Turbo' }
       ];
-    } else if (formData.selected_provider === 'anthropic') {
+    } else if (provider === 'anthropic') {
       return [
         { value: 'claude-3-5-sonnet-20241022', label: 'Claude 3.5 Sonnet' },
         { value: 'claude-3-5-haiku-20241022', label: 'Claude 3.5 Haiku' },
@@ -383,6 +479,11 @@ const AISettings = () => {
       ];
     }
     return [];
+  };
+
+  const getCurrentClassSetting = () => {
+    const targetClass = selectedClass === 'all' ? 'all' : selectedClass;
+    return classSettings.find(cs => cs.class_name === targetClass);
   };
 
   if (loading) {
@@ -481,7 +582,7 @@ const AISettings = () => {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {getModelOptions().map(option => (
+                      {getModelOptions(formData.selected_provider).map(option => (
                         <SelectItem key={option.value} value={option.value}>
                           {option.label}
                         </SelectItem>
@@ -573,11 +674,100 @@ const AISettings = () => {
                 <div className="text-sm text-gray-500">
                   {(() => {
                     const activeTemplate = getActiveTemplate();
-                    return activeTemplate 
-                      ? `현재 활성: ${activeTemplate.name}`
-                      : '활성화된 템플릿 없음';
+                    const currentSetting = getCurrentClassSetting();
+                    return (
+                      <div>
+                        <div>{activeTemplate ? `현재 활성: ${activeTemplate.name}` : '활성화된 템플릿 없음'}</div>
+                        {currentSetting && (
+                          <div className="text-xs">
+                            모델: {currentSetting.selected_provider === 'openai' ? 'OpenAI' : 'Anthropic'} - {currentSetting.selected_model}
+                          </div>
+                        )}
+                      </div>
+                    );
                   })()}
                 </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* 클래스별 AI 모델 설정 */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center space-x-2">
+                <Bot className="h-5 w-5" />
+                <span>{selectedClass === 'all' ? '전체' : selectedClass} 클래스 AI 모델 설정</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="class-provider">AI 제공업체</Label>
+                  <Select 
+                    value={classFormData.selected_provider} 
+                    onValueChange={(value) => {
+                      setClassFormData({
+                        ...classFormData, 
+                        selected_provider: value,
+                        selected_model: value === 'openai' ? 'gpt-4o' : 'claude-3-5-sonnet-20241022'
+                      });
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="openai">OpenAI</SelectItem>
+                      <SelectItem value="anthropic">Anthropic</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label htmlFor="class-model">AI 모델</Label>
+                  <Select 
+                    value={classFormData.selected_model} 
+                    onValueChange={(value) => setClassFormData({...classFormData, selected_model: value})}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {getModelOptions(classFormData.selected_provider).map(option => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div>
+                <Label htmlFor="class_system_prompt">클래스 시스템 프롬프트</Label>
+                <Textarea
+                  id="class_system_prompt"
+                  value={classFormData.system_prompt}
+                  onChange={(e) => setClassFormData({...classFormData, system_prompt: e.target.value})}
+                  placeholder="이 클래스에만 적용될 시스템 프롬프트를 입력하세요..."
+                  rows={4}
+                />
+                <p className="text-sm text-gray-500 mt-1">
+                  {selectedClass === 'all' 
+                    ? '전체 클래스에 적용되는 기본 프롬프트입니다.' 
+                    : `${selectedClass} 클래스에만 적용되는 프롬프트입니다.`}
+                </p>
+              </div>
+
+              <div className="flex justify-end">
+                <Button 
+                  onClick={saveClassSettings}
+                  disabled={saving}
+                  className="bg-[rgb(15,15,112)] hover:bg-[rgb(15,15,112)]/90"
+                >
+                  <Save className="h-4 w-4 mr-2" />
+                  {saving ? '저장 중...' : '클래스 설정 저장'}
+                </Button>
               </div>
             </CardContent>
           </Card>

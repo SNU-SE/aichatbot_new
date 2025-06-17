@@ -268,6 +268,8 @@ export type Database = {
           class_name: string
           created_at: string
           id: string
+          selected_model: string | null
+          selected_provider: string | null
           system_prompt: string | null
           updated_at: string
         }
@@ -276,6 +278,8 @@ export type Database = {
           class_name: string
           created_at?: string
           id?: string
+          selected_model?: string | null
+          selected_provider?: string | null
           system_prompt?: string | null
           updated_at?: string
         }
@@ -284,6 +288,8 @@ export type Database = {
           class_name?: string
           created_at?: string
           id?: string
+          selected_model?: string | null
+          selected_provider?: string | null
           system_prompt?: string | null
           updated_at?: string
         }
