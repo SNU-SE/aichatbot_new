@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -137,11 +136,10 @@ const AISettings = () => {
     try {
       const { data, error } = await supabase
         .from('students')
-        .select('class_name')
-        .group('class_name');
+        .select('class_name');
 
       if (error) throw error;
-      const uniqueClasses = [...new Set((data || []).map(item => item.class_name))];
+      const uniqueClasses = [...new Set((data || []).map(item => item.class_name).filter(Boolean))] as string[];
       setClasses(uniqueClasses);
     } catch (error: any) {
       console.error('Error fetching classes:', error);
