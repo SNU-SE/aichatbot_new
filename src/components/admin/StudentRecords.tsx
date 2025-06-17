@@ -1,13 +1,14 @@
-
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Search, MessageCircle, Clock, User } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Search, MessageCircle, Clock, User, Download } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { generateCSV, downloadCSV } from '@/utils/csvUtils';
 
 interface ChatLog {
   id: string;
@@ -30,10 +31,21 @@ interface Activity {
   type: string;
 }
 
+interface ChecklistProgress {
+  id: string;
+  student_id: string;
+  checklist_item_id: string;
+  is_completed: boolean;
+  completed_at: string | null;
+  description: string;
+  activity_title: string;
+}
+
 const StudentRecords = () => {
   const [chatLogs, setChatLogs] = useState<ChatLog[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
+  const [checklistProgress, setChecklistProgress] = useState<ChecklistProgress[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStudent, setSelectedStudent] = useState('all');
@@ -68,9 +80,33 @@ const StudentRecords = () => {
 
       if (activitiesError) throw activitiesError;
 
+      // 체크리스트 진행도 가져오기
+      const { data: progressData, error: progressError } = await supabase
+        .from('student_checklist_progress')
+        .select(`
+          *,
+          checklist_items!inner(
+            description,
+            activities!inner(title)
+          )
+        `);
+
+      if (progressError) throw progressError;
+
+      const formattedProgress = progressData?.map(p => ({
+        id: p.id,
+        student_id: p.student_id,
+        checklist_item_id: p.checklist_item_id,
+        is_completed: p.is_completed,
+        completed_at: p.completed_at,
+        description: (p.checklist_items as any).description,
+        activity_title: (p.checklist_items as any).activities.title
+      })) || [];
+
       setChatLogs(logsData || []);
       setStudents(studentsData || []);
       setActivities(activitiesData || []);
+      setChecklistProgress(formattedProgress);
     } catch (error) {
       toast({
         title: "오류",
@@ -80,6 +116,53 @@ const StudentRecords = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const downloadChatLogs = () => {
+    const filteredLogs = chatLogs.filter(log => {
+      const matchesSearch = log.message.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                           log.student_id.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesStudent = selectedStudent === 'all' || log.student_id === selectedStudent;
+      const matchesActivity = selectedActivity === 'all' || log.activity_id === selectedActivity;
+      
+      return matchesSearch && matchesStudent && matchesActivity;
+    });
+
+    const csvData = filteredLogs.map(log => ({
+      timestamp: new Date(log.timestamp).toLocaleString('ko-KR'),
+      student_id: log.student_id,
+      student_name: getStudentInfo(log.student_id).split(' (')[0],
+      sender: log.sender === 'student' ? '학생' : 'AI',
+      activity: getActivityInfo(log.activity_id),
+      message: log.message
+    }));
+
+    const csvContent = generateCSV(csvData, ['timestamp', 'student_id', 'student_name', 'sender', 'activity', 'message']);
+    downloadCSV(csvContent, `chat_logs_${new Date().toISOString().split('T')[0]}.csv`);
+    
+    toast({
+      title: "다운로드 완료",
+      description: "채팅 로그가 다운로드되었습니다."
+    });
+  };
+
+  const downloadChecklistProgress = () => {
+    const csvData = checklistProgress.map(progress => ({
+      student_id: progress.student_id,
+      student_name: getStudentInfo(progress.student_id).split(' (')[0],
+      activity_title: progress.activity_title,
+      checklist_item: progress.description,
+      is_completed: progress.is_completed ? '완료' : '미완료',
+      completed_at: progress.completed_at ? new Date(progress.completed_at).toLocaleString('ko-KR') : '-'
+    }));
+
+    const csvContent = generateCSV(csvData, ['student_id', 'student_name', 'activity_title', 'checklist_item', 'is_completed', 'completed_at']);
+    downloadCSV(csvContent, `checklist_progress_${new Date().toISOString().split('T')[0]}.csv`);
+    
+    toast({
+      title: "다운로드 완료",
+      description: "체크리스트 진행도가 다운로드되었습니다."
+    });
   };
 
   const getStudentInfo = (studentId: string) => {
@@ -130,7 +213,19 @@ const StudentRecords = () => {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-[rgb(15,15,112)]">학생기록 관리</h2>
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-bold text-[rgb(15,15,112)]">학생기록 관리</h2>
+        <div className="flex space-x-2">
+          <Button onClick={downloadChecklistProgress} variant="outline">
+            <Download className="h-4 w-4 mr-2" />
+            체크리스트 다운로드
+          </Button>
+          <Button onClick={downloadChatLogs} variant="outline">
+            <Download className="h-4 w-4 mr-2" />
+            채팅로그 다운로드
+          </Button>
+        </div>
+      </div>
 
       {/* 필터 */}
       <Card>

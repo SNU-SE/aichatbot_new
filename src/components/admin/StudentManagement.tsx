@@ -1,13 +1,13 @@
-
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Edit, Trash2, Search } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, Upload } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import CSVUploader from './enhanced/CSVUploader';
 
 interface Student {
   id: string;
@@ -22,6 +22,7 @@ const StudentManagement = () => {
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [showCSVUpload, setShowCSVUpload] = useState(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const { toast } = useToast();
@@ -106,6 +107,37 @@ const StudentManagement = () => {
     }
   };
 
+  const handleCSVData = async (csvData: any[]) => {
+    try {
+      const studentsToInsert = csvData.map(row => ({
+        student_id: row.student_id || row['학번'],
+        class_name: row.class_name || row['반'],
+        name: row.name || row['이름'] || null,
+        mother_tongue: row.mother_tongue || row['모국어'] || 'Korean'
+      }));
+
+      const { error } = await supabase
+        .from('students')
+        .insert(studentsToInsert);
+
+      if (error) throw error;
+
+      toast({
+        title: "성공",
+        description: `${studentsToInsert.length}명의 학생이 등록되었습니다.`
+      });
+
+      setShowCSVUpload(false);
+      fetchStudents();
+    } catch (error: any) {
+      toast({
+        title: "오류",
+        description: "CSV 데이터 저장에 실패했습니다: " + error.message,
+        variant: "destructive"
+      });
+    }
+  };
+
   const handleEdit = (student: Student) => {
     setEditingStudent(student);
     setFormData({
@@ -167,14 +199,33 @@ const StudentManagement = () => {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold text-[rgb(15,15,112)]">학생정보 관리</h2>
-        <Button 
-          onClick={() => setShowForm(true)}
-          className="bg-[rgb(15,15,112)] hover:bg-[rgb(15,15,112)]/90"
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          새 학생 등록
-        </Button>
+        <div className="flex space-x-2">
+          <Button 
+            onClick={() => setShowCSVUpload(true)}
+            variant="outline"
+            className="border-[rgb(15,15,112)] text-[rgb(15,15,112)]"
+          >
+            <Upload className="h-4 w-4 mr-2" />
+            CSV 일괄등록
+          </Button>
+          <Button 
+            onClick={() => setShowForm(true)}
+            className="bg-[rgb(15,15,112)] hover:bg-[rgb(15,15,112)]/90"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            새 학생 등록
+          </Button>
+        </div>
       </div>
+
+      {/* CSV 업로드 */}
+      {showCSVUpload && (
+        <CSVUploader
+          onDataParsed={handleCSVData}
+          expectedHeaders={['student_id', 'class_name', 'name', 'mother_tongue']}
+          title="학생"
+        />
+      )}
 
       {/* 검색 */}
       <Card>

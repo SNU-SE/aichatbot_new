@@ -1,9 +1,11 @@
+
 import { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
-import { Users, MessageCircle, Activity, Clock } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Button } from '@/components/ui/button';
+import { Users, MessageCircle, Activity, Clock, Send, Eye } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import ClassControlPanel from './enhanced/ClassControlPanel';
 import StudentStatusGrid from './enhanced/StudentStatusGrid';
 import RealTimeChatMonitor from './enhanced/RealTimeChatMonitor';
 
@@ -35,14 +37,33 @@ interface ChatLog {
   timestamp: string;
 }
 
+interface ArgumentationResponse {
+  id: string;
+  student_id: string;
+  activity_id: string;
+  response_text: string;
+  is_submitted: boolean;
+  submitted_at: string;
+}
+
+interface PeerEvaluation {
+  id: string;
+  evaluator_id: string;
+  target_response_id: string;
+  activity_id: string;
+  evaluation_text: string | null;
+  is_completed: boolean;
+}
+
 const ClassManagement = () => {
   const [sessions, setSessions] = useState<StudentSession[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [recentChats, setRecentChats] = useState<ChatLog[]>([]);
+  const [argumentationResponses, setArgumentationResponses] = useState<ArgumentationResponse[]>([]);
+  const [peerEvaluations, setPeerEvaluations] = useState<PeerEvaluation[]>([]);
   const [selectedClass, setSelectedClass] = useState('all');
   const [selectedActivity, setSelectedActivity] = useState('');
-  const [isClassActive, setIsClassActive] = useState(false);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
@@ -89,10 +110,26 @@ const ClassManagement = () => {
 
       if (chatsError) throw chatsError;
 
+      // 논증 응답 가져오기
+      const { data: responsesData, error: responsesError } = await supabase
+        .from('argumentation_responses')
+        .select('*');
+
+      if (responsesError) throw responsesError;
+
+      // 동료평가 가져오기
+      const { data: evaluationsData, error: evaluationsError } = await supabase
+        .from('peer_evaluations')
+        .select('*');
+
+      if (evaluationsError) throw evaluationsError;
+
       setSessions(sessionsData || []);
       setStudents(studentsData || []);
       setActivities(activitiesData || []);
       setRecentChats(chatsData || []);
+      setArgumentationResponses(responsesData || []);
+      setPeerEvaluations(evaluationsData || []);
     } catch (error) {
       toast({
         title: "오류",
@@ -138,22 +175,6 @@ const ClassManagement = () => {
     });
   };
 
-  const startClass = () => {
-    setIsClassActive(true);
-    toast({
-      title: "수업 시작",
-      description: "실시간 수업이 시작되었습니다."
-    });
-  };
-
-  const endClass = () => {
-    setIsClassActive(false);
-    toast({
-      title: "수업 종료",
-      description: "실시간 수업이 종료되었습니다."
-    });
-  };
-
   const assignActivity = async () => {
     if (!selectedActivity) {
       toast({
@@ -170,6 +191,36 @@ const ClassManagement = () => {
     });
   };
 
+  const sendAnnouncement = () => {
+    toast({
+      title: "공지사항 전송",
+      description: "모든 온라인 학생에게 공지사항이 전송되었습니다."
+    });
+  };
+
+  const getSelectedActivityInfo = () => {
+    return activities.find(a => a.id === selectedActivity);
+  };
+
+  const getArgumentationStats = () => {
+    const selectedActivityInfo = getSelectedActivityInfo();
+    if (!selectedActivityInfo || selectedActivityInfo.type !== 'argumentation') {
+      return null;
+    }
+
+    const activityResponses = argumentationResponses.filter(r => r.activity_id === selectedActivity);
+    const completedResponses = activityResponses.filter(r => r.is_submitted);
+    const evaluations = peerEvaluations.filter(e => e.activity_id === selectedActivity);
+    const completedEvaluations = evaluations.filter(e => e.is_completed);
+
+    return {
+      totalResponses: activityResponses.length,
+      completedResponses: completedResponses.length,
+      totalEvaluations: evaluations.length,
+      completedEvaluations: completedEvaluations.length
+    };
+  };
+
   if (loading) {
     return <div className="flex justify-center py-8">로딩 중...</div>;
   }
@@ -178,6 +229,8 @@ const ClassManagement = () => {
   const totalStudents = selectedClass === 'all' ? 
     students.length : 
     students.filter(s => s.class_name === selectedClass).length;
+
+  const argumentationStats = getArgumentationStats();
 
   return (
     <div className="space-y-6">
@@ -228,29 +281,97 @@ const ClassManagement = () => {
             <div className="flex items-center space-x-2">
               <Clock className="h-5 w-5 text-[rgb(15,15,112)]" />
               <div>
-                <p className="text-sm text-gray-600">수업 상태</p>
-                <p className="text-lg font-bold">{isClassActive ? "진행 중" : "대기 중"}</p>
+                <p className="text-sm text-gray-600">선택된 반</p>
+                <p className="text-lg font-bold">{selectedClass === 'all' ? '전체' : selectedClass}</p>
               </div>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* 수업 제어 패널 */}
-      <ClassControlPanel
-        isClassActive={isClassActive}
-        onStartClass={startClass}
-        onEndClass={endClass}
-        selectedClass={selectedClass}
-        onClassChange={setSelectedClass}
-        selectedActivity={selectedActivity}
-        onActivityChange={setSelectedActivity}
-        onAssignActivity={assignActivity}
-        activities={activities}
-        classes={getUniqueClasses()}
-        onlineCount={onlineStudents.length}
-        totalCount={totalStudents}
-      />
+      {/* 활동 배정 영역 */}
+      <Card className="border-2 border-[rgb(15,15,112)]/20">
+        <CardContent className="pt-6">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-gray-50 rounded-lg">
+            <div>
+              <label className="text-sm font-medium mb-2 block">대상 반</label>
+              <Select value={selectedClass} onValueChange={setSelectedClass}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">모든 반</SelectItem>
+                  {getUniqueClasses().map(className => (
+                    <SelectItem key={className} value={className}>
+                      {className}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium mb-2 block">활동 선택</label>
+              <Select value={selectedActivity} onValueChange={setSelectedActivity}>
+                <SelectTrigger>
+                  <SelectValue placeholder="활동을 선택하세요" />
+                </SelectTrigger>
+                <SelectContent>
+                  {activities.map(activity => (
+                    <SelectItem key={activity.id} value={activity.id}>
+                      {activity.title} ({activity.type})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex flex-col space-y-2">
+              <Button 
+                onClick={assignActivity}
+                disabled={!selectedActivity}
+                className="bg-[rgb(15,15,112)] hover:bg-[rgb(15,15,112)]/90 flex-1"
+              >
+                <Send className="h-4 w-4 mr-2" />
+                활동 배정
+              </Button>
+              <Button 
+                onClick={sendAnnouncement}
+                variant="outline"
+                size="sm"
+              >
+                공지 전송
+              </Button>
+            </div>
+
+            {/* 논증 활동 특별 버튼들 */}
+            {argumentationStats && (
+              <div className="flex flex-col space-y-2">
+                <Button variant="outline" size="sm">
+                  <Eye className="h-4 w-4 mr-2" />
+                  동료평가 ({argumentationStats.completedEvaluations}/{argumentationStats.totalEvaluations})
+                </Button>
+                <Button variant="outline" size="sm">
+                  피드백확인
+                </Button>
+                <Button variant="outline" size="sm">
+                  결과확인
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {argumentationStats && (
+            <div className="mt-4 p-4 bg-blue-50 rounded-lg">
+              <h4 className="font-medium text-[rgb(15,15,112)] mb-2">논증 활동 진행 상황</h4>
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>응답 완료: {argumentationStats.completedResponses}/{argumentationStats.totalResponses}</div>
+                <div>동료평가 완료: {argumentationStats.completedEvaluations}/{argumentationStats.totalEvaluations}</div>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* 학생 상태 그리드와 채팅 모니터 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
