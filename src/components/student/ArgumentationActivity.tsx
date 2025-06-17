@@ -77,7 +77,7 @@ const ArgumentationActivity = ({ activity, studentId, onBack }: ArgumentationAct
         .from('peer_evaluations')
         .select(`
           *,
-          target_response:argumentation_responses(response_text)
+          argumentation_responses!target_response_id(response_text)
         `)
         .eq('evaluator_id', studentId)
         .eq('activity_id', activity.id);
@@ -90,16 +90,25 @@ const ArgumentationActivity = ({ activity, studentId, onBack }: ArgumentationAct
         }
       }
 
-      // Check if peer evaluations are available for this student
-      const { data: evaluations } = await supabase
-        .from('peer_evaluations')
-        .select('*')
+      // Check if peer evaluations are available for this student's response
+      const { data: studentResponse } = await supabase
+        .from('argumentation_responses')
+        .select('id')
+        .eq('student_id', studentId)
         .eq('activity_id', activity.id)
-        .eq('target_response_id', `(SELECT id FROM argumentation_responses WHERE student_id = '${studentId}' AND activity_id = '${activity.id}')`);
+        .single();
 
-      if (evaluations && evaluations.length > 0) {
-        setPeerEvaluations(evaluations);
-        setShowEvaluationCheck(true);
+      if (studentResponse) {
+        const { data: evaluations } = await supabase
+          .from('peer_evaluations')
+          .select('*')
+          .eq('target_response_id', studentResponse.id)
+          .eq('is_completed', true);
+
+        if (evaluations && evaluations.length > 0) {
+          setPeerEvaluations(evaluations);
+          setShowEvaluationCheck(true);
+        }
       }
     } catch (error) {
       console.error('동료평가 상태 확인 실패:', error);
@@ -326,7 +335,7 @@ const ArgumentationActivity = ({ activity, studentId, onBack }: ArgumentationAct
               <div>
                 <h4 className="font-medium mb-2">평가할 응답:</h4>
                 <div className="bg-gray-50 p-3 rounded">
-                  <p className="text-gray-700">{peerResponse?.target_response?.response_text}</p>
+                  <p className="text-gray-700">{peerResponse?.argumentation_responses?.response_text}</p>
                 </div>
               </div>
               <div>

@@ -579,7 +579,29 @@ export type Database = {
       }
     }
     Functions: {
-      [_ in never]: never
+      assign_peer_evaluations: {
+        Args: { activity_id_param: string }
+        Returns: number
+      }
+      get_peer_evaluation_stats: {
+        Args: { activity_id_param: string }
+        Returns: {
+          total_responses: number
+          submitted_responses: number
+          total_evaluations: number
+          completed_evaluations: number
+          completion_rate: number
+        }[]
+      }
+      get_student_evaluation_status: {
+        Args: { student_id_param: string; activity_id_param: string }
+        Returns: {
+          has_submitted_response: boolean
+          assigned_evaluations: number
+          completed_evaluations: number
+          received_evaluations: number
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never

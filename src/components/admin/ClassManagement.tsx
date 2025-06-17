@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -8,6 +7,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import StudentStatusGrid from './enhanced/StudentStatusGrid';
 import RealTimeChatMonitor from './enhanced/RealTimeChatMonitor';
+import PeerEvaluationDialog from './enhanced/PeerEvaluationDialog';
 
 interface StudentSession {
   id: string;
@@ -203,13 +203,7 @@ const ClassManagement = () => {
   };
 
   const handlePeerEvaluation = () => {
-    const stats = getArgumentationStats();
-    if (!stats) return;
-
-    toast({
-      title: "동료평가 관리",
-      description: `현재 ${stats.completedEvaluations}/${stats.totalEvaluations}개의 동료평가가 완료되었습니다.`
-    });
+    // This will be handled by the PeerEvaluationDialog component
   };
 
   const handleFeedbackCheck = () => {
@@ -262,6 +256,7 @@ const ClassManagement = () => {
     students.filter(s => s.class_name === selectedClass).length;
 
   const argumentationStats = getArgumentationStats();
+  const selectedActivityInfo = getSelectedActivityInfo();
 
   return (
     <div className="space-y-6">
@@ -379,17 +374,21 @@ const ClassManagement = () => {
             </div>
 
             {/* 논증 활동 특별 버튼들 */}
-            {argumentationStats && (
+            {argumentationStats && selectedActivityInfo && (
               <div className="flex flex-col space-y-2">
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={handlePeerEvaluation}
-                  className="text-xs"
+                <PeerEvaluationDialog 
+                  activityId={selectedActivity} 
+                  activityTitle={selectedActivityInfo.title}
                 >
-                  <Eye className="h-4 w-4 mr-1" />
-                  동료평가 ({argumentationStats.completedEvaluations}/{argumentationStats.totalEvaluations})
-                </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    className="text-xs w-full"
+                  >
+                    <Eye className="h-4 w-4 mr-1" />
+                    동료평가 ({argumentationStats.completedEvaluations}/{argumentationStats.totalEvaluations})
+                  </Button>
+                </PeerEvaluationDialog>
                 <Button 
                   variant="outline" 
                   size="sm"
