@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -8,7 +9,6 @@ import { useChecklistProgress } from '@/hooks/useChecklistProgress';
 import ChatInterface from './ChatInterface';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { X } from 'lucide-react';
 
 interface ArgumentationActivityProps {
   activity: any;
@@ -21,9 +21,7 @@ const ArgumentationActivity = ({ activity, studentId, onBack }: ArgumentationAct
     studentId, 
     activityId: activity.id 
   });
-  const [showArgumentInput, setShowArgumentInput] = useState(false);
-  const [showPeerEvaluation, setShowPeerEvaluation] = useState(false);
-  const [showEvaluationCheck, setShowEvaluationCheck] = useState(false);
+  const [activeTask, setActiveTask] = useState<'none' | 'argument' | 'peer-evaluation' | 'evaluation-check'>('none');
   const [argumentText, setArgumentText] = useState('');
   const [evaluationText, setEvaluationText] = useState('');
   const [reflectionText, setReflectionText] = useState('');
@@ -83,7 +81,6 @@ const ArgumentationActivity = ({ activity, studentId, onBack }: ArgumentationAct
         .eq('activity_id', activity.id);
 
       if (assignments && assignments.length > 0) {
-        setShowPeerEvaluation(true);
         setPeerResponse(assignments[0]);
         if (assignments[0].evaluation_text) {
           setEvaluationText(assignments[0].evaluation_text);
@@ -107,7 +104,6 @@ const ArgumentationActivity = ({ activity, studentId, onBack }: ArgumentationAct
 
         if (evaluations && evaluations.length > 0) {
           setPeerEvaluations(evaluations);
-          setShowEvaluationCheck(true);
         }
       }
     } catch (error) {
@@ -140,7 +136,7 @@ const ArgumentationActivity = ({ activity, studentId, onBack }: ArgumentationAct
       if (error) throw error;
 
       setIsSubmitted(true);
-      setShowArgumentInput(false);
+      setActiveTask('none');
       
       toast({
         title: "성공",
@@ -177,7 +173,7 @@ const ArgumentationActivity = ({ activity, studentId, onBack }: ArgumentationAct
 
       if (error) throw error;
 
-      setShowPeerEvaluation(false);
+      setActiveTask('none');
       
       toast({
         title: "성공",
@@ -216,7 +212,7 @@ const ArgumentationActivity = ({ activity, studentId, onBack }: ArgumentationAct
 
       if (error) throw error;
 
-      setShowEvaluationCheck(false);
+      setActiveTask('none');
       
       toast({
         title: "성공",
@@ -277,24 +273,25 @@ const ArgumentationActivity = ({ activity, studentId, onBack }: ArgumentationAct
           {/* Action Buttons */}
           <div className="mt-4 space-y-2">
             <Button 
-              onClick={() => setShowArgumentInput(true)}
+              onClick={() => setActiveTask(activeTask === 'argument' ? 'none' : 'argument')}
               className="w-full"
               disabled={isSubmitted}
+              variant={activeTask === 'argument' ? 'default' : 'outline'}
             >
               {isSubmitted ? '논증 제출완료' : '논증 입력'}
             </Button>
             <Button 
-              onClick={() => setShowPeerEvaluation(true)}
+              onClick={() => setActiveTask(activeTask === 'peer-evaluation' ? 'none' : 'peer-evaluation')}
               className="w-full"
-              variant="outline"
+              variant={activeTask === 'peer-evaluation' ? 'default' : 'outline'}
               disabled={!peerResponse || peerResponse.is_completed}
             >
               {peerResponse?.is_completed ? '동료평가 완료' : '동료 평가'}
             </Button>
             <Button 
-              onClick={() => setShowEvaluationCheck(true)}
+              onClick={() => setActiveTask(activeTask === 'evaluation-check' ? 'none' : 'evaluation-check')}
               className="w-full"
-              variant="outline"
+              variant={activeTask === 'evaluation-check' ? 'default' : 'outline'}
               disabled={peerEvaluations.length === 0}
             >
               평가 확인
@@ -309,10 +306,128 @@ const ArgumentationActivity = ({ activity, studentId, onBack }: ArgumentationAct
         </div>
       </div>
 
-      {/* Right Panel: Chat + Overlay */}
-      <div className="flex-1 relative">
-        {/* Chat Interface - Always Visible */}
-        <div className="h-full">
+      {/* Right Panel: Task + Chat */}
+      <div className="flex-1 flex flex-col">
+        {/* Task Area (상단) */}
+        {activeTask !== 'none' && (
+          <div className="bg-white border-b shadow-sm">
+            {activeTask === 'argument' && (
+              <Card className="m-4 border-0 shadow-sm">
+                <CardHeader>
+                  <CardTitle>논증 입력</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div>
+                    <h4 className="font-medium mb-2">질문:</h4>
+                    <p className="text-gray-700 bg-gray-50 p-3 rounded">
+                      {activity.final_question || "질문이 설정되지 않았습니다."}
+                    </p>
+                  </div>
+                  <div>
+                    <h4 className="font-medium mb-2">답변:</h4>
+                    <Textarea
+                      value={argumentText}
+                      onChange={(e) => setArgumentText(e.target.value)}
+                      placeholder="논증을 작성해주세요..."
+                      className="min-h-32"
+                    />
+                  </div>
+                  <div className="flex space-x-2">
+                    <Button onClick={submitArgument}>제출</Button>
+                    <Button variant="outline" onClick={() => setActiveTask('none')}>
+                      취소
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {activeTask === 'peer-evaluation' && (
+              <Card className="m-4 border-0 shadow-sm">
+                <CardHeader>
+                  <CardTitle>동료 평가</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div>
+                    <h4 className="font-medium mb-2">평가할 응답:</h4>
+                    <div className="bg-gray-50 p-3 rounded">
+                      <p className="text-gray-700">{peerResponse?.argumentation_responses?.response_text}</p>
+                    </div>
+                  </div>
+                  <div>
+                    <h4 className="font-medium mb-2">평가 내용:</h4>
+                    <Textarea
+                      value={evaluationText}
+                      onChange={(e) => setEvaluationText(e.target.value)}
+                      placeholder="동료의 응답에 대한 평가를 작성해주세요..."
+                      className="min-h-32"
+                    />
+                  </div>
+                  <div className="flex space-x-2">
+                    <Button onClick={submitPeerEvaluation}>평가 제출</Button>
+                    <Button variant="outline" onClick={() => setActiveTask('none')}>
+                      취소
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {activeTask === 'evaluation-check' && (
+              <Card className="m-4 border-0 shadow-sm">
+                <CardHeader>
+                  <CardTitle>평가 확인</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div>
+                    <h4 className="font-medium mb-2">받은 평가들:</h4>
+                    <div className="space-y-2">
+                      {peerEvaluations.map((evaluation, index) => (
+                        <div key={evaluation.id} className="bg-gray-50 p-3 rounded">
+                          <p className="text-sm text-gray-600">평가 {index + 1}</p>
+                          <p className="text-gray-700">{evaluation.evaluation_text}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <h4 className="font-medium mb-2">이 평가들이 얼마나 유익했나요?</h4>
+                    <Textarea
+                      value={reflectionText}
+                      onChange={(e) => setReflectionText(e.target.value)}
+                      placeholder="받은 평가에 대한 생각을 작성해주세요..."
+                      className="min-h-24"
+                    />
+                  </div>
+                  <div>
+                    <h4 className="font-medium mb-2">유익함 정도 (1-5점):</h4>
+                    <div className="flex space-x-2">
+                      {[1, 2, 3, 4, 5].map((rating) => (
+                        <Button
+                          key={rating}
+                          variant={usefulnessRating === rating ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setUsefulnessRating(rating)}
+                        >
+                          {rating}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex space-x-2">
+                    <Button onClick={submitReflection}>저장</Button>
+                    <Button variant="outline" onClick={() => setActiveTask('none')}>
+                      취소
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        )}
+
+        {/* Chat Interface (하단) */}
+        <div className="flex-1 overflow-hidden">
           <ChatInterface 
             activity={activity}
             studentId={studentId}
@@ -323,147 +438,6 @@ const ArgumentationActivity = ({ activity, studentId, onBack }: ArgumentationAct
             }}
           />
         </div>
-
-        {/* Overlay Panels */}
-        {showArgumentInput && (
-          <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center p-8">
-            <Card className="w-full max-w-2xl max-h-[80vh] overflow-y-auto">
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle>논증 입력</CardTitle>
-                <Button 
-                  variant="ghost" 
-                  size="sm"
-                  onClick={() => setShowArgumentInput(false)}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <h4 className="font-medium mb-2">질문:</h4>
-                  <p className="text-gray-700 bg-gray-50 p-3 rounded">
-                    {activity.final_question || "질문이 설정되지 않았습니다."}
-                  </p>
-                </div>
-                <div>
-                  <h4 className="font-medium mb-2">답변:</h4>
-                  <Textarea
-                    value={argumentText}
-                    onChange={(e) => setArgumentText(e.target.value)}
-                    placeholder="논증을 작성해주세요..."
-                    className="min-h-32"
-                  />
-                </div>
-                <div className="flex space-x-2">
-                  <Button onClick={submitArgument}>제출</Button>
-                  <Button variant="outline" onClick={() => setShowArgumentInput(false)}>
-                    취소
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        )}
-
-        {showPeerEvaluation && (
-          <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center p-8">
-            <Card className="w-full max-w-2xl max-h-[80vh] overflow-y-auto">
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle>동료 평가</CardTitle>
-                <Button 
-                  variant="ghost" 
-                  size="sm"
-                  onClick={() => setShowPeerEvaluation(false)}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <h4 className="font-medium mb-2">평가할 응답:</h4>
-                  <div className="bg-gray-50 p-3 rounded">
-                    <p className="text-gray-700">{peerResponse?.argumentation_responses?.response_text}</p>
-                  </div>
-                </div>
-                <div>
-                  <h4 className="font-medium mb-2">평가 내용:</h4>
-                  <Textarea
-                    value={evaluationText}
-                    onChange={(e) => setEvaluationText(e.target.value)}
-                    placeholder="동료의 응답에 대한 평가를 작성해주세요..."
-                    className="min-h-32"
-                  />
-                </div>
-                <div className="flex space-x-2">
-                  <Button onClick={submitPeerEvaluation}>평가 제출</Button>
-                  <Button variant="outline" onClick={() => setShowPeerEvaluation(false)}>
-                    취소
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        )}
-
-        {showEvaluationCheck && (
-          <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center p-8">
-            <Card className="w-full max-w-2xl max-h-[80vh] overflow-y-auto">
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle>평가 확인</CardTitle>
-                <Button 
-                  variant="ghost" 
-                  size="sm"
-                  onClick={() => setShowEvaluationCheck(false)}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <h4 className="font-medium mb-2">받은 평가들:</h4>
-                  <div className="space-y-2">
-                    {peerEvaluations.map((evaluation, index) => (
-                      <div key={evaluation.id} className="bg-gray-50 p-3 rounded">
-                        <p className="text-sm text-gray-600">평가 {index + 1}</p>
-                        <p className="text-gray-700">{evaluation.evaluation_text}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <h4 className="font-medium mb-2">이 평가들이 얼마나 유익했나요?</h4>
-                  <Textarea
-                    value={reflectionText}
-                    onChange={(e) => setReflectionText(e.target.value)}
-                    placeholder="받은 평가에 대한 생각을 작성해주세요..."
-                    className="min-h-24"
-                  />
-                </div>
-                <div>
-                  <h4 className="font-medium mb-2">유익함 정도 (1-5점):</h4>
-                  <div className="flex space-x-2">
-                    {[1, 2, 3, 4, 5].map((rating) => (
-                      <Button
-                        key={rating}
-                        variant={usefulnessRating === rating ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => setUsefulnessRating(rating)}
-                      >
-                        {rating}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-                <div className="flex space-x-2">
-                  <Button onClick={submitReflection}>저장</Button>
-                  <Button variant="outline" onClick={() => setShowEvaluationCheck(false)}>
-                    취소
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        )}
       </div>
     </div>
   );
