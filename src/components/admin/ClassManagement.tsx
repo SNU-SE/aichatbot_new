@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { Users, MessageCircle, Activity, Clock, Send, Eye } from 'lucide-react';
+import { Users, MessageCircle, Activity, Clock, Send, Eye, FileText, BarChart3 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import StudentStatusGrid from './enhanced/StudentStatusGrid';
@@ -185,16 +185,47 @@ const ClassManagement = () => {
       return;
     }
 
+    const targetClass = selectedClass === 'all' ? '모든 반' : selectedClass;
+    const activity = activities.find(a => a.id === selectedActivity);
+    
     toast({
       title: "활동 배정 완료",
-      description: "선택된 활동이 온라인 학생들에게 배정되었습니다."
+      description: `${activity?.title}이(가) ${targetClass} 학생들에게 배정되었습니다.`
     });
   };
 
   const sendAnnouncement = () => {
+    const targetClass = selectedClass === 'all' ? '모든 반' : selectedClass;
     toast({
       title: "공지사항 전송",
-      description: "모든 온라인 학생에게 공지사항이 전송되었습니다."
+      description: `${targetClass} 학생들에게 공지사항이 전송되었습니다.`
+    });
+  };
+
+  const handlePeerEvaluation = () => {
+    const stats = getArgumentationStats();
+    if (!stats) return;
+
+    toast({
+      title: "동료평가 관리",
+      description: `현재 ${stats.completedEvaluations}/${stats.totalEvaluations}개의 동료평가가 완료되었습니다.`
+    });
+  };
+
+  const handleFeedbackCheck = () => {
+    toast({
+      title: "피드백 확인",
+      description: "학생들의 동료평가 피드백을 확인합니다."
+    });
+  };
+
+  const handleResultCheck = () => {
+    const stats = getArgumentationStats();
+    if (!stats) return;
+
+    toast({
+      title: "결과 확인",
+      description: `논증 활동 결과를 확인합니다. (응답: ${stats.completedResponses}/${stats.totalResponses}, 평가: ${stats.completedEvaluations}/${stats.totalEvaluations})`
     });
   };
 
@@ -236,6 +267,9 @@ const ClassManagement = () => {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold text-[rgb(15,15,112)]">실시간 수업 관리</h2>
+        <div className="text-sm text-gray-600">
+          언제든지 활동을 배정하고 관리할 수 있습니다
+        </div>
       </div>
 
       {/* 통계 카드 */}
@@ -347,14 +381,31 @@ const ClassManagement = () => {
             {/* 논증 활동 특별 버튼들 */}
             {argumentationStats && (
               <div className="flex flex-col space-y-2">
-                <Button variant="outline" size="sm">
-                  <Eye className="h-4 w-4 mr-2" />
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={handlePeerEvaluation}
+                  className="text-xs"
+                >
+                  <Eye className="h-4 w-4 mr-1" />
                   동료평가 ({argumentationStats.completedEvaluations}/{argumentationStats.totalEvaluations})
                 </Button>
-                <Button variant="outline" size="sm">
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={handleFeedbackCheck}
+                  className="text-xs"
+                >
+                  <FileText className="h-4 w-4 mr-1" />
                   피드백확인
                 </Button>
-                <Button variant="outline" size="sm">
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={handleResultCheck}
+                  className="text-xs"
+                >
+                  <BarChart3 className="h-4 w-4 mr-1" />
                   결과확인
                 </Button>
               </div>
