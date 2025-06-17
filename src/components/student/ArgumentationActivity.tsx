@@ -236,9 +236,9 @@ const ArgumentationActivity = ({ activity, studentId, onBack }: ArgumentationAct
   }
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
+    <div className="flex min-h-screen bg-gray-50 gap-4">
       {/* Left Panel: Checklist and Controls */}
-      <div className="w-80 bg-white shadow-lg flex flex-col">
+      <div className="w-80 bg-white shadow-lg flex flex-col flex-shrink-0">
         <div className="p-4 border-b">
           <h2 className="text-lg font-semibold">{activity.title}</h2>
           <p className="text-sm text-gray-600 mt-1">논증 활동</p>
@@ -307,12 +307,12 @@ const ArgumentationActivity = ({ activity, studentId, onBack }: ArgumentationAct
       </div>
 
       {/* Right Panel: Task + Chat */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 min-w-0 flex flex-col">
         {/* Task Area (상단) */}
         {activeTask !== 'none' && (
-          <div className="bg-white border-b shadow-sm">
+          <div className="bg-white border rounded-lg shadow-sm mb-4">
             {activeTask === 'argument' && (
-              <Card className="m-4 border-0 shadow-sm">
+              <Card className="border-0 shadow-none">
                 <CardHeader>
                   <CardTitle>논증 입력</CardTitle>
                 </CardHeader>
@@ -343,7 +343,7 @@ const ArgumentationActivity = ({ activity, studentId, onBack }: ArgumentationAct
             )}
 
             {activeTask === 'peer-evaluation' && (
-              <Card className="m-4 border-0 shadow-sm">
+              <Card className="border-0 shadow-none">
                 <CardHeader>
                   <CardTitle>동료 평가</CardTitle>
                 </CardHeader>
@@ -374,7 +374,7 @@ const ArgumentationActivity = ({ activity, studentId, onBack }: ArgumentationAct
             )}
 
             {activeTask === 'evaluation-check' && (
-              <Card className="m-4 border-0 shadow-sm">
+              <Card className="border-0 shadow-none">
                 <CardHeader>
                   <CardTitle>평가 확인</CardTitle>
                 </CardHeader>
@@ -427,7 +427,7 @@ const ArgumentationActivity = ({ activity, studentId, onBack }: ArgumentationAct
         )}
 
         {/* Chat Interface (하단) */}
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1 min-h-0">
           <ChatInterface 
             activity={activity}
             studentId={studentId}
