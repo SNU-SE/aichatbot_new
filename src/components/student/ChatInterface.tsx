@@ -27,12 +27,16 @@ interface Activity {
 }
 
 interface ChatInterfaceProps {
-  activity: Activity;
+  activity: any;
   studentId: string;
   onBack: () => void;
+  checklistContext?: {
+    currentStep: string;
+    allSteps: any[];
+  };
 }
 
-const ChatInterface = ({ activity, studentId, onBack }: ChatInterfaceProps) => {
+const ChatInterface = ({ activity, studentId, onBack, checklistContext }: ChatInterfaceProps) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -110,38 +114,40 @@ const ChatInterface = ({ activity, studentId, onBack }: ChatInterfaceProps) => {
     }
   };
 
-  const sendMessage = async () => {
-    if ((!inputMessage.trim() && !selectedFile) || isLoading) return;
+  const handleSendMessage = async (messageText: string, file?: File) => {
+    if (!messageText.trim() && !file) return;
 
-    const userMessage = inputMessage.trim();
-    let fileUrl = null;
-    let fileName = null;
-    let fileType = null;
+    // Check for help requests
+    const isHelpRequest = messageText.trim() === '?' || messageText.trim() === '도와줘';
+    let finalMessage = messageText;
+
+    if (isHelpRequest && checklistContext) {
+      finalMessage = `현재 단계에 대해 도움이 필요합니다. 현재 단계: ${checklistContext.currentStep}`;
+    }
 
     setInputMessage('');
     setIsLoading(true);
 
     try {
       // Upload file if selected
-      if (selectedFile) {
-        fileUrl = await uploadFile(selectedFile, studentId);
-        fileName = selectedFile.name;
-        fileType = selectedFile.type;
+      if (file) {
+        const fileUrl = await uploadFile(file, studentId);
         setSelectedFile(null);
         if (fileInputRef.current) {
           fileInputRef.current.value = '';
         }
+        return;
       }
 
       // AI 채팅 API 호출
       const { data, error } = await supabase.functions.invoke('ai-chat', {
         body: {
-          message: userMessage || '파일을 업로드했습니다.',
+          message: finalMessage || '파일을 업로드했습니다.',
           studentId: studentId,
           activityId: activity.id,
-          fileUrl: fileUrl,
-          fileName: fileName,
-          fileType: fileType
+          fileUrl: null,
+          fileName: null,
+          fileType: null
         }
       });
 
@@ -163,6 +169,10 @@ const ChatInterface = ({ activity, studentId, onBack }: ChatInterfaceProps) => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const sendMessage = async () => {
+    handleSendMessage(inputMessage.trim(), selectedFile);
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {

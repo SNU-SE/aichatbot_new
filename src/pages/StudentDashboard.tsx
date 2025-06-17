@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -6,6 +5,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { BookOpen, MessageCircle, LogOut, Users, Clock } from 'lucide-react';
 import ActivitySelection from '@/components/student/ActivitySelection';
 import ChatInterface from '@/components/student/ChatInterface';
+import ExperimentActivity from '@/components/student/ExperimentActivity';
+import ArgumentationActivity from '@/components/student/ArgumentationActivity';
+import DiscussionActivity from '@/components/student/DiscussionActivity';
 import { supabase } from '@/integrations/supabase/client';
 
 const StudentDashboard = () => {
@@ -75,7 +77,19 @@ const StudentDashboard = () => {
 
   const handleActivitySelect = (activity: any) => {
     setSelectedActivity(activity);
-    setActiveView('chat');
+    
+    // Set view based on activity type
+    if (activity.type === 'reading') {
+      setActiveView('discussion');
+    } else if (activity.type === 'experiment') {
+      setActiveView('experiment');
+    } else if (activity.type === 'argumentation') {
+      setActiveView('argumentation');
+    } else if (activity.type === 'discussion') {
+      setActiveView('discussion');
+    } else {
+      setActiveView('chat'); // fallback to basic chat
+    }
   };
 
   const handleBackToActivities = () => {
@@ -85,6 +99,30 @@ const StudentDashboard = () => {
 
   const renderContent = () => {
     switch (activeView) {
+      case 'experiment':
+        return (
+          <ExperimentActivity 
+            activity={selectedActivity}
+            studentId={studentId}
+            onBack={handleBackToActivities}
+          />
+        );
+      case 'argumentation':
+        return (
+          <ArgumentationActivity 
+            activity={selectedActivity}
+            studentId={studentId}
+            onBack={handleBackToActivities}
+          />
+        );
+      case 'discussion':
+        return (
+          <DiscussionActivity 
+            activity={selectedActivity}
+            studentId={studentId}
+            onBack={handleBackToActivities}
+          />
+        );
       case 'chat':
         return (
           <ChatInterface 
