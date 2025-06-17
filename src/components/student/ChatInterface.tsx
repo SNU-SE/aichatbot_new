@@ -9,7 +9,7 @@ import { useToast } from '@/hooks/use-toast';
 
 interface Message {
   id: string;
-  sender: 'student' | 'ai';
+  sender: 'student' | 'bot';
   message: string;
   timestamp: string;
 }
