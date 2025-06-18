@@ -1,8 +1,8 @@
+
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useChecklistProgress } from '@/hooks/useChecklistProgress';
 import ChatInterface from './ChatInterface';
@@ -305,115 +305,8 @@ const ArgumentationActivity = ({ activity, studentId, onBack }: ArgumentationAct
         </div>
       </div>
 
-      {/* Right Panel: Chat Interface with Task Area on top */}
+      {/* Right Panel: Chat Interface */}
       <div className="flex-1 min-w-0 flex flex-col overflow-hidden p-4">
-        {/* Task Area (활동 제목 창 바로 밑에 위치) */}
-        {activeTask !== 'none' && (
-          <div className="bg-white border shadow-sm p-4 max-h-96 overflow-y-auto mb-4 rounded-lg">
-            {activeTask === 'argument' && (
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold">논증 입력</h3>
-                <div>
-                  <h4 className="font-medium mb-2">질문:</h4>
-                  <p className="text-gray-700 bg-gray-50 p-3 rounded">
-                    {activity.final_question || "질문이 설정되지 않았습니다."}
-                  </p>
-                </div>
-                <div>
-                  <h4 className="font-medium mb-2">답변:</h4>
-                  <Textarea
-                    value={argumentText}
-                    onChange={(e) => setArgumentText(e.target.value)}
-                    placeholder="논증을 작성해주세요..."
-                    className="min-h-32"
-                  />
-                </div>
-                <div className="flex space-x-2">
-                  <Button onClick={submitArgument}>제출</Button>
-                  <Button variant="outline" onClick={() => setActiveTask('none')}>
-                    취소
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {activeTask === 'peer-evaluation' && (
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold">동료 평가</h3>
-                <div>
-                  <h4 className="font-medium mb-2">평가할 응답:</h4>
-                  <div className="bg-gray-50 p-3 rounded">
-                    <p className="text-gray-700">{peerResponse?.argumentation_responses?.response_text}</p>
-                  </div>
-                </div>
-                <div>
-                  <h4 className="font-medium mb-2">평가 내용:</h4>
-                  <Textarea
-                    value={evaluationText}
-                    onChange={(e) => setEvaluationText(e.target.value)}
-                    placeholder="동료의 응답에 대한 평가를 작성해주세요..."
-                    className="min-h-32"
-                  />
-                </div>
-                <div className="flex space-x-2">
-                  <Button onClick={submitPeerEvaluation}>평가 제출</Button>
-                  <Button variant="outline" onClick={() => setActiveTask('none')}>
-                    취소
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {activeTask === 'evaluation-check' && (
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold">평가 확인</h3>
-                <div>
-                  <h4 className="font-medium mb-2">받은 평가들:</h4>
-                  <div className="space-y-2">
-                    {peerEvaluations.map((evaluation, index) => (
-                      <div key={evaluation.id} className="bg-gray-50 p-3 rounded">
-                        <p className="text-sm text-gray-600">평가 {index + 1}</p>
-                        <p className="text-gray-700">{evaluation.evaluation_text}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <h4 className="font-medium mb-2">이 평가들이 얼마나 유익했나요?</h4>
-                  <Textarea
-                    value={reflectionText}
-                    onChange={(e) => setReflectionText(e.target.value)}
-                    placeholder="받은 평가에 대한 생각을 작성해주세요..."
-                    className="min-h-24"
-                  />
-                </div>
-                <div>
-                  <h4 className="font-medium mb-2">유익함 정도 (1-5점):</h4>
-                  <div className="flex space-x-2">
-                    {[1, 2, 3, 4, 5].map((rating) => (
-                      <Button
-                        key={rating}
-                        variant={usefulnessRating === rating ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => setUsefulnessRating(rating)}
-                      >
-                        {rating}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-                <div className="flex space-x-2">
-                  <Button onClick={submitReflection}>저장</Button>
-                  <Button variant="outline" onClick={() => setActiveTask('none')}>
-                    취소
-                  </Button>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Chat Interface (하단) */}
         <div className="flex-1 min-h-0 rounded-lg overflow-hidden">
           <ChatInterface 
             activity={activity}
@@ -422,6 +315,24 @@ const ArgumentationActivity = ({ activity, studentId, onBack }: ArgumentationAct
             checklistContext={{
               currentStep: items.find(item => !item.is_completed)?.description || "모든 단계가 완료되었습니다.",
               allSteps: items
+            }}
+            argumentationContext={{
+              activeTask,
+              setActiveTask,
+              argumentText,
+              setArgumentText,
+              evaluationText,
+              setEvaluationText,
+              reflectionText,
+              setReflectionText,
+              usefulnessRating,
+              setUsefulnessRating,
+              peerResponse,
+              peerEvaluations,
+              isSubmitted,
+              submitArgument,
+              submitPeerEvaluation,
+              submitReflection
             }}
           />
         </div>

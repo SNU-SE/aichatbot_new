@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Send, Bot, User, ArrowLeft, BookOpen, Paperclip, Microscope, Users } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -26,6 +27,25 @@ interface Activity {
   content: any;
 }
 
+interface ArgumentationContext {
+  activeTask: 'none' | 'argument' | 'peer-evaluation' | 'evaluation-check';
+  setActiveTask: (task: 'none' | 'argument' | 'peer-evaluation' | 'evaluation-check') => void;
+  argumentText: string;
+  setArgumentText: (text: string) => void;
+  evaluationText: string;
+  setEvaluationText: (text: string) => void;
+  reflectionText: string;
+  setReflectionText: (text: string) => void;
+  usefulnessRating: number;
+  setUsefulnessRating: (rating: number) => void;
+  peerResponse: any;
+  peerEvaluations: any[];
+  isSubmitted: boolean;
+  submitArgument: () => void;
+  submitPeerEvaluation: () => void;
+  submitReflection: () => void;
+}
+
 interface ChatInterfaceProps {
   activity: any;
   studentId: string;
@@ -34,9 +54,10 @@ interface ChatInterfaceProps {
     currentStep: string;
     allSteps: any[];
   };
+  argumentationContext?: ArgumentationContext;
 }
 
-const ChatInterface = ({ activity, studentId, onBack, checklistContext }: ChatInterfaceProps) => {
+const ChatInterface = ({ activity, studentId, onBack, checklistContext, argumentationContext }: ChatInterfaceProps) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -298,6 +319,112 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext }: ChatIn
           </div>
         </CardHeader>
       </Card>
+
+      {/* 논증 활동 작업 영역 */}
+      {argumentationContext && argumentationContext.activeTask !== 'none' && (
+        <div className="bg-white border shadow-sm p-4 max-h-96 overflow-y-auto rounded-lg">
+          {argumentationContext.activeTask === 'argument' && (
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold">논증 입력</h3>
+              <div>
+                <h4 className="font-medium mb-2">질문:</h4>
+                <p className="text-gray-700 bg-gray-50 p-3 rounded">
+                  {activity.final_question || "질문이 설정되지 않았습니다."}
+                </p>
+              </div>
+              <div>
+                <h4 className="font-medium mb-2">답변:</h4>
+                <Textarea
+                  value={argumentationContext.argumentText}
+                  onChange={(e) => argumentationContext.setArgumentText(e.target.value)}
+                  placeholder="논증을 작성해주세요..."
+                  className="min-h-32"
+                />
+              </div>
+              <div className="flex space-x-2">
+                <Button onClick={argumentationContext.submitArgument}>제출</Button>
+                <Button variant="outline" onClick={() => argumentationContext.setActiveTask('none')}>
+                  취소
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {argumentationContext.activeTask === 'peer-evaluation' && (
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold">동료 평가</h3>
+              <div>
+                <h4 className="font-medium mb-2">평가할 응답:</h4>
+                <div className="bg-gray-50 p-3 rounded">
+                  <p className="text-gray-700">{argumentationContext.peerResponse?.argumentation_responses?.response_text}</p>
+                </div>
+              </div>
+              <div>
+                <h4 className="font-medium mb-2">평가 내용:</h4>
+                <Textarea
+                  value={argumentationContext.evaluationText}
+                  onChange={(e) => argumentationContext.setEvaluationText(e.target.value)}
+                  placeholder="동료의 응답에 대한 평가를 작성해주세요..."
+                  className="min-h-32"
+                />
+              </div>
+              <div className="flex space-x-2">
+                <Button onClick={argumentationContext.submitPeerEvaluation}>평가 제출</Button>
+                <Button variant="outline" onClick={() => argumentationContext.setActiveTask('none')}>
+                  취소
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {argumentationContext.activeTask === 'evaluation-check' && (
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold">평가 확인</h3>
+              <div>
+                <h4 className="font-medium mb-2">받은 평가들:</h4>
+                <div className="space-y-2">
+                  {argumentationContext.peerEvaluations.map((evaluation, index) => (
+                    <div key={evaluation.id} className="bg-gray-50 p-3 rounded">
+                      <p className="text-sm text-gray-600">평가 {index + 1}</p>
+                      <p className="text-gray-700">{evaluation.evaluation_text}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <h4 className="font-medium mb-2">이 평가들이 얼마나 유익했나요?</h4>
+                <Textarea
+                  value={argumentationContext.reflectionText}
+                  onChange={(e) => argumentationContext.setReflectionText(e.target.value)}
+                  placeholder="받은 평가에 대한 생각을 작성해주세요..."
+                  className="min-h-24"
+                />
+              </div>
+              <div>
+                <h4 className="font-medium mb-2">유익함 정도 (1-5점):</h4>
+                <div className="flex space-x-2">
+                  {[1, 2, 3, 4, 5].map((rating) => (
+                    <Button
+                      key={rating}
+                      variant={argumentationContext.usefulnessRating === rating ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => argumentationContext.setUsefulnessRating(rating)}
+                    >
+                      {rating}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+              <div className="flex space-x-2">
+                <Button onClick={argumentationContext.submitReflection}>저장</Button>
+                <Button variant="outline" onClick={() => argumentationContext.setActiveTask('none')}>
+                  취소
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* 채팅 영역 */}
       <Card className="border-0 shadow-md rounded-lg flex-1 min-h-0 flex flex-col">
