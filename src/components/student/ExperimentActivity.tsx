@@ -24,7 +24,6 @@ const ExperimentActivity = ({ activity, studentId, onBack }: ExperimentActivityP
   const [currentModule, setCurrentModule] = useState(1);
   const [completedModules, setCompletedModules] = useState(0);
 
-  // 컴포넌트 마운트 시 스크롤을 상단으로 고정
   useEffect(() => {
     window.scrollTo(0, 0);
   }, []);
@@ -34,7 +33,6 @@ const ExperimentActivity = ({ activity, studentId, onBack }: ExperimentActivityP
   }, [activity.id]);
 
   useEffect(() => {
-    // Calculate completed modules and update current module
     if (modules.length > 0 && items.length > 0) {
       const moduleItems = items.filter(item => item.module_id);
       const moduleCompletionStatus = modules.map(module => {
@@ -52,12 +50,10 @@ const ExperimentActivity = ({ activity, studentId, onBack }: ExperimentActivityP
       const completedCount = moduleCompletionStatus.filter(m => m.isComplete).length;
       setCompletedModules(completedCount);
       
-      // Update current module to first incomplete
       const firstIncomplete = moduleCompletionStatus.find(m => !m.isComplete);
       if (firstIncomplete) {
         setCurrentModule(firstIncomplete.moduleNumber);
       } else if (completedCount === modules.length) {
-        // All modules completed
         setCurrentModule(modules.length);
       }
     }
@@ -108,21 +104,13 @@ const ExperimentActivity = ({ activity, studentId, onBack }: ExperimentActivityP
     );
   }
 
-  // 각 섹션의 높이를 아이템 수에 따라 동적으로 계산
-  const sectionHeight = (itemCount: number) => Math.min(Math.max(itemCount * 60 + 20, 60), 120);
-
   return (
     <div className="h-screen flex bg-gray-50 overflow-hidden">
       {/* Left Panel: Module Progress and Checklist */}
       <div className="w-80 bg-white shadow-lg flex flex-col flex-shrink-0">
-        {/* Header with module progress and stars */}
+        {/* Header with module progress */}
         <div className="p-4 border-b">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-lg font-bold">{activity.title}</h2>
-            <Button variant="outline" size="sm" onClick={onBack}>
-              목록으로
-            </Button>
-          </div>
+          <h2 className="text-lg font-bold mb-4">{activity.title}</h2>
           <ModuleProgress 
             currentModule={currentModule}
             totalModules={modules.length}
@@ -140,10 +128,10 @@ const ExperimentActivity = ({ activity, studentId, onBack }: ExperimentActivityP
                 <CheckCircle className="h-4 w-4 mr-2" />
                 완료됨
               </h4>
-              <ScrollArea style={{ height: `${sectionHeight(completed.length)}px` }}>
+              <div className="max-h-32 overflow-y-auto">
                 <div className="space-y-1">
                   {completed.slice(0, 3).map((item) => (
-                    <div key={item.id} className="flex items-start space-x-2 p-2 bg-green-50 rounded">
+                    <div key={item.id} className="flex items-start space-x-2 p-2 bg-green-50 rounded-lg">
                       <Checkbox 
                         checked={true}
                         onCheckedChange={() => toggleItem(item.id)}
@@ -153,7 +141,7 @@ const ExperimentActivity = ({ activity, studentId, onBack }: ExperimentActivityP
                     </div>
                   ))}
                 </div>
-              </ScrollArea>
+              </div>
             </div>
 
             {/* Current */}
@@ -162,10 +150,10 @@ const ExperimentActivity = ({ activity, studentId, onBack }: ExperimentActivityP
                 <Clock className="h-4 w-4 mr-2" />
                 진행중
               </h4>
-              <ScrollArea style={{ height: `${sectionHeight(current.length)}px` }}>
+              <div className="max-h-32 overflow-y-auto">
                 <div className="space-y-1">
                   {current.slice(0, 3).map((item) => (
-                    <div key={item.id} className="flex items-start space-x-2 p-2 bg-blue-50 rounded border-2 border-blue-200">
+                    <div key={item.id} className="flex items-start space-x-2 p-2 bg-blue-50 rounded-lg border-2 border-blue-200">
                       <Checkbox 
                         checked={false}
                         onCheckedChange={() => toggleItem(item.id)}
@@ -175,7 +163,7 @@ const ExperimentActivity = ({ activity, studentId, onBack }: ExperimentActivityP
                     </div>
                   ))}
                 </div>
-              </ScrollArea>
+              </div>
             </div>
 
             {/* Upcoming */}
@@ -184,10 +172,10 @@ const ExperimentActivity = ({ activity, studentId, onBack }: ExperimentActivityP
                 <Circle className="h-4 w-4 mr-2" />
                 예정
               </h4>
-              <ScrollArea style={{ height: `${sectionHeight(upcoming.length)}px` }}>
+              <div className="max-h-32 overflow-y-auto">
                 <div className="space-y-1">
                   {upcoming.slice(0, 3).map((item) => (
-                    <div key={item.id} className="flex items-start space-x-2 p-2 bg-gray-50 rounded">
+                    <div key={item.id} className="flex items-start space-x-2 p-2 bg-gray-50 rounded-lg">
                       <Checkbox 
                         checked={false}
                         disabled={true}
@@ -197,23 +185,25 @@ const ExperimentActivity = ({ activity, studentId, onBack }: ExperimentActivityP
                     </div>
                   ))}
                 </div>
-              </ScrollArea>
+              </div>
             </div>
           </div>
         </div>
       </div>
 
       {/* Right Panel: Chat Interface */}
-      <div className="flex-1 min-w-0">
-        <ChatInterface 
-          activity={activity}
-          studentId={studentId}
-          onBack={onBack}
-          checklistContext={{
-            currentStep: current[0]?.description || "모든 단계가 완료되었습니다.",
-            allSteps: items
-          }}
-        />
+      <div className="flex-1 min-w-0 p-4">
+        <div className="h-full rounded-lg overflow-hidden">
+          <ChatInterface 
+            activity={activity}
+            studentId={studentId}
+            onBack={onBack}
+            checklistContext={{
+              currentStep: current[0]?.description || "모든 단계가 완료되었습니다.",
+              allSteps: items
+            }}
+          />
+        </div>
       </div>
     </div>
   );

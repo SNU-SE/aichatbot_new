@@ -252,36 +252,36 @@ const ArgumentationActivity = ({ activity, studentId, onBack }: ArgumentationAct
         </div>
         
         {/* Checklist */}
-        <div className="flex-1 p-4 overflow-hidden">
-          <Card className="border-0 shadow-none">
-            <CardHeader>
-              <CardTitle>체크리스트</CardTitle>
+        <div className="p-4">
+          <Card className="border-0 shadow-none rounded-lg">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg">체크리스트</CardTitle>
             </CardHeader>
-            <CardContent>
-              <ScrollArea style={{ height: `${checklistHeight}px` }}>
-                <div className="space-y-2">
-                  {items.slice(0, 5).map((item) => (
-                    <div key={item.id} className="flex items-start space-x-2 p-2 rounded hover:bg-gray-50">
-                      <Checkbox 
-                        checked={item.is_completed}
-                        onCheckedChange={() => toggleItem(item.id)}
-                        className="mt-1"
-                      />
-                      <span className={`text-sm ${item.is_completed ? 'text-gray-500 line-through' : 'text-gray-900'}`}>
-                        {item.description}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </ScrollArea>
+            <CardContent className="pt-0">
+              <div className="space-y-2 max-h-40 overflow-y-auto">
+                {items.slice(0, 5).map((item) => (
+                  <div key={item.id} className="flex items-start space-x-2 p-2 rounded-lg hover:bg-gray-50">
+                    <Checkbox 
+                      checked={item.is_completed}
+                      onCheckedChange={() => toggleItem(item.id)}
+                      className="mt-1"
+                    />
+                    <span className={`text-sm ${item.is_completed ? 'text-gray-500 line-through' : 'text-gray-900'}`}>
+                      {item.description}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </CardContent>
           </Card>
+        </div>
 
-          {/* Action Buttons */}
-          <div className="mt-4 space-y-2">
+        {/* Action Buttons */}
+        <div className="px-4 pb-4">
+          <div className="space-y-2">
             <Button 
               onClick={() => setActiveTask(activeTask === 'argument' ? 'none' : 'argument')}
-              className="w-full"
+              className="w-full rounded-lg"
               disabled={isSubmitted}
               variant={activeTask === 'argument' ? 'default' : 'outline'}
             >
@@ -289,7 +289,7 @@ const ArgumentationActivity = ({ activity, studentId, onBack }: ArgumentationAct
             </Button>
             <Button 
               onClick={() => setActiveTask(activeTask === 'peer-evaluation' ? 'none' : 'peer-evaluation')}
-              className="w-full"
+              className="w-full rounded-lg"
               variant={activeTask === 'peer-evaluation' ? 'default' : 'outline'}
               disabled={!peerResponse || peerResponse.is_completed}
             >
@@ -297,7 +297,7 @@ const ArgumentationActivity = ({ activity, studentId, onBack }: ArgumentationAct
             </Button>
             <Button 
               onClick={() => setActiveTask(activeTask === 'evaluation-check' ? 'none' : 'evaluation-check')}
-              className="w-full"
+              className="w-full rounded-lg"
               variant={activeTask === 'evaluation-check' ? 'default' : 'outline'}
               disabled={peerEvaluations.length === 0}
             >
@@ -307,17 +307,17 @@ const ArgumentationActivity = ({ activity, studentId, onBack }: ArgumentationAct
         </div>
 
         <div className="p-4 border-t">
-          <Button variant="outline" onClick={onBack} className="w-full">
+          <Button variant="outline" onClick={onBack} className="w-full rounded-lg">
             활동 목록으로
           </Button>
         </div>
       </div>
 
       {/* Right Panel: Chat Interface */}
-      <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
+      <div className="flex-1 min-w-0 flex flex-col overflow-hidden p-4">
         {/* Task Area (상단) - 활동 제목 창 바로 밑에 위치 */}
         {activeTask !== 'none' && (
-          <div className="bg-white border-b shadow-sm p-4 max-h-96 overflow-y-auto">
+          <div className="bg-white border shadow-sm p-4 max-h-96 overflow-y-auto mb-4 rounded-lg">
             {activeTask === 'argument' && (
               <div className="space-y-4">
                 <h3 className="text-lg font-semibold">논증 입력</h3>
@@ -422,7 +422,7 @@ const ArgumentationActivity = ({ activity, studentId, onBack }: ArgumentationAct
         )}
 
         {/* Chat Interface (하단) */}
-        <div className="flex-1 min-h-0">
+        <div className="flex-1 min-h-0 rounded-lg overflow-hidden">
           <ChatInterface 
             activity={activity}
             studentId={studentId}

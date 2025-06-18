@@ -118,7 +118,6 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext }: ChatIn
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      // Check file size (10MB limit)
       if (file.size > 10 * 1024 * 1024) {
         toast({
           title: "파일 크기 초과",
@@ -141,7 +140,6 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext }: ChatIn
   const handleSendMessage = async (messageText: string, file?: File) => {
     if (!messageText.trim() && !file) return;
 
-    // Check for help requests
     const isHelpRequest = messageText.trim() === '?' || messageText.trim() === '도와줘';
     let finalMessage = messageText;
 
@@ -149,7 +147,6 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext }: ChatIn
       finalMessage = `현재 단계에 대해 도움이 필요합니다. 현재 단계: ${checklistContext.currentStep}`;
     }
 
-    // Add student message to UI immediately for better UX
     if (messageText.trim()) {
       const userMessage: Message = {
         id: Date.now().toString(),
@@ -175,7 +172,6 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext }: ChatIn
       let fileName = null;
       let fileType = null;
 
-      // Upload file if selected
       if (file) {
         fileUrl = await uploadFile(file, studentId);
         fileName = file.name;
@@ -192,7 +188,6 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext }: ChatIn
         motherTongue
       });
 
-      // AI 채팅 API 호출 with mother tongue information
       const { data, error } = await supabase.functions.invoke('ai-chat', {
         body: {
           message: finalMessage || '파일을 업로드했습니다.',
@@ -217,13 +212,11 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext }: ChatIn
         throw new Error(data.error);
       }
 
-      // Refresh chat history to get the latest messages
       await fetchChatHistory();
 
     } catch (error: any) {
       console.error('Error in handleSendMessage:', error);
       
-      // Remove the optimistically added message on error
       if (messageText.trim()) {
         setMessages(prev => prev.slice(0, -1));
       }
@@ -265,9 +258,9 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext }: ChatIn
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="max-w-4xl mx-auto space-y-6 h-full flex flex-col">
       {/* 활동 정보 헤더 */}
-      <Card className="border-0 shadow-md">
+      <Card className="border-0 shadow-md rounded-lg flex-shrink-0">
         <CardHeader className="pb-4">
           <div className="flex items-center space-x-3">
             <div className="p-2 bg-[rgb(15,15,112)] rounded-lg text-white">
@@ -284,7 +277,7 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext }: ChatIn
             <Button 
               variant="outline" 
               onClick={onBack}
-              className="border-[rgb(15,15,112)] text-[rgb(15,15,112)] hover:bg-[rgb(15,15,112)] hover:text-white"
+              className="border-[rgb(15,15,112)] text-[rgb(15,15,112)] hover:bg-[rgb(15,15,112)] hover:text-white rounded-lg"
             >
               <ArrowLeft className="h-4 w-4 mr-2" />
               뒤로가기
@@ -294,10 +287,10 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext }: ChatIn
       </Card>
 
       {/* 채팅 영역 */}
-      <Card className="border-0 shadow-md">
-        <CardContent className="p-0">
+      <Card className="border-0 shadow-md rounded-lg flex-1 min-h-0 flex flex-col">
+        <CardContent className="p-0 flex-1 min-h-0 flex flex-col">
           {/* 메시지 목록 */}
-          <div className="h-96 overflow-y-auto p-4 space-y-4">
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
             {messages.length === 0 ? (
               <div className="text-center py-8">
                 <Bot className="h-12 w-12 text-gray-400 mx-auto mb-4" />
@@ -377,7 +370,7 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext }: ChatIn
           )}
 
           {/* 메시지 입력 영역 */}
-          <div className="border-t p-4">
+          <div className="border-t p-4 flex-shrink-0">
             <div className="flex space-x-2">
               <div className="flex space-x-1">
                 <input
@@ -392,7 +385,7 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext }: ChatIn
                   size="sm"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isLoading}
-                  className="p-2"
+                  className="p-2 rounded-lg"
                 >
                   <Paperclip className="h-4 w-4" />
                 </Button>
@@ -403,12 +396,12 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext }: ChatIn
                 onKeyPress={handleKeyPress}
                 placeholder="메시지를 입력하세요..."
                 disabled={isLoading}
-                className="flex-1"
+                className="flex-1 rounded-lg"
               />
               <Button 
                 onClick={sendMessage}
                 disabled={(!inputMessage.trim() && !selectedFile) || isLoading}
-                className="bg-[rgb(15,15,112)] hover:bg-[rgb(15,15,112)]/90"
+                className="bg-[rgb(15,15,112)] hover:bg-[rgb(15,15,112)]/90 rounded-lg"
               >
                 <Send className="h-4 w-4" />
               </Button>
