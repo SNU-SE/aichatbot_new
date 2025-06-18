@@ -232,9 +232,6 @@ const ArgumentationActivity = ({ activity, studentId, onBack }: ArgumentationAct
     }
   };
 
-  // 체크리스트 높이를 아이템 수에 따라 동적으로 계산 (최소 120px, 최대 200px)
-  const checklistHeight = Math.min(Math.max(items.length * 48 + 40, 120), 200);
-
   if (loading) {
     return (
       <div className="flex justify-center items-center py-12">
@@ -306,17 +303,11 @@ const ArgumentationActivity = ({ activity, studentId, onBack }: ArgumentationAct
             </Button>
           </div>
         </div>
-
-        <div className="p-4 border-t">
-          <Button variant="outline" onClick={onBack} className="w-full rounded-lg">
-            활동 목록으로
-          </Button>
-        </div>
       </div>
 
-      {/* Right Panel: Chat Interface */}
+      {/* Right Panel: Chat Interface with Task Area on top */}
       <div className="flex-1 min-w-0 flex flex-col overflow-hidden p-4">
-        {/* Task Area (상단) - 활동 제목 창 바로 밑에 위치 */}
+        {/* Task Area (활동 제목 창 바로 밑에 위치) */}
         {activeTask !== 'none' && (
           <div className="bg-white border shadow-sm p-4 max-h-96 overflow-y-auto mb-4 rounded-lg">
             {activeTask === 'argument' && (

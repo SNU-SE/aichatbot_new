@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { BookOpen, Play, Clock, FileText } from 'lucide-react';
+import { BookOpen, Play, Clock, Users, Microscope } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
@@ -49,8 +49,10 @@ const ActivitySelection = ({ onActivitySelect }: ActivitySelectionProps) => {
 
   const getActivityIcon = (type: string) => {
     switch (type) {
-      case 'reading':
-        return <FileText className="h-6 w-6" />;
+      case 'experiment':
+        return <Microscope className="h-6 w-6" />;
+      case 'argumentation':
+        return <Users className="h-6 w-6" />;
       case 'discussion':
         return <BookOpen className="h-6 w-6" />;
       default:
