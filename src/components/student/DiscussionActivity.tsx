@@ -32,6 +32,9 @@ const DiscussionActivity = ({ activity, studentId, onBack }: DiscussionActivityP
     );
   }
 
+  // 체크리스트 높이를 아이템 수에 따라 동적으로 계산 (최소 120px, 최대 240px)
+  const checklistHeight = Math.min(Math.max(items.length * 48 + 40, 120), 240);
+
   return (
     <div className="h-screen flex bg-gray-50 overflow-hidden">
       {/* Left Panel: Checklist and Notes */}
@@ -42,7 +45,7 @@ const DiscussionActivity = ({ activity, studentId, onBack }: DiscussionActivityP
             <CardTitle>토의 체크리스트</CardTitle>
           </CardHeader>
           <CardContent>
-            <ScrollArea className="h-64">
+            <ScrollArea style={{ height: `${checklistHeight}px` }}>
               <div className="space-y-2">
                 {items.slice(0, 5).map((item) => (
                   <div key={item.id} className="flex items-start space-x-2 p-2 rounded hover:bg-gray-50">

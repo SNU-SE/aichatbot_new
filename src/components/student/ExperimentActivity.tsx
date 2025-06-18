@@ -108,6 +108,9 @@ const ExperimentActivity = ({ activity, studentId, onBack }: ExperimentActivityP
     );
   }
 
+  // 각 섹션의 높이를 아이템 수에 따라 동적으로 계산
+  const sectionHeight = (itemCount: number) => Math.min(Math.max(itemCount * 60 + 20, 60), 120);
+
   return (
     <div className="h-screen flex bg-gray-50 overflow-hidden">
       {/* Left Panel: Module Progress and Checklist */}
@@ -137,7 +140,7 @@ const ExperimentActivity = ({ activity, studentId, onBack }: ExperimentActivityP
                 <CheckCircle className="h-4 w-4 mr-2" />
                 완료됨
               </h4>
-              <ScrollArea className="h-24">
+              <ScrollArea style={{ height: `${sectionHeight(completed.length)}px` }}>
                 <div className="space-y-1">
                   {completed.slice(0, 3).map((item) => (
                     <div key={item.id} className="flex items-start space-x-2 p-2 bg-green-50 rounded">
@@ -159,7 +162,7 @@ const ExperimentActivity = ({ activity, studentId, onBack }: ExperimentActivityP
                 <Clock className="h-4 w-4 mr-2" />
                 진행중
               </h4>
-              <ScrollArea className="h-24">
+              <ScrollArea style={{ height: `${sectionHeight(current.length)}px` }}>
                 <div className="space-y-1">
                   {current.slice(0, 3).map((item) => (
                     <div key={item.id} className="flex items-start space-x-2 p-2 bg-blue-50 rounded border-2 border-blue-200">
@@ -181,7 +184,7 @@ const ExperimentActivity = ({ activity, studentId, onBack }: ExperimentActivityP
                 <Circle className="h-4 w-4 mr-2" />
                 예정
               </h4>
-              <ScrollArea className="h-24">
+              <ScrollArea style={{ height: `${sectionHeight(upcoming.length)}px` }}>
                 <div className="space-y-1">
                   {upcoming.slice(0, 3).map((item) => (
                     <div key={item.id} className="flex items-start space-x-2 p-2 bg-gray-50 rounded">
