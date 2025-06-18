@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -43,17 +42,37 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext }: ChatIn
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(true);
+  const [motherTongue, setMotherTongue] = useState<string>('Korean');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
   useEffect(() => {
+    fetchStudentInfo();
     fetchChatHistory();
   }, [activity.id, studentId]);
 
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  const fetchStudentInfo = async () => {
+    try {
+      const { data: studentData, error } = await supabase
+        .from('students')
+        .select('mother_tongue')
+        .eq('student_id', studentId)
+        .single();
+
+      if (error) {
+        console.error('Student info error:', error);
+      } else {
+        setMotherTongue(studentData.mother_tongue || 'Korean');
+      }
+    } catch (error) {
+      console.error('Error fetching student info:', error);
+    }
+  };
 
   const fetchChatHistory = async () => {
     try {
@@ -130,7 +149,7 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext }: ChatIn
       finalMessage = `현재 단계에 대해 도움이 필요합니다. 현재 단계: ${checklistContext.currentStep}`;
     }
 
-    // Add user message to UI immediately for better UX
+    // Add student message to UI immediately for better UX
     if (messageText.trim()) {
       const userMessage: Message = {
         id: Date.now().toString(),
@@ -169,10 +188,11 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext }: ChatIn
         activityId: activity.id,
         fileUrl,
         fileName,
-        fileType
+        fileType,
+        motherTongue
       });
 
-      // AI 채팅 API 호출
+      // AI 채팅 API 호출 with mother tongue information
       const { data, error } = await supabase.functions.invoke('ai-chat', {
         body: {
           message: finalMessage || '파일을 업로드했습니다.',
@@ -180,7 +200,8 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext }: ChatIn
           activityId: activity.id,
           fileUrl: fileUrl,
           fileName: fileName,
-          fileType: fileType
+          fileType: fileType,
+          motherTongue: motherTongue
         }
       });
 

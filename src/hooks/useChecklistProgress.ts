@@ -2,11 +2,16 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { getMultilingualDescription } from '@/utils/multilingualUtils';
 
 interface ChecklistItem {
   id: string;
   step_number: number;
   description: string;
+  description_ko?: string;
+  description_en?: string;
+  description_zh?: string;
+  description_ja?: string;
   module_id?: string;
   is_completed: boolean;
   completed_at?: string;
@@ -20,11 +25,25 @@ interface UseChecklistProgressProps {
 export const useChecklistProgress = ({ studentId, activityId }: UseChecklistProgressProps) => {
   const [items, setItems] = useState<ChecklistItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [motherTongue, setMotherTongue] = useState<string>('Korean');
   const { toast } = useToast();
 
   const fetchChecklist = useCallback(async () => {
     try {
       setLoading(true);
+      
+      // Get student's mother tongue
+      const { data: studentData, error: studentError } = await supabase
+        .from('students')
+        .select('mother_tongue')
+        .eq('student_id', studentId)
+        .single();
+
+      if (studentError) {
+        console.error('Student data error:', studentError);
+      } else {
+        setMotherTongue(studentData.mother_tongue || 'Korean');
+      }
       
       // Get checklist items for the activity
       const { data: checklistData, error: checklistError } = await supabase
@@ -43,11 +62,14 @@ export const useChecklistProgress = ({ studentId, activityId }: UseChecklistProg
 
       if (progressError) throw progressError;
 
-      // Combine data
+      // Combine data with multilingual descriptions
       const combinedItems = (checklistData || []).map(item => {
         const progress = progressData?.find(p => p.checklist_item_id === item.id);
+        const description = getMultilingualDescription(item, studentData?.mother_tongue || 'Korean');
+        
         return {
           ...item,
+          description,
           is_completed: progress?.is_completed || false,
           completed_at: progress?.completed_at
         };
@@ -128,6 +150,7 @@ export const useChecklistProgress = ({ studentId, activityId }: UseChecklistProg
   return {
     items,
     loading,
+    motherTongue,
     toggleItem,
     refetch: fetchChecklist
   };

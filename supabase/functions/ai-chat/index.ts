@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
@@ -31,9 +30,9 @@ serve(async (req) => {
   }
 
   try {
-    const { message, studentId, activityId, fileUrl, fileName, fileType } = await req.json()
+    const { message, studentId, activityId, fileUrl, fileName, fileType, motherTongue } = await req.json()
     
-    console.log('Received request:', { studentId, activityId, messageLength: message?.length })
+    console.log('Received request:', { studentId, activityId, messageLength: message?.length, motherTongue })
 
     // Initialize Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
@@ -155,6 +154,9 @@ serve(async (req) => {
       .order('timestamp', { ascending: true })
       .limit(10)
 
+    // Determine multilingual response requirement
+    const isMultilingual = motherTongue && motherTongue !== 'Korean'
+    
     // Get active prompt template for the class
     let systemPrompt = globalSettings.system_prompt || '학생의 질문에 직접적으로 답을 하지 말고, 그 답이 나오기까지 필요한 최소한의 정보를 제공해. 단계별로 학생들이 생각하고 질문할 수 있도록 유도해줘.'
     
@@ -170,6 +172,23 @@ serve(async (req) => {
       }
     } else if (classSettings?.system_prompt) {
       systemPrompt = classSettings.system_prompt
+    }
+
+    // Add multilingual instruction to system prompt
+    if (isMultilingual) {
+      const languageMap: { [key: string]: string } = {
+        'Chinese': '중국어',
+        'English': '영어',
+        'Japanese': '일본어'
+      }
+      
+      const nativeLanguageName = languageMap[motherTongue] || motherTongue
+      
+      systemPrompt += `\n\n중요: 이 학생의 모국어는 ${nativeLanguageName}입니다. 모든 답변은 다음 형식으로 제공해주세요:
+1. 먼저 ${nativeLanguageName}로 답변
+2. 그 다음 "/"를 구분자로 하여 한국어로 같은 내용을 답변
+형식 예시: "${nativeLanguageName} 답변 / 한국어 답변"
+학생이 어떤 언어로 질문하든 항상 이 형식을 유지해주세요.`
     }
 
     // Prepare context for AI
@@ -381,7 +400,8 @@ serve(async (req) => {
         questionCount: questionCount,
         ragUsed: useRAG,
         combinedResponse: useCombined,
-        ragSearchType: ragSearchType
+        ragSearchType: ragSearchType,
+        isMultilingual: isMultilingual
       }),
       { 
         headers: { 
