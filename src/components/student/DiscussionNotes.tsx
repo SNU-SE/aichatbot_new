@@ -2,7 +2,6 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
-import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { FileText } from 'lucide-react';
 
@@ -33,19 +32,11 @@ const DiscussionNotes = ({ studentId, activityId }: DiscussionNotesProps) => {
 
   const loadNotes = async () => {
     try {
-      const { data, error } = await supabase
-        .from('student_notes')
-        .select('notes')
-        .eq('student_id', studentId)
-        .eq('activity_id', activityId)
-        .single();
-
-      if (error && error.code !== 'PGRST116') {
-        throw error;
-      }
-
-      if (data) {
-        setNotes(data.notes || '');
+      // For now, store notes in localStorage until the table is properly added to Supabase
+      const storageKey = `notes_${studentId}_${activityId}`;
+      const savedNotes = localStorage.getItem(storageKey);
+      if (savedNotes) {
+        setNotes(savedNotes);
       }
     } catch (error) {
       console.error('메모 로딩 실패:', error);
@@ -56,18 +47,9 @@ const DiscussionNotes = ({ studentId, activityId }: DiscussionNotesProps) => {
 
   const saveNotes = async () => {
     try {
-      const { error } = await supabase
-        .from('student_notes')
-        .upsert({
-          student_id: studentId,
-          activity_id: activityId,
-          notes: notes,
-          updated_at: new Date().toISOString()
-        }, {
-          onConflict: 'student_id,activity_id'
-        });
-
-      if (error) throw error;
+      // For now, store notes in localStorage until the table is properly added to Supabase
+      const storageKey = `notes_${studentId}_${activityId}`;
+      localStorage.setItem(storageKey, notes);
     } catch (error) {
       console.error('메모 저장 실패:', error);
       toast({

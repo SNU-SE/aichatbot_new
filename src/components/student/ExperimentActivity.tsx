@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { CheckCircle, Clock, Circle } from 'lucide-react';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { useChecklistProgress } from '@/hooks/useChecklistProgress';
 import ChatInterface from './ChatInterface';
 import ModuleProgress from './ModuleProgress';
@@ -104,95 +105,112 @@ const ExperimentActivity = ({ activity, studentId, onBack }: ExperimentActivityP
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header with module progress and stars */}
-      <Card>
-        <CardHeader>
-          <div className="flex justify-between items-center">
-            <h2 className="text-xl font-bold">{activity.title}</h2>
-            <Button variant="outline" onClick={onBack}>
-              목록으로
-            </Button>
-          </div>
-          <ModuleProgress 
-            currentModule={currentModule}
-            totalModules={modules.length}
-            completedModules={completedModules}
-          />
-        </CardHeader>
-      </Card>
-
-      {/* Checklist */}
-      <Card>
-        <CardHeader>
-          <CardTitle>실험 단계</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Completed */}
-            <div className="space-y-2">
-              <h4 className="font-semibold text-green-600 flex items-center">
-                <CheckCircle className="h-4 w-4 mr-2" />
-                완료됨
-              </h4>
-              {completed.map((item) => (
-                <div key={item.id} className="flex items-center space-x-2 p-2 bg-green-50 rounded">
-                  <Checkbox 
-                    checked={true}
-                    onCheckedChange={() => toggleItem(item.id)}
-                  />
-                  <span className="text-sm text-green-700">{item.description}</span>
-                </div>
-              ))}
+    <div className="flex min-h-screen bg-gray-50 gap-4">
+      {/* Left Panel: Module Progress and Checklist */}
+      <div className="w-80 space-y-4 flex-shrink-0">
+        {/* Header with module progress and stars */}
+        <Card>
+          <CardHeader>
+            <div className="flex justify-between items-center">
+              <h2 className="text-lg font-bold">{activity.title}</h2>
+              <Button variant="outline" size="sm" onClick={onBack}>
+                목록으로
+              </Button>
             </div>
+            <ModuleProgress 
+              currentModule={currentModule}
+              totalModules={modules.length}
+              completedModules={completedModules}
+            />
+          </CardHeader>
+        </Card>
 
-            {/* Current */}
-            <div className="space-y-2">
-              <h4 className="font-semibold text-blue-600 flex items-center">
-                <Clock className="h-4 w-4 mr-2" />
-                진행중
-              </h4>
-              {current.map((item) => (
-                <div key={item.id} className="flex items-center space-x-2 p-2 bg-blue-50 rounded border-2 border-blue-200">
-                  <Checkbox 
-                    checked={false}
-                    onCheckedChange={() => toggleItem(item.id)}
-                  />
-                  <span className="text-sm text-blue-700 font-medium">{item.description}</span>
-                </div>
-              ))}
+        {/* Checklist */}
+        <Card>
+          <CardHeader>
+            <CardTitle>실험 단계</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {/* Completed */}
+              <div className="space-y-2">
+                <h4 className="font-semibold text-green-600 flex items-center">
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                  완료됨
+                </h4>
+                <ScrollArea className="h-24">
+                  <div className="space-y-1">
+                    {completed.slice(0, 3).map((item) => (
+                      <div key={item.id} className="flex items-center space-x-2 p-2 bg-green-50 rounded">
+                        <Checkbox 
+                          checked={true}
+                          onCheckedChange={() => toggleItem(item.id)}
+                        />
+                        <span className="text-sm text-green-700">{item.description}</span>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </div>
+
+              {/* Current */}
+              <div className="space-y-2">
+                <h4 className="font-semibold text-blue-600 flex items-center">
+                  <Clock className="h-4 w-4 mr-2" />
+                  진행중
+                </h4>
+                <ScrollArea className="h-24">
+                  <div className="space-y-1">
+                    {current.slice(0, 3).map((item) => (
+                      <div key={item.id} className="flex items-center space-x-2 p-2 bg-blue-50 rounded border-2 border-blue-200">
+                        <Checkbox 
+                          checked={false}
+                          onCheckedChange={() => toggleItem(item.id)}
+                        />
+                        <span className="text-sm text-blue-700 font-medium">{item.description}</span>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </div>
+
+              {/* Upcoming */}
+              <div className="space-y-2">
+                <h4 className="font-semibold text-gray-600 flex items-center">
+                  <Circle className="h-4 w-4 mr-2" />
+                  예정
+                </h4>
+                <ScrollArea className="h-24">
+                  <div className="space-y-1">
+                    {upcoming.slice(0, 3).map((item) => (
+                      <div key={item.id} className="flex items-center space-x-2 p-2 bg-gray-50 rounded">
+                        <Checkbox 
+                          checked={false}
+                          disabled={true}
+                        />
+                        <span className="text-sm text-gray-600">{item.description}</span>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </div>
             </div>
+          </CardContent>
+        </Card>
+      </div>
 
-            {/* Upcoming */}
-            <div className="space-y-2">
-              <h4 className="font-semibold text-gray-600 flex items-center">
-                <Circle className="h-4 w-4 mr-2" />
-                예정
-              </h4>
-              {upcoming.map((item) => (
-                <div key={item.id} className="flex items-center space-x-2 p-2 bg-gray-50 rounded">
-                  <Checkbox 
-                    checked={false}
-                    disabled={true}
-                  />
-                  <span className="text-sm text-gray-600">{item.description}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Chat Interface */}
-      <ChatInterface 
-        activity={activity}
-        studentId={studentId}
-        onBack={onBack}
-        checklistContext={{
-          currentStep: current[0]?.description || "모든 단계가 완료되었습니다.",
-          allSteps: items
-        }}
-      />
+      {/* Right Panel: Chat Interface */}
+      <div className="flex-1 min-w-0">
+        <ChatInterface 
+          activity={activity}
+          studentId={studentId}
+          onBack={onBack}
+          checklistContext={{
+            currentStep: current[0]?.description || "모든 단계가 완료되었습니다.",
+            allSteps: items
+          }}
+        />
+      </div>
     </div>
   );
 };
