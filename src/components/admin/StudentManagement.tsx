@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Plus, Edit, Trash2, Search, Upload } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
@@ -27,6 +28,7 @@ const StudentManagement = () => {
   const [showCSVUpload, setShowCSVUpload] = useState(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedClass, setSelectedClass] = useState('all');
   const { toast } = useToast();
 
   const [formData, setFormData] = useState({
@@ -86,6 +88,12 @@ const StudentManagement = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // 고유 반 목록 추출
+  const getUniqueClasses = () => {
+    const classes = students.map(student => student.class_name);
+    return Array.from(new Set(classes)).sort();
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -220,12 +228,16 @@ const StudentManagement = () => {
     setShowForm(false);
   };
 
-  const filteredStudents = students.filter(student =>
-    student.student_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    student.class_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (student.group_name && student.group_name.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (student.name && student.name.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  const filteredStudents = students.filter(student => {
+    const matchesSearch = student.student_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      student.class_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (student.group_name && student.group_name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (student.name && student.name.toLowerCase().includes(searchTerm.toLowerCase()));
+    
+    const matchesClass = selectedClass === 'all' || student.class_name === selectedClass;
+    
+    return matchesSearch && matchesClass;
+  });
 
   if (loading) {
     return <div className="flex justify-center py-8">로딩 중...</div>;
@@ -264,17 +276,32 @@ const StudentManagement = () => {
         />
       )}
 
-      {/* 검색 */}
+      {/* 검색 및 필터 */}
       <Card>
         <CardContent className="pt-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-            <Input
-              placeholder="학번, 반 이름, 모둠명, 학생 이름으로 검색..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10"
-            />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+              <Input
+                placeholder="학번, 반 이름, 모둠명, 학생 이름으로 검색..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+            <Select value={selectedClass} onValueChange={setSelectedClass}>
+              <SelectTrigger>
+                <SelectValue placeholder="반 선택" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">모든 반</SelectItem>
+                {getUniqueClasses().map(className => (
+                  <SelectItem key={className} value={className}>
+                    {className}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </CardContent>
       </Card>
@@ -358,7 +385,14 @@ const StudentManagement = () => {
       {/* 학생 목록 테이블 */}
       <Card>
         <CardHeader>
-          <CardTitle>학생 목록 ({filteredStudents.length}명)</CardTitle>
+          <CardTitle>
+            학생 목록 ({filteredStudents.length}명)
+            {selectedClass !== 'all' && (
+              <span className="text-sm font-normal text-gray-500 ml-2">
+                - {selectedClass}
+              </span>
+            )}
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <Table>
@@ -406,7 +440,7 @@ const StudentManagement = () => {
               {filteredStudents.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center py-8 text-gray-500">
-                    {searchTerm ? '검색 결과가 없습니다.' : '등록된 학생이 없습니다.'}
+                    {searchTerm || selectedClass !== 'all' ? '필터 조건에 맞는 학생이 없습니다.' : '등록된 학생이 없습니다.'}
                   </TableCell>
                 </TableRow>
               )}

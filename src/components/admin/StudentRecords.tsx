@@ -64,6 +64,7 @@ const StudentRecords = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStudent, setSelectedStudent] = useState('all');
   const [selectedActivity, setSelectedActivity] = useState('all');
+  const [selectedClass, setSelectedClass] = useState('all');
   const [viewMode, setViewMode] = useState<'overview' | 'student-detail'>('overview');
   const [selectedStudentDetail, setSelectedStudentDetail] = useState<string>('');
   const { toast } = useToast();
@@ -177,6 +178,12 @@ const StudentRecords = () => {
     setUnifiedLogs(unified);
   };
 
+  // 고유 반 목록 추출
+  const getUniqueClasses = () => {
+    const classes = students.map(student => student.class_name);
+    return Array.from(new Set(classes)).sort();
+  };
+
   const downloadUnifiedLogs = () => {
     const filteredLogs = getFilteredUnifiedLogs();
 
@@ -184,12 +191,13 @@ const StudentRecords = () => {
       timestamp: new Date(log.timestamp).toLocaleString('ko-KR'),
       student_id: log.student_id,
       student_name: getStudentInfo(log.student_id).split(' (')[0],
+      student_class: getStudentClass(log.student_id),
       type: log.type === 'chat' ? (log.sender === 'student' ? '학생 메시지' : 'AI 응답') : '체크리스트 완료',
       activity: log.activity_title || '-',
       content: log.content
     }));
 
-    const csvContent = generateCSV(csvData, ['timestamp', 'student_id', 'student_name', 'type', 'activity', 'content']);
+    const csvContent = generateCSV(csvData, ['timestamp', 'student_id', 'student_name', 'student_class', 'type', 'activity', 'content']);
     downloadCSV(csvContent, `unified_logs_${new Date().toISOString().split('T')[0]}.csv`);
     
     toast({
@@ -203,6 +211,11 @@ const StudentRecords = () => {
     return student ? `${student.name || '이름없음'} (${student.student_id})` : studentId;
   };
 
+  const getStudentClass = (studentId: string) => {
+    const student = students.find(s => s.student_id === studentId);
+    return student ? student.class_name : '-';
+  };
+
   const getActivityInfo = (activityId: string | null) => {
     if (!activityId) return '-';
     const activity = activities.find(a => a.id === activityId);
@@ -211,12 +224,15 @@ const StudentRecords = () => {
 
   const getFilteredUnifiedLogs = () => {
     return unifiedLogs.filter(log => {
+      const student = students.find(s => s.student_id === log.student_id);
       const matchesSearch = log.content.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           log.student_id.toLowerCase().includes(searchTerm.toLowerCase());
+                           log.student_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                           (student?.name && student.name.toLowerCase().includes(searchTerm.toLowerCase()));
       const matchesStudent = selectedStudent === 'all' || log.student_id === selectedStudent;
       const matchesActivity = selectedActivity === 'all' || log.activity_id === selectedActivity;
+      const matchesClass = selectedClass === 'all' || (student && student.class_name === selectedClass);
       
-      return matchesSearch && matchesStudent && matchesActivity;
+      return matchesSearch && matchesStudent && matchesActivity && matchesClass;
     });
   };
 
@@ -226,7 +242,7 @@ const StudentRecords = () => {
 
   // 학생별 통계
   const getStudentStats = () => {
-    const stats = students.map(student => {
+    let stats = students.map(student => {
       const studentLogs = chatLogs.filter(log => log.student_id === student.student_id);
       const totalMessages = studentLogs.length;
       const studentMessages = studentLogs.filter(log => log.sender === 'student').length;
@@ -246,6 +262,11 @@ const StudentRecords = () => {
         lastActivity
       };
     });
+
+    // 반별 필터링 적용
+    if (selectedClass !== 'all') {
+      stats = stats.filter(student => student.class_name === selectedClass);
+    }
 
     return stats.sort((a, b) => b.totalMessages - a.totalMessages);
   };
@@ -355,27 +376,42 @@ const StudentRecords = () => {
       {/* 필터 */}
       <Card>
         <CardContent className="pt-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="relative">
               <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
               <Input
-                placeholder="메시지 내용이나 학번으로 검색..."
+                placeholder="메시지 내용이나 학번, 학생명으로 검색..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10"
               />
             </div>
+            <Select value={selectedClass} onValueChange={setSelectedClass}>
+              <SelectTrigger>
+                <SelectValue placeholder="반 선택" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">모든 반</SelectItem>
+                {getUniqueClasses().map(className => (
+                  <SelectItem key={className} value={className}>
+                    {className}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Select value={selectedStudent} onValueChange={setSelectedStudent}>
               <SelectTrigger>
                 <SelectValue placeholder="학생 선택" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">모든 학생</SelectItem>
-                {students.map(student => (
-                  <SelectItem key={student.student_id} value={student.student_id}>
-                    {getStudentInfo(student.student_id)}
-                  </SelectItem>
-                ))}
+                {students
+                  .filter(student => selectedClass === 'all' || student.class_name === selectedClass)
+                  .map(student => (
+                    <SelectItem key={student.student_id} value={student.student_id}>
+                      {getStudentInfo(student.student_id)}
+                    </SelectItem>
+                  ))}
               </SelectContent>
             </Select>
             <Select value={selectedActivity} onValueChange={setSelectedActivity}>
@@ -398,7 +434,14 @@ const StudentRecords = () => {
       {/* 학생별 활동 통계 */}
       <Card>
         <CardHeader>
-          <CardTitle>학생별 활동 통계</CardTitle>
+          <CardTitle>
+            학생별 활동 통계
+            {selectedClass !== 'all' && (
+              <span className="text-sm font-normal text-gray-500 ml-2">
+                - {selectedClass}
+              </span>
+            )}
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <Table>
@@ -453,6 +496,7 @@ const StudentRecords = () => {
               <TableRow>
                 <TableHead>시간</TableHead>
                 <TableHead>학생</TableHead>
+                <TableHead>반</TableHead>
                 <TableHead>유형</TableHead>
                 <TableHead>활동</TableHead>
                 <TableHead>내용</TableHead>
@@ -469,6 +513,9 @@ const StudentRecords = () => {
                       <User className="h-4 w-4" />
                       <span className="text-sm">{getStudentInfo(log.student_id)}</span>
                     </div>
+                  </TableCell>
+                  <TableCell className="text-sm">
+                    {getStudentClass(log.student_id)}
                   </TableCell>
                   <TableCell>
                     {log.type === 'chat' ? (
@@ -495,15 +542,15 @@ const StudentRecords = () => {
               ))}
               {getFilteredUnifiedLogs().length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center py-8 text-gray-500">
-                    {searchTerm || selectedStudent !== 'all' || selectedActivity !== 'all' ? 
+                  <TableCell colSpan={6} className="text-center py-8 text-gray-500">
+                    {searchTerm || selectedStudent !== 'all' || selectedActivity !== 'all' || selectedClass !== 'all' ? 
                       '필터 조건에 맞는 기록이 없습니다.' : '기록이 없습니다.'}
                   </TableCell>
                 </TableRow>
               )}
               {getFilteredUnifiedLogs().length > 100 && (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center py-4 text-gray-500">
+                  <TableCell colSpan={6} className="text-center py-4 text-gray-500">
                     최근 100개 항목만 표시됩니다. 더 많은 기록을 보려면 필터를 사용하거나 학생별 상세보기를 이용하세요.
                   </TableCell>
                 </TableRow>
