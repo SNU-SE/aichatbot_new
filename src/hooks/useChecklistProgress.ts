@@ -2,16 +2,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { getMultilingualDescription } from '@/utils/multilingualUtils';
 
 interface ChecklistItem {
   id: string;
   step_number: number;
   description: string;
-  description_ko?: string;
-  description_en?: string;
-  description_zh?: string;
-  description_ja?: string;
   module_id?: string;
   is_completed: boolean;
   completed_at?: string;
@@ -27,6 +22,35 @@ export const useChecklistProgress = ({ studentId, activityId }: UseChecklistProg
   const [loading, setLoading] = useState(true);
   const [motherTongue, setMotherTongue] = useState<string>('Korean');
   const { toast } = useToast();
+
+  const translateText = async (text: string, targetLanguage: string): Promise<string> => {
+    if (targetLanguage === 'Korean') {
+      return text;
+    }
+
+    try {
+      const { data, error } = await supabase.functions.invoke('ai-chat', {
+        body: {
+          message: `Translate the following Korean text to ${targetLanguage}. Only return the translation, nothing else: "${text}"`,
+          studentId: studentId,
+          activityId: activityId,
+          motherTongue: targetLanguage,
+          isTranslationRequest: true
+        }
+      });
+
+      if (error) {
+        console.error('Translation error:', error);
+        return text; // 번역 실패 시 원본 반환
+      }
+
+      const translatedText = data?.response || text;
+      return `${translatedText} / ${text}`;
+    } catch (error) {
+      console.error('Translation request failed:', error);
+      return text; // 번역 실패 시 원본 반환
+    }
+  };
 
   const fetchChecklist = useCallback(async () => {
     try {
@@ -45,16 +69,10 @@ export const useChecklistProgress = ({ studentId, activityId }: UseChecklistProg
         setMotherTongue(studentData.mother_tongue || 'Korean');
       }
       
-      // Get checklist items for the activity with all description columns
+      // Get checklist items for the activity
       const { data: checklistData, error: checklistError } = await supabase
         .from('checklist_items')
-        .select(`
-          *,
-          description_ko,
-          description_en,
-          description_zh,
-          description_ja
-        `)
+        .select('*')
         .eq('activity_id', activityId)
         .order('step_number', { ascending: true });
 
@@ -68,27 +86,25 @@ export const useChecklistProgress = ({ studentId, activityId }: UseChecklistProg
 
       if (progressError) throw progressError;
 
-      // Combine data with multilingual descriptions
-      const combinedItems = (checklistData || []).map(item => {
+      // Translate descriptions if needed and combine data
+      const combinedItems: ChecklistItem[] = [];
+      
+      for (const item of checklistData || []) {
         const progress = progressData?.find(p => p.checklist_item_id === item.id);
-        const description = getMultilingualDescription(item, studentData?.mother_tongue || 'Korean');
         
-        console.log('Item processing:', {
-          originalDescription: item.description,
-          description_ko: item.description_ko,
-          description_en: item.description_en,
-          description_zh: item.description_zh,
-          motherTongue: studentData?.mother_tongue,
-          finalDescription: description
-        });
+        // Translate description if student's mother tongue is not Korean
+        let translatedDescription = item.description;
+        if (studentData?.mother_tongue && studentData.mother_tongue !== 'Korean') {
+          translatedDescription = await translateText(item.description, studentData.mother_tongue);
+        }
         
-        return {
+        combinedItems.push({
           ...item,
-          description,
+          description: translatedDescription,
           is_completed: progress?.is_completed || false,
           completed_at: progress?.completed_at
-        };
-      });
+        });
+      }
 
       setItems(combinedItems);
     } catch (error: any) {

@@ -30,9 +30,9 @@ serve(async (req) => {
   }
 
   try {
-    const { message, studentId, activityId, fileUrl, fileName, fileType, motherTongue } = await req.json()
+    const { message, studentId, activityId, fileUrl, fileName, fileType, motherTongue, isTranslationRequest } = await req.json()
     
-    console.log('Received request:', { studentId, activityId, messageLength: message?.length, motherTongue })
+    console.log('Received request:', { studentId, activityId, messageLength: message?.length, motherTongue, isTranslationRequest })
 
     // Initialize Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
@@ -90,6 +90,98 @@ serve(async (req) => {
     const ragEnabled = useClassSettings ? 
       (classSettings.rag_enabled !== null ? classSettings.rag_enabled : globalSettings.rag_enabled) :
       (globalSettings.rag_enabled || false)
+
+    // Handle translation requests differently
+    if (isTranslationRequest) {
+      let aiResponse: string
+
+      if (selectedProvider === 'anthropic' && anthropicApiKey) {
+        // Call Anthropic API for translation
+        const anthropicResponse = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'x-api-key': anthropicApiKey,
+            'Content-Type': 'application/json',
+            'anthropic-version': '2023-06-01'
+          },
+          body: JSON.stringify({
+            model: selectedModel,
+            max_tokens: 1000,
+            messages: [
+              {
+                role: 'user',
+                content: message
+              }
+            ],
+            temperature: 0.1,
+          }),
+        })
+
+        if (!anthropicResponse.ok) {
+          const error = await anthropicResponse.text()
+          console.error('Anthropic API error:', error)
+          throw new Error(`Anthropic API 오류: ${anthropicResponse.status}`)
+        }
+
+        const anthropicData = await anthropicResponse.json()
+        aiResponse = anthropicData.content[0]?.text
+
+        if (!aiResponse) {
+          throw new Error('Anthropic AI 응답을 받을 수 없습니다.')
+        }
+      } else if (openaiApiKey) {
+        // Call OpenAI API for translation
+        const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${openaiApiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: selectedModel,
+            messages: [
+              {
+                role: 'user',
+                content: message
+              }
+            ],
+            max_tokens: 1000,
+            temperature: 0.1,
+          }),
+        })
+
+        if (!openaiResponse.ok) {
+          const error = await openaiResponse.text()
+          console.error('OpenAI API error:', error)
+          throw new Error(`OpenAI API 오류: ${openaiResponse.status}`)
+        }
+
+        const openaiData = await openaiResponse.json()
+        aiResponse = openaiData.choices[0]?.message?.content
+
+        if (!aiResponse) {
+          throw new Error('OpenAI AI 응답을 받을 수 없습니다.')
+        }
+      } else {
+        throw new Error('사용 가능한 AI API 키가 없습니다.')
+      }
+
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          response: aiResponse,
+          provider: selectedProvider,
+          model: selectedModel,
+          isTranslation: true
+        }),
+        { 
+          headers: { 
+            ...corsHeaders, 
+            'Content-Type': 'application/json' 
+          } 
+        }
+      )
+    }
 
     // Track question frequency for RAG logic
     const questionHash = generateQuestionHash(message)
