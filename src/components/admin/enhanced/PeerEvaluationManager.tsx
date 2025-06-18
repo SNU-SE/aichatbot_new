@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Users, Shuffle, CheckCircle, Download, Eye, Star } from 'lucide-react';
+import { Users, Shuffle, CheckCircle, Download, Eye, Star, Info } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { generateCSV, downloadCSV } from '@/utils/csvUtils';
@@ -19,10 +19,12 @@ interface PeerEvaluationManagerProps {
 interface ArgumentationData {
   student_id: string;
   student_name: string;
+  group_name: string | null;
   argument_text: string;
   evaluations: {
     evaluator_id: string;
     evaluator_name: string;
+    evaluator_group: string | null;
     evaluation_text: string;
     usefulness_rating?: number;
   }[];
@@ -106,7 +108,7 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
 
       toast({
         title: "성공",
-        description: `${data}개의 동료평가가 배정되었습니다.`
+        description: `${data}개의 동료평가가 배정되었습니다. 모둠 기반으로 배정되어 같은 모둠 학생들끼리는 평가하지 않습니다.`
       });
 
       await fetchStats();
@@ -132,14 +134,14 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
   const fetchArgumentationData = async () => {
     setLoading(true);
     try {
-      // 모든 논증 응답 가져오기 (id 포함)
+      // 모든 논증 응답 가져오기 (모둠 정보 포함)
       const { data: responses, error: responsesError } = await supabase
         .from('argumentation_responses')
         .select(`
           id,
           student_id,
           response_text,
-          students!inner(name)
+          students!inner(name, group_name)
         `)
         .eq('activity_id', selectedActivity)
         .eq('is_submitted', true);
@@ -149,13 +151,13 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
       const data: ArgumentationData[] = [];
 
       for (const response of responses || []) {
-        // 해당 응답에 대한 모든 평가 가져오기
+        // 해당 응답에 대한 모든 평가 가져오기 (평가자의 모둠 정보 포함)
         const { data: evaluations, error: evaluationsError } = await supabase
           .from('peer_evaluations')
           .select(`
             evaluator_id,
             evaluation_text,
-            students!inner(name)
+            students!inner(name, group_name)
           `)
           .eq('target_response_id', response.id)
           .eq('is_completed', true);
@@ -174,6 +176,7 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
         const evaluationsWithRating = evaluations?.map((evaluation, index) => ({
           evaluator_id: evaluation.evaluator_id,
           evaluator_name: evaluation.students.name || '이름없음',
+          evaluator_group: evaluation.students.group_name,
           evaluation_text: evaluation.evaluation_text || '',
           usefulness_rating: reflections?.[index]?.usefulness_rating
         })) || [];
@@ -181,6 +184,7 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
         data.push({
           student_id: response.student_id,
           student_name: response.students.name || '이름없음',
+          group_name: response.students.group_name,
           argument_text: response.response_text,
           evaluations: evaluationsWithRating
         });
@@ -205,16 +209,18 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
       arg.evaluations.map(evaluation => ({
         '학생ID': arg.student_id,
         '학생이름': arg.student_name,
+        '학생모둠': arg.group_name || '-',
         '논증내용': arg.argument_text,
         '평가자ID': evaluation.evaluator_id,
         '평가자이름': evaluation.evaluator_name,
+        '평가자모둠': evaluation.evaluator_group || '-',
         '평가내용': evaluation.evaluation_text,
         '도움정도평가': evaluation.usefulness_rating || '미평가'
       }))
     );
 
     const csv = generateCSV(csvData, [
-      '학생ID', '학생이름', '논증내용', '평가자ID', '평가자이름', '평가내용', '도움정도평가'
+      '학생ID', '학생이름', '학생모둠', '논증내용', '평가자ID', '평가자이름', '평가자모둠', '평가내용', '도움정도평가'
     ]);
 
     downloadCSV(csv, `peer_evaluation_${activityTitle}_${new Date().toISOString().split('T')[0]}.csv`);
@@ -230,6 +236,20 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
 
   return (
     <div className="space-y-4">
+      {/* 모둠 기반 동료평가 안내 */}
+      <Card className="border-blue-200 bg-blue-50">
+        <CardContent className="pt-4">
+          <div className="flex items-start space-x-2">
+            <Info className="h-4 w-4 text-blue-600 mt-0.5" />
+            <div className="text-sm text-blue-800">
+              <p className="font-medium mb-1">모둠 기반 동료평가</p>
+              <p>학생 정보에 모둠이 설정된 경우, 같은 모둠 학생들끼리는 서로 평가하지 않고 다른 모둠의 학생들만 평가합니다.</p>
+              <p>각 응답당 2명이 평가하고, 각 학생은 2개의 응답을 평가합니다.</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* 통계 카드 */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <div className="text-center p-4 bg-blue-50 rounded-lg">
@@ -250,7 +270,7 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
         </div>
         <div className="text-center p-4 bg-gray-50 rounded-lg">
           <div className="text-2xl font-bold text-gray-600">
-            {stats.completedEvaluations > 0 ? Math.round((stats.completedEvaluations / stats.assignedEvaluations) * 100) : 0}%
+            {stats.assignedEvaluations > 0 ? Math.round((stats.completedEvaluations / stats.assignedEvaluations) * 100) : 0}%
           </div>
           <div className="text-sm text-gray-600">완료율</div>
         </div>
@@ -264,7 +284,7 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
           className="flex items-center space-x-2"
         >
           <Shuffle className="h-4 w-4" />
-          <span>동료평가 배정</span>
+          <span>모둠별 동료평가 배정</span>
         </Button>
 
         <Button
@@ -308,8 +328,11 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
               {argumentationData.map((arg, index) => (
                 <Card key={index}>
                   <CardHeader>
-                    <CardTitle className="text-lg">
-                      {arg.student_name} ({arg.student_id})
+                    <CardTitle className="text-lg flex items-center space-x-2">
+                      <span>{arg.student_name} ({arg.student_id})</span>
+                      {arg.group_name && (
+                        <Badge variant="outline">{arg.group_name}모둠</Badge>
+                      )}
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
@@ -325,9 +348,16 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
                           {arg.evaluations.map((evaluation, evalIndex) => (
                             <div key={evalIndex} className="border rounded p-3">
                               <div className="flex items-center justify-between mb-2">
-                                <span className="font-medium text-sm">
-                                  평가자: {evaluation.evaluator_name} ({evaluation.evaluator_id})
-                                </span>
+                                <div className="flex items-center space-x-2">
+                                  <span className="font-medium text-sm">
+                                    평가자: {evaluation.evaluator_name} ({evaluation.evaluator_id})
+                                  </span>
+                                  {evaluation.evaluator_group && (
+                                    <Badge variant="secondary" className="text-xs">
+                                      {evaluation.evaluator_group}모둠
+                                    </Badge>
+                                  )}
+                                </div>
                                 {evaluation.usefulness_rating && (
                                   <div className="flex items-center space-x-1">
                                     <Star className="h-4 w-4 text-yellow-500" />

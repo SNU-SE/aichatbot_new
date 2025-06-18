@@ -44,21 +44,21 @@ const StudentManagement = () => {
     {
       student_id: '2024001',
       class_name: '3학년 1반',
-      group_name: '1모둠',
+      group_name: '1',
       name: '김철수',
       mother_tongue: '한국어'
     },
     {
       student_id: '2024002',
       class_name: '3학년 1반',
-      group_name: '2모둠',
+      group_name: '2',
       name: '이영희',
       mother_tongue: '한국어'
     },
     {
       student_id: '2024003',
       class_name: '3학년 2반',
-      group_name: '1모둠',
+      group_name: '1',
       name: 'John Smith',
       mother_tongue: '중국어'
     }
@@ -96,8 +96,25 @@ const StudentManagement = () => {
     return Array.from(new Set(classes)).sort();
   };
 
+  // 모둠 번호 유효성 검사
+  const validateGroupNumber = (groupName: string) => {
+    if (!groupName.trim()) return true; // 빈 값은 허용
+    const num = parseInt(groupName.trim(), 10);
+    return !isNaN(num) && num > 0 && num.toString() === groupName.trim();
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // 모둠 번호 유효성 검사
+    if (formData.group_name && !validateGroupNumber(formData.group_name)) {
+      toast({
+        title: "오류",
+        description: "모둠은 양의 정수로만 입력해주세요. (예: 1, 2, 3)",
+        variant: "destructive"
+      });
+      return;
+    }
     
     try {
       if (editingStudent) {
@@ -149,6 +166,21 @@ const StudentManagement = () => {
 
   const handleCSVData = async (csvData: any[]) => {
     try {
+      // CSV 데이터 유효성 검사
+      const invalidRows = csvData.filter(row => {
+        const groupName = row.group_name || row['모둠'];
+        return groupName && !validateGroupNumber(groupName);
+      });
+
+      if (invalidRows.length > 0) {
+        toast({
+          title: "오류",
+          description: "모둠은 양의 정수로만 입력해주세요. 잘못된 데이터가 있습니다.",
+          variant: "destructive"
+        });
+        return;
+      }
+
       const studentsToInsert = csvData.map(row => ({
         student_id: row.student_id || row['학번'],
         class_name: row.class_name || row['반'],
@@ -337,12 +369,14 @@ const StudentManagement = () => {
                   />
                 </div>
                 <div>
-                  <Label htmlFor="group_name">모둠 (선택)</Label>
+                  <Label htmlFor="group_name">모둠 (숫자만, 선택)</Label>
                   <Input
                     id="group_name"
                     value={formData.group_name}
                     onChange={(e) => setFormData({...formData, group_name: e.target.value})}
-                    placeholder="예: 1모둠"
+                    placeholder="예: 1, 2, 3"
+                    pattern="[1-9][0-9]*"
+                    title="양의 정수만 입력 가능합니다"
                   />
                 </div>
               </div>
