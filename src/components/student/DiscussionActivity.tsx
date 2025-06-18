@@ -32,9 +32,9 @@ const DiscussionActivity = ({ activity, studentId, onBack }: DiscussionActivityP
   }
 
   return (
-    <div className="h-screen flex bg-gray-50 overflow-hidden">
+    <div className="h-screen flex bg-gray-50 overflow-hidden p-4">
       {/* Left Panel: Checklist and Notes */}
-      <div className="w-80 bg-white shadow-lg flex flex-col flex-shrink-0">
+      <div className="w-80 bg-white shadow-lg flex flex-col flex-shrink-0 rounded-lg">
         {/* Checklist */}
         <div className="p-4">
           <Card className="border-0 shadow-none rounded-lg">
@@ -42,7 +42,7 @@ const DiscussionActivity = ({ activity, studentId, onBack }: DiscussionActivityP
               <CardTitle className="text-lg">토의 체크리스트</CardTitle>
             </CardHeader>
             <CardContent className="pt-0">
-              <div className="space-y-2 max-h-48 overflow-y-auto">
+              <div className="space-y-2" style={{ height: '192px', overflowY: 'auto' }}>
                 {items.slice(0, 5).map((item) => (
                   <div key={item.id} className="flex items-start space-x-2 p-2 rounded-lg hover:bg-gray-50">
                     <Checkbox 

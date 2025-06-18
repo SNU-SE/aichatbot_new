@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Send, Bot, User, ArrowLeft, BookOpen, Paperclip } from 'lucide-react';
+import { Send, Bot, User, ArrowLeft, BookOpen, Paperclip, Microscope, Users } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { uploadFile } from '@/utils/fileUpload';
@@ -249,6 +249,19 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext }: ChatIn
     return '';
   };
 
+  const getActivityIcon = () => {
+    switch (activity.type) {
+      case 'experiment':
+        return <Microscope className="h-6 w-6" />;
+      case 'argumentation':
+        return <Users className="h-6 w-6" />;
+      case 'discussion':
+        return <BookOpen className="h-6 w-6" />;
+      default:
+        return <BookOpen className="h-6 w-6" />;
+    }
+  };
+
   if (loadingHistory) {
     return (
       <div className="flex justify-center items-center py-12">
@@ -264,7 +277,7 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext }: ChatIn
         <CardHeader className="pb-4">
           <div className="flex items-center space-x-3">
             <div className="p-2 bg-[rgb(15,15,112)] rounded-lg text-white">
-              <BookOpen className="h-6 w-6" />
+              {getActivityIcon()}
             </div>
             <div className="flex-1">
               <CardTitle className="text-xl font-bold text-gray-900">

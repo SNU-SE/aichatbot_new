@@ -21,6 +21,7 @@ const ArgumentationActivity = ({ activity, studentId, onBack }: ArgumentationAct
     activityId: activity.id 
   });
   const [activeTask, setActiveTask] = useState<'none' | 'argument' | 'peer-evaluation' | 'evaluation-check'>('none');
+  
   const [argumentText, setArgumentText] = useState('');
   const [evaluationText, setEvaluationText] = useState('');
   const [reflectionText, setReflectionText] = useState('');
@@ -243,9 +244,9 @@ const ArgumentationActivity = ({ activity, studentId, onBack }: ArgumentationAct
   }
 
   return (
-    <div className="h-screen flex bg-gray-50 overflow-hidden">
+    <div className="h-screen flex bg-gray-50 overflow-hidden p-4">
       {/* Left Panel: Checklist and Controls */}
-      <div className="w-80 bg-white shadow-lg flex flex-col flex-shrink-0">
+      <div className="w-80 bg-white shadow-lg flex flex-col flex-shrink-0 rounded-lg">
         <div className="p-4 border-b">
           <h2 className="text-lg font-semibold">{activity.title}</h2>
           <p className="text-sm text-gray-600 mt-1">논증 활동</p>
@@ -258,7 +259,7 @@ const ArgumentationActivity = ({ activity, studentId, onBack }: ArgumentationAct
               <CardTitle className="text-lg">체크리스트</CardTitle>
             </CardHeader>
             <CardContent className="pt-0">
-              <div className="space-y-2 max-h-40 overflow-y-auto">
+              <div className="space-y-2" style={{ height: '160px', overflowY: 'auto' }}>
                 {items.slice(0, 5).map((item) => (
                   <div key={item.id} className="flex items-start space-x-2 p-2 rounded-lg hover:bg-gray-50">
                     <Checkbox 

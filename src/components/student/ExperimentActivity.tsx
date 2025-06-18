@@ -105,9 +105,9 @@ const ExperimentActivity = ({ activity, studentId, onBack }: ExperimentActivityP
   }
 
   return (
-    <div className="h-screen flex bg-gray-50 overflow-hidden">
+    <div className="h-screen flex bg-gray-50 overflow-hidden p-4">
       {/* Left Panel: Module Progress and Checklist */}
-      <div className="w-80 bg-white shadow-lg flex flex-col flex-shrink-0">
+      <div className="w-80 bg-white shadow-lg flex flex-col flex-shrink-0 rounded-lg">
         {/* Header with module progress */}
         <div className="p-4 border-b">
           <h2 className="text-lg font-bold mb-4">{activity.title}</h2>
@@ -121,7 +121,7 @@ const ExperimentActivity = ({ activity, studentId, onBack }: ExperimentActivityP
         {/* Checklist */}
         <div className="flex-1 p-4 overflow-hidden">
           <h3 className="text-md font-semibold mb-4">실험 단계</h3>
-          <div className="space-y-4 h-full overflow-y-auto">
+          <div className="space-y-4" style={{ height: '128px', overflowY: 'auto' }}>
             {/* Completed */}
             <div className="space-y-2">
               <h4 className="font-semibold text-green-600 flex items-center">
