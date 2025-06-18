@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { LogOut, Users, MessageSquare, Settings, BookOpen, BarChart3, Monitor } from 'lucide-react';
+import { LogOut, Users, Settings, BookOpen, BarChart3, Monitor } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 
@@ -11,7 +11,6 @@ import StudentManagement from '@/components/admin/StudentManagement';
 import AISettings from '@/components/admin/AISettings';
 import ActivityManagement from '@/components/admin/ActivityManagement';
 import RealTimeMonitoring from '@/components/admin/RealTimeMonitoring';
-import ClassManagement from '@/components/admin/ClassManagement';
 import StudentRecords from '@/components/admin/StudentRecords';
 
 const AdminDashboard = () => {
@@ -59,14 +58,10 @@ const AdminDashboard = () => {
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-6">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="monitoring" className="flex items-center space-x-2">
               <Monitor className="h-4 w-4" />
               <span>실시간 모니터링</span>
-            </TabsTrigger>
-            <TabsTrigger value="class-management" className="flex items-center space-x-2">
-              <MessageSquare className="h-4 w-4" />
-              <span>수업 관리</span>
             </TabsTrigger>
             <TabsTrigger value="students" className="flex items-center space-x-2">
               <Users className="h-4 w-4" />
@@ -88,10 +83,6 @@ const AdminDashboard = () => {
 
           <TabsContent value="monitoring">
             <RealTimeMonitoring />
-          </TabsContent>
-
-          <TabsContent value="class-management">
-            <ClassManagement />
           </TabsContent>
 
           <TabsContent value="students">

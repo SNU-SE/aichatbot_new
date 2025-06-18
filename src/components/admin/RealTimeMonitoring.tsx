@@ -32,93 +32,131 @@ const RealTimeMonitoring = () => {
   const [studentActivities, setStudentActivities] = useState<StudentActivity[]>([]);
   const [recentChats, setRecentChats] = useState<RecentChatActivity[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
-    fetchInitialData();
-    setupRealtimeListeners();
-  }, []);
+    let mounted = true;
+    let channels: any[] = [];
 
-  const fetchInitialData = async () => {
-    try {
-      // 학생 활동 데이터 가져오기
-      const { data: activityData, error: activityError } = await supabase
-        .from('student_activity_view')
-        .select('*');
+    const fetchInitialData = async () => {
+      if (!mounted) return;
+      
+      try {
+        setLoading(true);
+        setError(null);
 
-      if (activityError) throw activityError;
+        // 학생 활동 데이터 가져오기
+        const { data: activityData, error: activityError } = await supabase
+          .from('student_activity_view')
+          .select('*');
 
-      // 최근 채팅 데이터 가져오기 (최근 1시간)
-      const oneHourAgo = new Date();
-      oneHourAgo.setHours(oneHourAgo.getHours() - 1);
-
-      const { data: chatData, error: chatError } = await supabase
-        .from('chat_logs')
-        .select('*')
-        .gte('timestamp', oneHourAgo.toISOString())
-        .order('timestamp', { ascending: false })
-        .limit(15);
-
-      if (chatError) throw chatError;
-
-      setStudentActivities(activityData || []);
-      setRecentChats(chatData || []);
-    } catch (error: any) {
-      toast({
-        title: "오류",
-        description: "데이터를 불러오는데 실패했습니다.",
-        variant: "destructive"
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const setupRealtimeListeners = () => {
-    // 학생 세션 실시간 업데이트
-    const sessionChannel = supabase
-      .channel('student-sessions-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'student_sessions'
-        },
-        () => {
-          fetchInitialData(); // 세션 변경 시 데이터 새로고침
+        if (activityError) {
+          console.error('Activity data error:', activityError);
+          throw new Error('학생 활동 데이터를 불러올 수 없습니다.');
         }
-      )
-      .subscribe();
 
-    // 채팅 로그 실시간 업데이트
-    const chatChannel = supabase
-      .channel('chat-logs-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'chat_logs'
-        },
-        (payload) => {
-          const newChat = payload.new as RecentChatActivity;
-          setRecentChats(prev => [newChat, ...prev.slice(0, 14)]);
-          
-          // 새로운 메시지 알림
+        // 최근 채팅 데이터 가져오기 (최근 1시간)
+        const oneHourAgo = new Date();
+        oneHourAgo.setHours(oneHourAgo.getHours() - 1);
+
+        const { data: chatData, error: chatError } = await supabase
+          .from('chat_logs')
+          .select('*')
+          .gte('timestamp', oneHourAgo.toISOString())
+          .order('timestamp', { ascending: false })
+          .limit(15);
+
+        if (chatError) {
+          console.error('Chat data error:', chatError);
+          throw new Error('채팅 데이터를 불러올 수 없습니다.');
+        }
+
+        if (mounted) {
+          setStudentActivities(activityData || []);
+          setRecentChats(chatData || []);
+        }
+      } catch (error: any) {
+        console.error('Data fetch error:', error);
+        if (mounted) {
+          setError(error.message);
           toast({
-            title: "새 메시지",
-            description: `${newChat.student_id}님이 메시지를 보냈습니다.`,
+            title: "오류",
+            description: error.message,
+            variant: "destructive"
           });
         }
-      )
-      .subscribe();
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    const setupRealtimeListeners = () => {
+      try {
+        // 학생 세션 실시간 업데이트
+        const sessionChannel = supabase
+          .channel('student-sessions-changes')
+          .on(
+            'postgres_changes',
+            {
+              event: '*',
+              schema: 'public',
+              table: 'student_sessions'
+            },
+            () => {
+              if (mounted) {
+                fetchInitialData();
+              }
+            }
+          )
+          .subscribe();
+
+        // 채팅 로그 실시간 업데이트
+        const chatChannel = supabase
+          .channel('chat-logs-changes')
+          .on(
+            'postgres_changes',
+            {
+              event: 'INSERT',
+              schema: 'public',
+              table: 'chat_logs'
+            },
+            (payload) => {
+              if (mounted) {
+                const newChat = payload.new as RecentChatActivity;
+                setRecentChats(prev => [newChat, ...prev.slice(0, 14)]);
+                
+                toast({
+                  title: "새 메시지",
+                  description: `${newChat.student_id}님이 메시지를 보냈습니다.`,
+                });
+              }
+            }
+          )
+          .subscribe();
+
+        channels = [sessionChannel, chatChannel];
+      } catch (error) {
+        console.error('Realtime setup error:', error);
+      }
+    };
+
+    fetchInitialData();
+    setupRealtimeListeners();
 
     return () => {
-      supabase.removeChannel(sessionChannel);
-      supabase.removeChannel(chatChannel);
+      mounted = false;
+      channels.forEach(channel => {
+        try {
+          supabase.removeChannel(channel);
+        } catch (error) {
+          console.error('Error removing channel:', error);
+        }
+      });
     };
-  };
+  }, [toast]);
 
   const getOnlineStudents = () => {
     const fiveMinutesAgo = new Date();
@@ -143,7 +181,23 @@ const RealTimeMonitoring = () => {
   };
 
   if (loading) {
-    return <div className="flex justify-center py-8">실시간 데이터를 불러오는 중...</div>;
+    return (
+      <div className="flex justify-center items-center py-12">
+        <div className="text-lg text-gray-600">실시간 데이터를 불러오는 중...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12">
+        <div className="text-lg text-red-600 mb-4">오류가 발생했습니다</div>
+        <div className="text-sm text-gray-600 mb-4">{error}</div>
+        <Button onClick={() => window.location.reload()}>
+          페이지 새로고침
+        </Button>
+      </div>
+    );
   }
 
   const onlineStudents = getOnlineStudents();
