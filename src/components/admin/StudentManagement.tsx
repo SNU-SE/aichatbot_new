@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -13,6 +14,7 @@ interface Student {
   id: string;
   student_id: string;
   class_name: string;
+  group_name: string | null;
   name: string | null;
   mother_tongue: string | null;
   created_at: string;
@@ -30,8 +32,9 @@ const StudentManagement = () => {
   const [formData, setFormData] = useState({
     student_id: '',
     class_name: '',
+    group_name: '',
     name: '',
-    mother_tongue: 'Korean'
+    mother_tongue: '한국어'
   });
 
   // CSV 템플릿용 예시 데이터
@@ -39,24 +42,27 @@ const StudentManagement = () => {
     {
       student_id: '2024001',
       class_name: '3학년 1반',
+      group_name: '1모둠',
       name: '김철수',
-      mother_tongue: 'Korean'
+      mother_tongue: '한국어'
     },
     {
       student_id: '2024002',
       class_name: '3학년 1반',
+      group_name: '2모둠',
       name: '이영희',
-      mother_tongue: 'Korean'
+      mother_tongue: '한국어'
     },
     {
       student_id: '2024003',
       class_name: '3학년 2반',
+      group_name: '1모둠',
       name: 'John Smith',
-      mother_tongue: 'English'
+      mother_tongue: '중국어'
     }
   ];
 
-  const csvExpectedHeaders = ['student_id', 'class_name', 'name', 'mother_tongue'];
+  const csvExpectedHeaders = ['student_id', 'class_name', 'group_name', 'name', 'mother_tongue'];
 
   useEffect(() => {
     fetchStudents();
@@ -91,6 +97,7 @@ const StudentManagement = () => {
           .from('students')
           .update({
             class_name: formData.class_name,
+            group_name: formData.group_name || null,
             name: formData.name || null,
             mother_tongue: formData.mother_tongue
           })
@@ -107,6 +114,7 @@ const StudentManagement = () => {
           .insert([{
             student_id: formData.student_id,
             class_name: formData.class_name,
+            group_name: formData.group_name || null,
             name: formData.name || null,
             mother_tongue: formData.mother_tongue
           }]);
@@ -136,8 +144,9 @@ const StudentManagement = () => {
       const studentsToInsert = csvData.map(row => ({
         student_id: row.student_id || row['학번'],
         class_name: row.class_name || row['반'],
+        group_name: row.group_name || row['모둠'] || null,
         name: row.name || row['이름'] || null,
-        mother_tongue: row.mother_tongue || row['모국어'] || 'Korean'
+        mother_tongue: row.mother_tongue || row['모국어'] || '한국어'
       }));
 
       const { error } = await supabase
@@ -167,8 +176,9 @@ const StudentManagement = () => {
     setFormData({
       student_id: student.student_id,
       class_name: student.class_name,
+      group_name: student.group_name || '',
       name: student.name || '',
-      mother_tongue: student.mother_tongue || 'Korean'
+      mother_tongue: student.mother_tongue || '한국어'
     });
     setShowForm(true);
   };
@@ -202,8 +212,9 @@ const StudentManagement = () => {
     setFormData({
       student_id: '',
       class_name: '',
+      group_name: '',
       name: '',
-      mother_tongue: 'Korean'
+      mother_tongue: '한국어'
     });
     setEditingStudent(null);
     setShowForm(false);
@@ -212,6 +223,7 @@ const StudentManagement = () => {
   const filteredStudents = students.filter(student =>
     student.student_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
     student.class_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (student.group_name && student.group_name.toLowerCase().includes(searchTerm.toLowerCase())) ||
     (student.name && student.name.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
@@ -258,7 +270,7 @@ const StudentManagement = () => {
           <div className="relative">
             <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
             <Input
-              placeholder="학번, 반 이름, 학생 이름으로 검색..."
+              placeholder="학번, 반 이름, 모둠명, 학생 이름으로 검색..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-10"
@@ -275,7 +287,7 @@ const StudentManagement = () => {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-4">
                 <div>
                   <Label htmlFor="student_id">학번</Label>
                   <Input
@@ -297,6 +309,15 @@ const StudentManagement = () => {
                     placeholder="예: 3학년 1반"
                   />
                 </div>
+                <div>
+                  <Label htmlFor="group_name">모둠 (선택)</Label>
+                  <Input
+                    id="group_name"
+                    value={formData.group_name}
+                    onChange={(e) => setFormData({...formData, group_name: e.target.value})}
+                    placeholder="예: 1모둠"
+                  />
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -314,7 +335,7 @@ const StudentManagement = () => {
                     id="mother_tongue"
                     value={formData.mother_tongue}
                     onChange={(e) => setFormData({...formData, mother_tongue: e.target.value})}
-                    placeholder="예: Korean, English, Chinese"
+                    placeholder="예: 한국어, 중국어, 러시아어"
                   />
                 </div>
               </div>
@@ -345,6 +366,7 @@ const StudentManagement = () => {
               <TableRow>
                 <TableHead>학번</TableHead>
                 <TableHead>반</TableHead>
+                <TableHead>모둠</TableHead>
                 <TableHead>이름</TableHead>
                 <TableHead>모국어</TableHead>
                 <TableHead>등록일</TableHead>
@@ -356,6 +378,7 @@ const StudentManagement = () => {
                 <TableRow key={student.id}>
                   <TableCell className="font-mono">{student.student_id}</TableCell>
                   <TableCell>{student.class_name}</TableCell>
+                  <TableCell>{student.group_name || '-'}</TableCell>
                   <TableCell>{student.name || '-'}</TableCell>
                   <TableCell>{student.mother_tongue || '-'}</TableCell>
                   <TableCell>{new Date(student.created_at).toLocaleDateString('ko-KR')}</TableCell>
@@ -382,7 +405,7 @@ const StudentManagement = () => {
               ))}
               {filteredStudents.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-gray-500">
+                  <TableCell colSpan={7} className="text-center py-8 text-gray-500">
                     {searchTerm ? '검색 결과가 없습니다.' : '등록된 학생이 없습니다.'}
                   </TableCell>
                 </TableRow>

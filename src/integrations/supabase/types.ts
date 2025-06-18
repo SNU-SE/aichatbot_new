@@ -606,6 +606,7 @@ export type Database = {
         Row: {
           class_name: string
           created_at: string
+          group_name: string | null
           id: string
           mother_tongue: string | null
           name: string | null
@@ -616,6 +617,7 @@ export type Database = {
         Insert: {
           class_name: string
           created_at?: string
+          group_name?: string | null
           id?: string
           mother_tongue?: string | null
           name?: string | null
@@ -626,6 +628,7 @@ export type Database = {
         Update: {
           class_name?: string
           created_at?: string
+          group_name?: string | null
           id?: string
           mother_tongue?: string | null
           name?: string | null
