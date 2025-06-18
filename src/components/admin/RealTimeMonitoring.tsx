@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -273,7 +272,6 @@ const RealTimeMonitoring = () => {
                 <TableHead>마지막 접속</TableHead>
                 <TableHead>총 메시지</TableHead>
                 <TableHead>참여 활동</TableHead>
-                <TableHead>작업</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -315,18 +313,12 @@ const RealTimeMonitoring = () => {
                     </TableCell>
                     <TableCell>{student.total_messages || 0}</TableCell>
                     <TableCell>{student.activities_participated || 0}</TableCell>
-                    <TableCell>
-                      <Button size="sm" variant="outline">
-                        <Eye className="h-3 w-3 mr-1" />
-                        상세보기
-                      </Button>
-                    </TableCell>
                   </TableRow>
                 );
               })}
               {studentActivities.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8 text-gray-500">
+                  <TableCell colSpan={6} className="text-center py-8 text-gray-500">
                     등록된 학생이 없습니다.
                   </TableCell>
                 </TableRow>
