@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Users, Shuffle, CheckCircle, Download, Eye, Star, Info } from 'lucide-react';
+import { Users, Shuffle, CheckCircle, Download, Eye, Star, Info, Minus, Plus } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { generateCSV, downloadCSV } from '@/utils/csvUtils';
@@ -47,6 +47,7 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
     feedbackResponses: 0
   });
   const [argumentationData, setArgumentationData] = useState<ArgumentationData[]>([]);
+  const [evaluationsPerStudent, setEvaluationsPerStudent] = useState(2);
   const [loading, setLoading] = useState(false);
   const [showResults, setShowResults] = useState(false);
   const { toast } = useToast();
@@ -90,10 +91,11 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
   };
 
   const handleAssignEvaluations = async () => {
-    if (stats.submittedArguments < 2) {
+    const minStudents = evaluationsPerStudent + 1;
+    if (stats.submittedArguments < minStudents) {
       toast({
         title: "알림",
-        description: "동료평가를 진행하려면 최소 2명 이상의 학생이 논증을 제출해야 합니다.",
+        description: `동료평가를 진행하려면 최소 ${minStudents}명 이상의 학생이 논증을 제출해야 합니다.`,
         variant: "destructive"
       });
       return;
@@ -102,13 +104,16 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
     setLoading(true);
     try {
       const { data, error } = await supabase
-        .rpc('assign_peer_evaluations', { activity_id_param: selectedActivity });
+        .rpc('assign_peer_evaluations', { 
+          activity_id_param: selectedActivity,
+          evaluations_per_student: evaluationsPerStudent
+        });
 
       if (error) throw error;
 
       toast({
         title: "성공",
-        description: `${data}개의 동료평가가 배정되었습니다. 모둠 기반으로 배정되어 같은 모둠 학생들끼리는 평가하지 않습니다.`
+        description: `${data}개의 동료평가가 배정되었습니다. 각 학생은 ${evaluationsPerStudent}개의 응답을 평가합니다.`
       });
 
       await fetchStats();
@@ -116,7 +121,7 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
       console.error('동료평가 배정 오류:', error);
       toast({
         title: "오류",
-        description: "동료평가 배정에 실패했습니다.",
+        description: error.message || "동료평가 배정에 실패했습니다.",
         variant: "destructive"
       });
     } finally {
@@ -226,6 +231,16 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
     downloadCSV(csv, `peer_evaluation_${activityTitle}_${new Date().toISOString().split('T')[0]}.csv`);
   };
 
+  const decreaseEvaluations = () => {
+    if (evaluationsPerStudent > 2) {
+      setEvaluationsPerStudent(evaluationsPerStudent - 1);
+    }
+  };
+
+  const increaseEvaluations = () => {
+    setEvaluationsPerStudent(evaluationsPerStudent + 1);
+  };
+
   if (selectedActivity === 'all') {
     return (
       <div className="text-center py-8 text-gray-500">
@@ -233,6 +248,8 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
       </div>
     );
   }
+
+  const minStudents = evaluationsPerStudent + 1;
 
   return (
     <div className="space-y-4">
@@ -244,7 +261,7 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
             <div className="text-sm text-blue-800">
               <p className="font-medium mb-1">모둠 기반 동료평가</p>
               <p>학생 정보에 모둠이 설정된 경우, 같은 모둠 학생들끼리는 서로 평가하지 않고 다른 모둠의 학생들만 평가합니다.</p>
-              <p>각 응답당 2명이 평가하고, 각 학생은 2개의 응답을 평가합니다.</p>
+              <p>각 학생은 설정된 수만큼의 다른 모둠 응답을 평가합니다.</p>
             </div>
           </div>
         </CardContent>
@@ -277,10 +294,34 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
       </div>
 
       {/* 동료평가 관리 버튼 */}
-      <div className="flex space-x-4">
+      <div className="flex items-center space-x-4">
+        {/* 평가할 학생 수 설정 */}
+        <div className="flex items-center space-x-2 bg-gray-50 px-3 py-2 rounded-lg">
+          <span className="text-sm font-medium">학생수:</span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={decreaseEvaluations}
+            disabled={evaluationsPerStudent <= 2}
+            className="h-6 w-6 p-0"
+          >
+            <Minus className="h-3 w-3" />
+          </Button>
+          <span className="text-sm font-bold w-6 text-center">{evaluationsPerStudent}</span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={increaseEvaluations}
+            className="h-6 w-6 p-0"
+          >
+            <Plus className="h-3 w-3" />
+          </Button>
+          <span className="text-xs text-gray-500">(최소 {minStudents}명 필요)</span>
+        </div>
+
         <Button
           onClick={handleAssignEvaluations}
-          disabled={loading || stats.submittedArguments < 2}
+          disabled={loading || stats.submittedArguments < minStudents}
           className="flex items-center space-x-2"
         >
           <Shuffle className="h-4 w-4" />
@@ -379,10 +420,10 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
         </Dialog>
       </div>
 
-      {stats.submittedArguments < 2 && (
+      {stats.submittedArguments < minStudents && (
         <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
           <p className="text-sm text-yellow-700">
-            동료평가를 진행하려면 최소 2명 이상의 학생이 논증을 제출해야 합니다.
+            동료평가를 진행하려면 최소 {minStudents}명 이상의 학생이 논증을 제출해야 합니다.
             현재 {stats.submittedArguments}명이 제출했습니다.
           </p>
         </div>

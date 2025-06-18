@@ -677,7 +677,9 @@ export type Database = {
     }
     Functions: {
       assign_peer_evaluations: {
-        Args: { activity_id_param: string }
+        Args:
+          | { activity_id_param: string }
+          | { activity_id_param: string; evaluations_per_student?: number }
         Returns: number
       }
       binary_quantize: {
