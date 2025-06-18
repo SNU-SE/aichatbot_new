@@ -30,6 +30,11 @@ const ArgumentationActivity = ({ activity, studentId, onBack }: ArgumentationAct
   const [isSubmitted, setIsSubmitted] = useState(false);
   const { toast } = useToast();
 
+  // 컴포넌트 마운트 시 스크롤을 상단으로 고정
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
+
   useEffect(() => {
     checkStudentStatus();
     checkPeerEvaluationStatus();

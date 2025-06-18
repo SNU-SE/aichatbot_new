@@ -35,6 +35,14 @@ const StudentDashboard = () => {
 
   const handleActivitySelect = (activity: Activity) => {
     setSelectedActivity(activity);
+    // 활동 선택 시 화면 상단으로 스크롤
+    window.scrollTo(0, 0);
+  };
+
+  const handleBack = () => {
+    setSelectedActivity(null);
+    // 활동 목록으로 돌아갈 때도 화면 상단으로 스크롤
+    window.scrollTo(0, 0);
   };
 
   const renderActivityInterface = () => {
@@ -43,7 +51,7 @@ const StudentDashboard = () => {
     const commonProps = {
       activity: selectedActivity,
       studentId: studentId,
-      onBack: () => setSelectedActivity(null)
+      onBack: handleBack
     };
 
     switch (selectedActivity.type) {

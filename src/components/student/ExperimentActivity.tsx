@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -24,6 +23,11 @@ const ExperimentActivity = ({ activity, studentId, onBack }: ExperimentActivityP
   const [modules, setModules] = useState<any[]>([]);
   const [currentModule, setCurrentModule] = useState(1);
   const [completedModules, setCompletedModules] = useState(0);
+
+  // 컴포넌트 마운트 시 스크롤을 상단으로 고정
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
 
   useEffect(() => {
     fetchModules();

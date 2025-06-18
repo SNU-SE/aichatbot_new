@@ -1,4 +1,5 @@
 
+import { useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -17,6 +18,11 @@ const DiscussionActivity = ({ activity, studentId, onBack }: DiscussionActivityP
     studentId, 
     activityId: activity.id 
   });
+
+  // 컴포넌트 마운트 시 스크롤을 상단으로 고정
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
 
   if (loading) {
     return (
