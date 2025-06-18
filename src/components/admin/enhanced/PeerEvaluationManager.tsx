@@ -132,10 +132,11 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
   const fetchArgumentationData = async () => {
     setLoading(true);
     try {
-      // 모든 논증 응답 가져오기
+      // 모든 논증 응답 가져오기 (id 포함)
       const { data: responses, error: responsesError } = await supabase
         .from('argumentation_responses')
         .select(`
+          id,
           student_id,
           response_text,
           students!inner(name)
@@ -170,10 +171,10 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
 
         if (reflectionsError) throw reflectionsError;
 
-        const evaluationsWithRating = evaluations?.map((eval, index) => ({
-          evaluator_id: eval.evaluator_id,
-          evaluator_name: eval.students.name || '이름없음',
-          evaluation_text: eval.evaluation_text || '',
+        const evaluationsWithRating = evaluations?.map((evaluation, index) => ({
+          evaluator_id: evaluation.evaluator_id,
+          evaluator_name: evaluation.students.name || '이름없음',
+          evaluation_text: evaluation.evaluation_text || '',
           usefulness_rating: reflections?.[index]?.usefulness_rating
         })) || [];
 
@@ -201,14 +202,14 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
 
   const handleDownloadCSV = () => {
     const csvData = argumentationData.flatMap(arg => 
-      arg.evaluations.map(eval => ({
+      arg.evaluations.map(evaluation => ({
         '학생ID': arg.student_id,
         '학생이름': arg.student_name,
         '논증내용': arg.argument_text,
-        '평가자ID': eval.evaluator_id,
-        '평가자이름': eval.evaluator_name,
-        '평가내용': eval.evaluation_text,
-        '도움정도평가': eval.usefulness_rating || '미평가'
+        '평가자ID': evaluation.evaluator_id,
+        '평가자이름': evaluation.evaluator_name,
+        '평가내용': evaluation.evaluation_text,
+        '도움정도평가': evaluation.usefulness_rating || '미평가'
       }))
     );
 
@@ -321,20 +322,20 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
                       <div>
                         <h4 className="font-medium mb-2">받은 평가:</h4>
                         <div className="space-y-2">
-                          {arg.evaluations.map((eval, evalIndex) => (
+                          {arg.evaluations.map((evaluation, evalIndex) => (
                             <div key={evalIndex} className="border rounded p-3">
                               <div className="flex items-center justify-between mb-2">
                                 <span className="font-medium text-sm">
-                                  평가자: {eval.evaluator_name} ({eval.evaluator_id})
+                                  평가자: {evaluation.evaluator_name} ({evaluation.evaluator_id})
                                 </span>
-                                {eval.usefulness_rating && (
+                                {evaluation.usefulness_rating && (
                                   <div className="flex items-center space-x-1">
                                     <Star className="h-4 w-4 text-yellow-500" />
-                                    <span className="text-sm">{eval.usefulness_rating}/5</span>
+                                    <span className="text-sm">{evaluation.usefulness_rating}/5</span>
                                   </div>
                                 )}
                               </div>
-                              <p className="text-sm">{eval.evaluation_text}</p>
+                              <p className="text-sm">{evaluation.evaluation_text}</p>
                             </div>
                           ))}
                         </div>
