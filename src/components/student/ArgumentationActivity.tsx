@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -253,7 +252,7 @@ const ArgumentationActivity = ({ activity, studentId, onBack }: ArgumentationAct
             <CardContent>
               <ScrollArea className="h-48">
                 <div className="space-y-2">
-                  {items.map((item) => (
+                  {items.slice(0, 5).map((item) => (
                     <div key={item.id} className="flex items-start space-x-2 p-2 rounded hover:bg-gray-50">
                       <Checkbox 
                         checked={item.is_completed}

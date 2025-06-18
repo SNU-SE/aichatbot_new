@@ -4,6 +4,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useChecklistProgress } from '@/hooks/useChecklistProgress';
 import ChatInterface from './ChatInterface';
+import DiscussionNotes from './DiscussionNotes';
 
 interface DiscussionActivityProps {
   activity: any;
@@ -26,9 +27,10 @@ const DiscussionActivity = ({ activity, studentId, onBack }: DiscussionActivityP
   }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      {/* Left: Simple Checklist */}
-      <div className="lg:col-span-1">
+    <div className="flex min-h-screen bg-gray-50 gap-4">
+      {/* Left Panel: Checklist and Notes */}
+      <div className="w-80 space-y-4 flex-shrink-0">
+        {/* Checklist */}
         <Card>
           <CardHeader>
             <CardTitle>토의 체크리스트</CardTitle>
@@ -52,10 +54,16 @@ const DiscussionActivity = ({ activity, studentId, onBack }: DiscussionActivityP
             </ScrollArea>
           </CardContent>
         </Card>
+
+        {/* Notes */}
+        <DiscussionNotes 
+          studentId={studentId}
+          activityId={activity.id}
+        />
       </div>
 
-      {/* Right: Chat Interface */}
-      <div className="lg:col-span-2">
+      {/* Right Panel: Chat Interface */}
+      <div className="flex-1 min-w-0">
         <ChatInterface 
           activity={activity}
           studentId={studentId}

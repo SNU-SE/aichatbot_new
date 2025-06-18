@@ -4,7 +4,9 @@ import { Button } from '@/components/ui/button';
 import { LogOut, GraduationCap } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import ActivitySelection from '@/components/student/ActivitySelection';
-import ChatInterface from '@/components/student/ChatInterface';
+import ExperimentActivity from '@/components/student/ExperimentActivity';
+import ArgumentationActivity from '@/components/student/ArgumentationActivity';
+import DiscussionActivity from '@/components/student/DiscussionActivity';
 import { Activity } from '@/types/activity';
 import { useToast } from '@/hooks/use-toast';
 
@@ -33,6 +35,27 @@ const StudentDashboard = () => {
 
   const handleActivitySelect = (activity: Activity) => {
     setSelectedActivity(activity);
+  };
+
+  const renderActivityInterface = () => {
+    if (!selectedActivity) return null;
+
+    const commonProps = {
+      activity: selectedActivity,
+      studentId: studentId,
+      onBack: () => setSelectedActivity(null)
+    };
+
+    switch (selectedActivity.type) {
+      case 'experiment':
+        return <ExperimentActivity {...commonProps} />;
+      case 'argumentation':
+        return <ArgumentationActivity {...commonProps} />;
+      case 'discussion':
+        return <DiscussionActivity {...commonProps} />;
+      default:
+        return <div>지원하지 않는 활동 유형입니다.</div>;
+    }
   };
 
   return (
@@ -73,11 +96,7 @@ const StudentDashboard = () => {
             onActivitySelect={handleActivitySelect}
           />
         ) : (
-          <ChatInterface
-            activity={selectedActivity}
-            studentId={studentId}
-            onBack={() => setSelectedActivity(null)}
-          />
+          renderActivityInterface()
         )}
       </div>
     </div>
