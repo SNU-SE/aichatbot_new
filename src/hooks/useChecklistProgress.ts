@@ -45,10 +45,16 @@ export const useChecklistProgress = ({ studentId, activityId }: UseChecklistProg
         setMotherTongue(studentData.mother_tongue || 'Korean');
       }
       
-      // Get checklist items for the activity
+      // Get checklist items for the activity with all description columns
       const { data: checklistData, error: checklistError } = await supabase
         .from('checklist_items')
-        .select('*')
+        .select(`
+          *,
+          description_ko,
+          description_en,
+          description_zh,
+          description_ja
+        `)
         .eq('activity_id', activityId)
         .order('step_number', { ascending: true });
 
@@ -67,6 +73,15 @@ export const useChecklistProgress = ({ studentId, activityId }: UseChecklistProg
         const progress = progressData?.find(p => p.checklist_item_id === item.id);
         const description = getMultilingualDescription(item, studentData?.mother_tongue || 'Korean');
         
+        console.log('Item processing:', {
+          originalDescription: item.description,
+          description_ko: item.description_ko,
+          description_en: item.description_en,
+          description_zh: item.description_zh,
+          motherTongue: studentData?.mother_tongue,
+          finalDescription: description
+        });
+        
         return {
           ...item,
           description,
@@ -77,6 +92,7 @@ export const useChecklistProgress = ({ studentId, activityId }: UseChecklistProg
 
       setItems(combinedItems);
     } catch (error: any) {
+      console.error('Checklist fetch error:', error);
       toast({
         title: "오류",
         description: "체크리스트를 불러오는데 실패했습니다.",
@@ -135,6 +151,7 @@ export const useChecklistProgress = ({ studentId, activityId }: UseChecklistProg
       });
 
     } catch (error: any) {
+      console.error('Toggle item error:', error);
       toast({
         title: "오류",
         description: "상태 변경에 실패했습니다.",

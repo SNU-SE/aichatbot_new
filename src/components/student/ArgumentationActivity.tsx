@@ -235,7 +235,7 @@ const ArgumentationActivity = ({ activity, studentId, onBack }: ArgumentationAct
   }
 
   return (
-    <div className="flex min-h-screen bg-gray-50 gap-4">
+    <div className="h-screen flex bg-gray-50 overflow-hidden">
       {/* Left Panel: Checklist and Controls */}
       <div className="w-80 bg-white shadow-lg flex flex-col flex-shrink-0">
         <div className="p-4 border-b">
@@ -244,8 +244,8 @@ const ArgumentationActivity = ({ activity, studentId, onBack }: ArgumentationAct
         </div>
         
         {/* Checklist */}
-        <div className="flex-1 p-4">
-          <Card>
+        <div className="flex-1 p-4 overflow-hidden">
+          <Card className="border-0 shadow-none">
             <CardHeader>
               <CardTitle>체크리스트</CardTitle>
             </CardHeader>
@@ -306,10 +306,10 @@ const ArgumentationActivity = ({ activity, studentId, onBack }: ArgumentationAct
       </div>
 
       {/* Right Panel: Task + Chat */}
-      <div className="flex-1 min-w-0 flex flex-col">
+      <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
         {/* Task Area (상단) */}
         {activeTask !== 'none' && (
-          <div className="bg-white border rounded-lg shadow-sm mb-4">
+          <div className="bg-white border-b shadow-sm">
             {activeTask === 'argument' && (
               <Card className="border-0 shadow-none">
                 <CardHeader>

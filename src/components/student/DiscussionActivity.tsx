@@ -27,11 +27,11 @@ const DiscussionActivity = ({ activity, studentId, onBack }: DiscussionActivityP
   }
 
   return (
-    <div className="flex min-h-screen bg-gray-50 gap-4">
+    <div className="h-screen flex bg-gray-50 overflow-hidden">
       {/* Left Panel: Checklist and Notes */}
-      <div className="w-80 space-y-4 flex-shrink-0">
+      <div className="w-80 bg-white shadow-lg flex flex-col flex-shrink-0">
         {/* Checklist */}
-        <Card>
+        <Card className="border-0 shadow-none">
           <CardHeader>
             <CardTitle>토의 체크리스트</CardTitle>
           </CardHeader>
@@ -56,10 +56,12 @@ const DiscussionActivity = ({ activity, studentId, onBack }: DiscussionActivityP
         </Card>
 
         {/* Notes */}
-        <DiscussionNotes 
-          studentId={studentId}
-          activityId={activity.id}
-        />
+        <div className="flex-1 min-h-0">
+          <DiscussionNotes 
+            studentId={studentId}
+            activityId={activity.id}
+          />
+        </div>
       </div>
 
       {/* Right Panel: Chat Interface */}

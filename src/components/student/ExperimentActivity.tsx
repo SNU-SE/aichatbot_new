@@ -105,98 +105,95 @@ const ExperimentActivity = ({ activity, studentId, onBack }: ExperimentActivityP
   }
 
   return (
-    <div className="flex min-h-screen bg-gray-50 gap-4">
+    <div className="h-screen flex bg-gray-50 overflow-hidden">
       {/* Left Panel: Module Progress and Checklist */}
-      <div className="w-80 space-y-4 flex-shrink-0">
+      <div className="w-80 bg-white shadow-lg flex flex-col flex-shrink-0">
         {/* Header with module progress and stars */}
-        <Card>
-          <CardHeader>
-            <div className="flex justify-between items-center">
-              <h2 className="text-lg font-bold">{activity.title}</h2>
-              <Button variant="outline" size="sm" onClick={onBack}>
-                목록으로
-              </Button>
-            </div>
-            <ModuleProgress 
-              currentModule={currentModule}
-              totalModules={modules.length}
-              completedModules={completedModules}
-            />
-          </CardHeader>
-        </Card>
+        <div className="p-4 border-b">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-lg font-bold">{activity.title}</h2>
+            <Button variant="outline" size="sm" onClick={onBack}>
+              목록으로
+            </Button>
+          </div>
+          <ModuleProgress 
+            currentModule={currentModule}
+            totalModules={modules.length}
+            completedModules={completedModules}
+          />
+        </div>
 
         {/* Checklist */}
-        <Card>
-          <CardHeader>
-            <CardTitle>실험 단계</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {/* Completed */}
-              <div className="space-y-2">
-                <h4 className="font-semibold text-green-600 flex items-center">
-                  <CheckCircle className="h-4 w-4 mr-2" />
-                  완료됨
-                </h4>
-                <ScrollArea className="h-24">
-                  <div className="space-y-1">
-                    {completed.slice(0, 3).map((item) => (
-                      <div key={item.id} className="flex items-center space-x-2 p-2 bg-green-50 rounded">
-                        <Checkbox 
-                          checked={true}
-                          onCheckedChange={() => toggleItem(item.id)}
-                        />
-                        <span className="text-sm text-green-700">{item.description}</span>
-                      </div>
-                    ))}
-                  </div>
-                </ScrollArea>
-              </div>
-
-              {/* Current */}
-              <div className="space-y-2">
-                <h4 className="font-semibold text-blue-600 flex items-center">
-                  <Clock className="h-4 w-4 mr-2" />
-                  진행중
-                </h4>
-                <ScrollArea className="h-24">
-                  <div className="space-y-1">
-                    {current.slice(0, 3).map((item) => (
-                      <div key={item.id} className="flex items-center space-x-2 p-2 bg-blue-50 rounded border-2 border-blue-200">
-                        <Checkbox 
-                          checked={false}
-                          onCheckedChange={() => toggleItem(item.id)}
-                        />
-                        <span className="text-sm text-blue-700 font-medium">{item.description}</span>
-                      </div>
-                    ))}
-                  </div>
-                </ScrollArea>
-              </div>
-
-              {/* Upcoming */}
-              <div className="space-y-2">
-                <h4 className="font-semibold text-gray-600 flex items-center">
-                  <Circle className="h-4 w-4 mr-2" />
-                  예정
-                </h4>
-                <ScrollArea className="h-24">
-                  <div className="space-y-1">
-                    {upcoming.slice(0, 3).map((item) => (
-                      <div key={item.id} className="flex items-center space-x-2 p-2 bg-gray-50 rounded">
-                        <Checkbox 
-                          checked={false}
-                          disabled={true}
-                        />
-                        <span className="text-sm text-gray-600">{item.description}</span>
-                      </div>
-                    ))}
-                  </div>
-                </ScrollArea>
-              </div>
+        <div className="flex-1 p-4 overflow-hidden">
+          <h3 className="text-md font-semibold mb-4">실험 단계</h3>
+          <div className="space-y-4 h-full overflow-y-auto">
+            {/* Completed */}
+            <div className="space-y-2">
+              <h4 className="font-semibold text-green-600 flex items-center">
+                <CheckCircle className="h-4 w-4 mr-2" />
+                완료됨
+              </h4>
+              <ScrollArea className="h-24">
+                <div className="space-y-1">
+                  {completed.slice(0, 3).map((item) => (
+                    <div key={item.id} className="flex items-start space-x-2 p-2 bg-green-50 rounded">
+                      <Checkbox 
+                        checked={true}
+                        onCheckedChange={() => toggleItem(item.id)}
+                        className="mt-1"
+                      />
+                      <span className="text-sm text-green-700">{item.description}</span>
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
             </div>
-          </CardContent>
-        </Card>
+
+            {/* Current */}
+            <div className="space-y-2">
+              <h4 className="font-semibold text-blue-600 flex items-center">
+                <Clock className="h-4 w-4 mr-2" />
+                진행중
+              </h4>
+              <ScrollArea className="h-24">
+                <div className="space-y-1">
+                  {current.slice(0, 3).map((item) => (
+                    <div key={item.id} className="flex items-start space-x-2 p-2 bg-blue-50 rounded border-2 border-blue-200">
+                      <Checkbox 
+                        checked={false}
+                        onCheckedChange={() => toggleItem(item.id)}
+                        className="mt-1"
+                      />
+                      <span className="text-sm text-blue-700 font-medium">{item.description}</span>
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
+            </div>
+
+            {/* Upcoming */}
+            <div className="space-y-2">
+              <h4 className="font-semibold text-gray-600 flex items-center">
+                <Circle className="h-4 w-4 mr-2" />
+                예정
+              </h4>
+              <ScrollArea className="h-24">
+                <div className="space-y-1">
+                  {upcoming.slice(0, 3).map((item) => (
+                    <div key={item.id} className="flex items-start space-x-2 p-2 bg-gray-50 rounded">
+                      <Checkbox 
+                        checked={false}
+                        disabled={true}
+                        className="mt-1"
+                      />
+                      <span className="text-sm text-gray-600">{item.description}</span>
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Right Panel: Chat Interface */}
