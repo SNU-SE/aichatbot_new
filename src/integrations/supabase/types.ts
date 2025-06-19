@@ -214,6 +214,42 @@ export type Database = {
           },
         ]
       }
+      checklist_completion_history: {
+        Row: {
+          activity_id: string
+          activity_title: string
+          checklist_item_id: string
+          completed_at: string
+          created_at: string
+          description: string
+          id: string
+          reset_at: string | null
+          student_id: string
+        }
+        Insert: {
+          activity_id: string
+          activity_title: string
+          checklist_item_id: string
+          completed_at: string
+          created_at?: string
+          description: string
+          id?: string
+          reset_at?: string | null
+          student_id: string
+        }
+        Update: {
+          activity_id?: string
+          activity_title?: string
+          checklist_item_id?: string
+          completed_at?: string
+          created_at?: string
+          description?: string
+          id?: string
+          reset_at?: string | null
+          student_id?: string
+        }
+        Relationships: []
+      }
       checklist_items: {
         Row: {
           activity_id: string

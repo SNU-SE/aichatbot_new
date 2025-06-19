@@ -18,12 +18,9 @@ const ChecklistReset = ({ selectedClass, selectedActivity }: ChecklistResetProps
   const handleReset = async () => {
     setResetting(true);
     try {
-      let query = supabase
-        .from('student_checklist_progress')
-        .delete();
-
-      // 특정 활동이 선택된 경우
+      // 완료된 체크리스트를 히스토리에 저장하고 초기화하는 로직
       if (selectedActivity && selectedActivity !== 'all') {
+        // 특정 활동 선택 시
         const { data: checklistItems } = await supabase
           .from('checklist_items')
           .select('id')
@@ -31,29 +28,127 @@ const ChecklistReset = ({ selectedClass, selectedActivity }: ChecklistResetProps
 
         if (checklistItems && checklistItems.length > 0) {
           const itemIds = checklistItems.map(item => item.id);
-          query = query.in('checklist_item_id', itemIds);
+          
+          // 완료된 기록들을 히스토리 테이블로 이동 (reset_at 필드 설정)
+          const { data: completedRecords } = await supabase
+            .from('student_checklist_progress')
+            .select(`
+              *,
+              checklist_items!inner(
+                description,
+                activity_id,
+                activities!inner(title)
+              )
+            `)
+            .in('checklist_item_id', itemIds)
+            .eq('is_completed', true);
+
+          if (completedRecords && completedRecords.length > 0) {
+            // 히스토리 테이블에 reset_at 필드 업데이트
+            const historyUpdates = completedRecords.map(record => ({
+              student_id: record.student_id,
+              checklist_item_id: record.checklist_item_id,
+              activity_id: (record.checklist_items as any).activity_id,
+              description: (record.checklist_items as any).description,
+              activity_title: (record.checklist_items as any).activities.title,
+              completed_at: record.completed_at,
+              reset_at: new Date().toISOString()
+            }));
+
+            await supabase
+              .from('checklist_completion_history')
+              .upsert(historyUpdates, {
+                onConflict: 'student_id,checklist_item_id,completed_at'
+              });
+          }
+
+          // 클래스 필터 적용
+          let query = supabase
+            .from('student_checklist_progress')
+            .delete()
+            .in('checklist_item_id', itemIds);
+
+          if (selectedClass && selectedClass !== 'all') {
+            const { data: students } = await supabase
+              .from('students')
+              .select('student_id')
+              .eq('class_name', selectedClass);
+
+            if (students && students.length > 0) {
+              const studentIds = students.map(student => student.student_id);
+              query = query.in('student_id', studentIds);
+            }
+          }
+
+          await query;
         }
-      }
-
-      // 특정 클래스가 선택된 경우
-      if (selectedClass && selectedClass !== 'all') {
-        const { data: students } = await supabase
-          .from('students')
-          .select('student_id')
-          .eq('class_name', selectedClass);
-
-        if (students && students.length > 0) {
-          const studentIds = students.map(student => student.student_id);
-          query = query.in('student_id', studentIds);
-        }
-      }
-
-      // 전체가 아닌 경우에만 필터 적용
-      if (selectedClass !== 'all' || selectedActivity !== 'all') {
-        await query;
       } else {
         // 전체 초기화
-        await supabase.from('student_checklist_progress').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+        let query = supabase
+          .from('student_checklist_progress')
+          .select(`
+            *,
+            checklist_items!inner(
+              description,
+              activity_id,
+              activities!inner(title)
+            )
+          `)
+          .eq('is_completed', true);
+
+        if (selectedClass && selectedClass !== 'all') {
+          const { data: students } = await supabase
+            .from('students')
+            .select('student_id')
+            .eq('class_name', selectedClass);
+
+          if (students && students.length > 0) {
+            const studentIds = students.map(student => student.student_id);
+            query = query.in('student_id', studentIds);
+          }
+        }
+
+        const { data: completedRecords } = await query;
+
+        if (completedRecords && completedRecords.length > 0) {
+          // 히스토리 테이블에 reset_at 필드 업데이트
+          const historyUpdates = completedRecords.map(record => ({
+            student_id: record.student_id,
+            checklist_item_id: record.checklist_item_id,
+            activity_id: (record.checklist_items as any).activity_id,
+            description: (record.checklist_items as any).description,
+            activity_title: (record.checklist_items as any).activities.title,
+            completed_at: record.completed_at,
+            reset_at: new Date().toISOString()
+          }));
+
+          await supabase
+            .from('checklist_completion_history')
+            .upsert(historyUpdates, {
+              onConflict: 'student_id,checklist_item_id,completed_at'
+            });
+        }
+
+        // 진행 상태 삭제
+        let deleteQuery = supabase
+          .from('student_checklist_progress')
+          .delete();
+
+        if (selectedClass !== 'all') {
+          const { data: students } = await supabase
+            .from('students')
+            .select('student_id')
+            .eq('class_name', selectedClass);
+
+          if (students && students.length > 0) {
+            const studentIds = students.map(student => student.student_id);
+            deleteQuery = deleteQuery.in('student_id', studentIds);
+          }
+        } else {
+          deleteQuery = deleteQuery.neq('id', '00000000-0000-0000-0000-000000000000');
+        }
+
+        await deleteQuery;
       }
 
       const targetText = selectedClass === 'all' && selectedActivity === 'all' 
@@ -62,7 +157,7 @@ const ChecklistReset = ({ selectedClass, selectedActivity }: ChecklistResetProps
 
       toast({
         title: "체크리스트 초기화 완료",
-        description: `${targetText}의 체크리스트가 초기화되었습니다.`
+        description: `${targetText}의 체크리스트가 초기화되었습니다. 완료 기록은 학습 기록에서 계속 확인할 수 있습니다.`
       });
     } catch (error) {
       console.error('체크리스트 초기화 오류:', error);
@@ -97,7 +192,7 @@ const ChecklistReset = ({ selectedClass, selectedActivity }: ChecklistResetProps
               : `${selectedClass === 'all' ? '전체 클래스' : selectedClass}의 ${selectedActivity === 'all' ? '모든 활동' : '선택된 활동'} 체크리스트를 초기화하시겠습니까?`
             }
             <br />
-            <strong>이 작업은 되돌릴 수 없으며, 학습 기록은 유지됩니다.</strong>
+            <strong>체크리스트 진행 상태는 초기화되지만, 완료 기록은 학습 기록에서 계속 확인할 수 있습니다.</strong>
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

@@ -127,7 +127,7 @@ export const useChecklistProgress = ({ studentId, activityId }: UseChecklistProg
       const newCompletedState = !item.is_completed;
       
       if (newCompletedState) {
-        // Mark as completed
+        // Mark as completed - 트리거가 자동으로 히스토리에 저장
         const { error } = await supabase
           .from('student_checklist_progress')
           .upsert({

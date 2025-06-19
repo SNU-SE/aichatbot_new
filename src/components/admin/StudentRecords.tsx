@@ -32,15 +32,15 @@ interface Activity {
   type: string;
 }
 
-interface ChecklistProgress {
+interface ChecklistHistory {
   id: string;
   student_id: string;
   checklist_item_id: string;
-  is_completed: boolean;
-  completed_at: string | null;
+  activity_id: string;
   description: string;
   activity_title: string;
-  activity_id: string;
+  completed_at: string;
+  reset_at: string | null;
 }
 
 interface UnifiedLogEntry {
@@ -52,13 +52,14 @@ interface UnifiedLogEntry {
   activity_id?: string | null;
   activity_title?: string;
   sender?: string;
+  is_reset?: boolean;
 }
 
 const StudentRecords = () => {
   const [chatLogs, setChatLogs] = useState<ChatLog[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
-  const [checklistProgress, setChecklistProgress] = useState<ChecklistProgress[]>([]);
+  const [checklistHistory, setChecklistHistory] = useState<ChecklistHistory[]>([]);
   const [unifiedLogs, setUnifiedLogs] = useState<UnifiedLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -75,7 +76,7 @@ const StudentRecords = () => {
 
   useEffect(() => {
     createUnifiedLogs();
-  }, [chatLogs, checklistProgress]);
+  }, [chatLogs, checklistHistory]);
 
   const fetchData = async () => {
     try {
@@ -101,8 +102,8 @@ const StudentRecords = () => {
 
       if (activitiesError) throw activitiesError;
 
-      // 체크리스트 진행도 가져오기
-      const { data: progressData, error: progressError } = await supabase
+      // 체크리스트 히스토리 가져오기 (기존 progress + 새로운 history 테이블)
+      const { data: currentProgress, error: progressError } = await supabase
         .from('student_checklist_progress')
         .select(`
           *,
@@ -111,25 +112,46 @@ const StudentRecords = () => {
             activity_id,
             activities!inner(title)
           )
-        `);
+        `)
+        .eq('is_completed', true);
 
       if (progressError) throw progressError;
 
-      const formattedProgress = progressData?.map(p => ({
+      // 히스토리 테이블에서 완료 기록 가져오기
+      const { data: historyData, error: historyError } = await supabase
+        .from('checklist_completion_history')
+        .select('*')
+        .order('completed_at', { ascending: false });
+
+      if (historyError) throw historyError;
+
+      // 현재 진행도와 히스토리를 통합
+      const currentProgressFormatted = currentProgress?.map(p => ({
         id: p.id,
         student_id: p.student_id,
         checklist_item_id: p.checklist_item_id,
-        is_completed: p.is_completed,
-        completed_at: p.completed_at,
+        activity_id: (p.checklist_items as any).activity_id,
         description: (p.checklist_items as any).description,
         activity_title: (p.checklist_items as any).activities.title,
-        activity_id: (p.checklist_items as any).activity_id
+        completed_at: p.completed_at!,
+        reset_at: null
       })) || [];
+
+      const allChecklistHistory = [...(historyData || []), ...currentProgressFormatted];
+
+      // 중복 제거 (같은 학생, 같은 체크리스트 항목, 같은 완료 시간)
+      const uniqueHistory = allChecklistHistory.filter((item, index, self) => 
+        index === self.findIndex(t => 
+          t.student_id === item.student_id && 
+          t.checklist_item_id === item.checklist_item_id && 
+          t.completed_at === item.completed_at
+        )
+      );
 
       setChatLogs(logsData || []);
       setStudents(studentsData || []);
       setActivities(activitiesData || []);
-      setChecklistProgress(formattedProgress);
+      setChecklistHistory(uniqueHistory);
     } catch (error) {
       toast({
         title: "오류",
@@ -158,20 +180,19 @@ const StudentRecords = () => {
       });
     });
 
-    // 체크리스트 진행 기록 추가 (완료된 것만)
-    checklistProgress
-      .filter(progress => progress.is_completed && progress.completed_at)
-      .forEach(progress => {
-        unified.push({
-          id: `checklist_${progress.id}`,
-          timestamp: progress.completed_at!,
-          student_id: progress.student_id,
-          type: 'checklist',
-          content: `${progress.description} 완료`,
-          activity_id: progress.activity_id,
-          activity_title: progress.activity_title
-        });
+    // 체크리스트 히스토리 추가
+    checklistHistory.forEach(history => {
+      unified.push({
+        id: `checklist_${history.id}`,
+        timestamp: history.completed_at,
+        student_id: history.student_id,
+        type: 'checklist',
+        content: `${history.description} 완료${history.reset_at ? ' (초기화됨)' : ''}`,
+        activity_id: history.activity_id,
+        activity_title: history.activity_title,
+        is_reset: !!history.reset_at
       });
+    });
 
     // 시간순으로 정렬 (최신순)
     unified.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
@@ -194,10 +215,11 @@ const StudentRecords = () => {
       student_class: getStudentClass(log.student_id),
       type: log.type === 'chat' ? (log.sender === 'student' ? '학생 메시지' : 'AI 응답') : '체크리스트 완료',
       activity: log.activity_title || '-',
-      content: log.content
+      content: log.content,
+      is_reset: log.is_reset ? '초기화됨' : ''
     }));
 
-    const csvContent = generateCSV(csvData, ['timestamp', 'student_id', 'student_name', 'student_class', 'type', 'activity', 'content']);
+    const csvContent = generateCSV(csvData, ['timestamp', 'student_id', 'student_name', 'student_class', 'type', 'activity', 'content', 'is_reset']);
     downloadCSV(csvContent, `unified_logs_${new Date().toISOString().split('T')[0]}.csv`);
     
     toast({
@@ -240,16 +262,14 @@ const StudentRecords = () => {
     return unifiedLogs.filter(log => log.student_id === studentId);
   };
 
-  // 학생별 통계
+  // 학생별 통계 수정 - 히스토리 기반으로 완료된 체크리스트 수 계산
   const getStudentStats = () => {
     let stats = students.map(student => {
       const studentLogs = chatLogs.filter(log => log.student_id === student.student_id);
       const totalMessages = studentLogs.length;
       const studentMessages = studentLogs.filter(log => log.sender === 'student').length;
       const botMessages = studentLogs.filter(log => log.sender === 'bot').length;
-      const completedChecklists = checklistProgress.filter(p => 
-        p.student_id === student.student_id && p.is_completed
-      ).length;
+      const completedChecklists = checklistHistory.filter(h => h.student_id === student.student_id).length;
       const lastActivity = studentLogs.length > 0 ? 
         new Date(studentLogs[0].timestamp).toLocaleDateString('ko-KR') : '-';
 
@@ -332,7 +352,10 @@ const StudentRecords = () => {
                           {log.sender === 'student' ? '학생' : 'AI'}
                         </Badge>
                       ) : (
-                        <Badge variant="outline" className="text-green-600 border-green-600">
+                        <Badge 
+                          variant="outline" 
+                          className={log.is_reset ? "text-orange-600 border-orange-600" : "text-green-600 border-green-600"}
+                        >
                           <CheckCircle className="h-3 w-3 mr-1" />
                           체크리스트
                         </Badge>
@@ -524,7 +547,10 @@ const StudentRecords = () => {
                         {log.sender === 'student' ? '학생' : 'AI'}
                       </Badge>
                     ) : (
-                      <Badge variant="outline" className="text-green-600 border-green-600">
+                      <Badge 
+                        variant="outline" 
+                        className={log.is_reset ? "text-orange-600 border-orange-600" : "text-green-600 border-green-600"}
+                      >
                         <CheckCircle className="h-3 w-3 mr-1" />
                         체크리스트
                       </Badge>
