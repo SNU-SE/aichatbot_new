@@ -17,6 +17,24 @@ const AuthPage = () => {
 
   const isAdminLogin = loginId === 'admin';
 
+  const verifyAdminPassword = async (password: string): Promise<boolean> => {
+    try {
+      const { data, error } = await supabase.functions.invoke('verify-admin', {
+        body: { password }
+      });
+
+      if (error) {
+        console.error('Error calling verify-admin function:', error);
+        return false;
+      }
+
+      return data?.success || false;
+    } catch (error) {
+      console.error('Error verifying admin password:', error);
+      return false;
+    }
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isLoading || !loginId.trim()) return;
@@ -24,27 +42,26 @@ const AuthPage = () => {
     setIsLoading(true);
     
     if (isAdminLogin) {
-      // 관리자 로그인 - admin / 38874
-      if (password === '38874') {
-        setTimeout(() => {
+      // 관리자 로그인 - 환경변수로 비밀번호 검증
+      const isValidPassword = await verifyAdminPassword(password);
+      
+      setTimeout(() => {
+        if (isValidPassword) {
           localStorage.setItem('userType', 'admin');
           toast({
             title: "관리자 로그인 성공",
             description: "관리자로 로그인되었습니다."
           });
           navigate('/admin');
-          setIsLoading(false);
-        }, 500);
-      } else {
-        setTimeout(() => {
+        } else {
           toast({
             title: "로그인 실패",
             description: "관리자 비밀번호가 올바르지 않습니다.",
             variant: "destructive"
           });
-          setIsLoading(false);
-        }, 500);
-      }
+        }
+        setIsLoading(false);
+      }, 500);
     } else {
       // 학생 로그인 - 등록된 학번 확인
       try {
