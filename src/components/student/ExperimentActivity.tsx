@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -121,14 +122,14 @@ const ExperimentActivity = ({ activity, studentId, onBack }: ExperimentActivityP
         {/* Checklist */}
         <div className="flex-1 p-4 overflow-hidden">
           <h3 className="text-md font-semibold mb-4">실험 단계</h3>
-          <div className="space-y-4" style={{ height: '128px', overflowY: 'auto' }}>
+          <div className="space-y-4" style={{ height: '384px', overflowY: 'auto' }}>
             {/* Completed */}
             <div className="space-y-2">
               <h4 className="font-semibold text-green-600 flex items-center">
                 <CheckCircle className="h-4 w-4 mr-2" />
                 완료됨
               </h4>
-              <div className="max-h-32 overflow-y-auto">
+              <div className="max-h-40 overflow-y-auto">
                 <div className="space-y-1">
                   {completed.slice(0, 3).map((item) => (
                     <div key={item.id} className="flex items-start space-x-2 p-2 bg-green-50 rounded-lg">
@@ -150,7 +151,7 @@ const ExperimentActivity = ({ activity, studentId, onBack }: ExperimentActivityP
                 <Clock className="h-4 w-4 mr-2" />
                 진행중
               </h4>
-              <div className="max-h-32 overflow-y-auto">
+              <div className="max-h-40 overflow-y-auto">
                 <div className="space-y-1">
                   {current.slice(0, 3).map((item) => (
                     <div key={item.id} className="flex items-start space-x-2 p-2 bg-blue-50 rounded-lg border-2 border-blue-200">
@@ -172,7 +173,7 @@ const ExperimentActivity = ({ activity, studentId, onBack }: ExperimentActivityP
                 <Circle className="h-4 w-4 mr-2" />
                 예정
               </h4>
-              <div className="max-h-32 overflow-y-auto">
+              <div className="max-h-40 overflow-y-auto">
                 <div className="space-y-1">
                   {upcoming.slice(0, 3).map((item) => (
                     <div key={item.id} className="flex items-start space-x-2 p-2 bg-gray-50 rounded-lg">
