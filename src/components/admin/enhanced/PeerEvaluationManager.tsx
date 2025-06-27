@@ -47,7 +47,7 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
     feedbackResponses: 0
   });
   const [argumentationData, setArgumentationData] = useState<ArgumentationData[]>([]);
-  const [evaluationsPerStudent, setEvaluationsPerStudent] = useState(2);
+  const [evaluationsPerStudent, setEvaluationsPerStudent] = useState(1);
   const [groupOffset, setGroupOffset] = useState("1");
   const [loading, setLoading] = useState(false);
   const [showResults, setShowResults] = useState(false);
@@ -92,7 +92,7 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
   };
 
   const handleAssignEvaluations = async () => {
-    const minStudents = 1;
+    const minStudents = evaluationsPerStudent + 1;
     if (stats.submittedArguments < minStudents) {
       toast({
         title: "알림",
@@ -131,7 +131,7 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
   };
 
   const handleAssignSpecificEvaluations = async () => {
-    const minStudents = 1;
+    const minStudents = evaluationsPerStudent + 1;
     if (stats.submittedArguments < minStudents) {
       toast({
         title: "알림",
@@ -273,7 +273,7 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
   };
 
   const decreaseEvaluations = () => {
-    if (evaluationsPerStudent > 2) {
+    if (evaluationsPerStudent > 1) {
       setEvaluationsPerStudent(evaluationsPerStudent - 1);
     }
   };
@@ -290,7 +290,7 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
     );
   }
 
-  const minStudents = 1;
+  const minStudents = evaluationsPerStudent + 1;
 
   return (
     <div className="space-y-4">
