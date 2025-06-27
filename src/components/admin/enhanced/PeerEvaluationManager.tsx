@@ -1,10 +1,10 @@
-
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Users, Shuffle, CheckCircle, Download, Eye, Star, Info, Minus, Plus } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -48,6 +48,7 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
   });
   const [argumentationData, setArgumentationData] = useState<ArgumentationData[]>([]);
   const [evaluationsPerStudent, setEvaluationsPerStudent] = useState(2);
+  const [groupOffset, setGroupOffset] = useState("1");
   const [loading, setLoading] = useState(false);
   const [showResults, setShowResults] = useState(false);
   const { toast } = useToast();
@@ -113,7 +114,7 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
 
       toast({
         title: "성공",
-        description: `${data}개의 동료평가가 배정되었습니다. 각 학생은 ${evaluationsPerStudent}개의 응답을 평가합니다.`
+        description: `${data}개의 동료평가가 랜덤 배정되었습니다. 각 학생은 ${evaluationsPerStudent}개의 응답을 평가합니다.`
       });
 
       await fetchStats();
@@ -122,6 +123,46 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
       toast({
         title: "오류",
         description: error.message || "동료평가 배정에 실패했습니다.",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAssignSpecificEvaluations = async () => {
+    const minStudents = evaluationsPerStudent + 1;
+    if (stats.submittedArguments < minStudents) {
+      toast({
+        title: "알림",
+        description: `동료평가를 진행하려면 최소 ${minStudents}명 이상의 학생이 논증을 제출해야 합니다.`,
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .rpc('assign_peer_evaluations_specific', { 
+          activity_id_param: selectedActivity,
+          evaluations_per_student: evaluationsPerStudent,
+          group_offset: parseInt(groupOffset)
+        });
+
+      if (error) throw error;
+
+      toast({
+        title: "성공",
+        description: `${data}개의 동료평가가 특정 배정되었습니다. 각 학생은 자신의 조 +${groupOffset}조의 ${evaluationsPerStudent}개 응답을 평가합니다.`
+      });
+
+      await fetchStats();
+    } catch (error) {
+      console.error('특정 동료평가 배정 오류:', error);
+      toast({
+        title: "오류",
+        description: error.message || "특정 동료평가 배정에 실패했습니다.",
         variant: "destructive"
       });
     } finally {
@@ -260,8 +301,8 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
             <Info className="h-4 w-4 text-blue-600 mt-0.5" />
             <div className="text-sm text-blue-800">
               <p className="font-medium mb-1">모둠 기반 동료평가</p>
-              <p>학생 정보에 모둠이 설정된 경우, 같은 모둠 학생들끼리는 서로 평가하지 않고 다른 모둠의 학생들만 평가합니다.</p>
-              <p>각 학생은 설정된 수만큼의 다른 모둠 응답을 평가합니다.</p>
+              <p><strong>랜덤 배정:</strong> 다른 모둠의 학생들을 랜덤하게 배정합니다.</p>
+              <p><strong>특정 배정:</strong> 자신의 조번호에 지정된 숫자를 더한 조의 학생들을 배정합니다. (순환 구조)</p>
             </div>
           </div>
         </CardContent>
@@ -294,7 +335,7 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
       </div>
 
       {/* 동료평가 관리 버튼 */}
-      <div className="flex items-center space-x-4">
+      <div className="space-y-4">
         {/* 평가할 학생 수 설정 */}
         <div className="flex items-center space-x-2 bg-gray-50 px-3 py-2 rounded-lg">
           <span className="text-sm font-medium">학생수:</span>
@@ -319,105 +360,135 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
           <span className="text-xs text-gray-500">(최소 {minStudents}명 필요)</span>
         </div>
 
-        <Button
-          onClick={handleAssignEvaluations}
-          disabled={loading || stats.submittedArguments < minStudents}
-          className="flex items-center space-x-2"
-        >
-          <Shuffle className="h-4 w-4" />
-          <span>모둠별 동료평가 배정</span>
-        </Button>
+        {/* 랜덤 배정 */}
+        <div className="flex items-center space-x-4">
+          <Button
+            onClick={handleAssignEvaluations}
+            disabled={loading || stats.submittedArguments < minStudents}
+            className="flex items-center space-x-2"
+          >
+            <Shuffle className="h-4 w-4" />
+            <span>모둠별 동료평가 배정 (랜덤)</span>
+          </Button>
+        </div>
 
-        <Button
-          onClick={handleCompletePeerEvaluation}
-          disabled={stats.completedEvaluations === 0}
-          variant="secondary"
-          className="flex items-center space-x-2"
-        >
-          <CheckCircle className="h-4 w-4" />
-          <span>동료평가 완료</span>
-        </Button>
+        {/* 특정 배정 */}
+        <div className="flex items-center space-x-4">
+          <Button
+            onClick={handleAssignSpecificEvaluations}
+            disabled={loading || stats.submittedArguments < minStudents}
+            variant="outline"
+            className="flex items-center space-x-2"
+          >
+            <Users className="h-4 w-4" />
+            <span>특정 배정</span>
+          </Button>
+          
+          <div className="flex items-center space-x-2">
+            <span className="text-sm font-medium">+(숫자 1-5):</span>
+            <ToggleGroup type="single" value={groupOffset} onValueChange={setGroupOffset}>
+              <ToggleGroupItem value="1" aria-label="Plus 1">+1</ToggleGroupItem>
+              <ToggleGroupItem value="2" aria-label="Plus 2">+2</ToggleGroupItem>
+              <ToggleGroupItem value="3" aria-label="Plus 3">+3</ToggleGroupItem>
+              <ToggleGroupItem value="4" aria-label="Plus 4">+4</ToggleGroupItem>
+              <ToggleGroupItem value="5" aria-label="Plus 5">+5</ToggleGroupItem>
+            </ToggleGroup>
+          </div>
+        </div>
 
-        <Dialog open={showResults} onOpenChange={setShowResults}>
-          <DialogTrigger asChild>
-            <Button
-              onClick={fetchArgumentationData}
-              disabled={loading || stats.completedEvaluations === 0}
-              variant="outline"
-              className="flex items-center space-x-2"
-            >
-              <Eye className="h-4 w-4" />
-              <span>평가 확인</span>
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle className="flex items-center justify-between">
-                <span>동료평가 결과 - {activityTitle}</span>
-                <Button
-                  onClick={handleDownloadCSV}
-                  size="sm"
-                  className="flex items-center space-x-2"
-                >
-                  <Download className="h-4 w-4" />
-                  <span>CSV 다운로드</span>
-                </Button>
-              </DialogTitle>
-            </DialogHeader>
-            
-            <div className="space-y-4">
-              {argumentationData.map((arg, index) => (
-                <Card key={index}>
-                  <CardHeader>
-                    <CardTitle className="text-lg flex items-center space-x-2">
-                      <span>{arg.student_name} ({arg.student_id})</span>
-                      {arg.group_name && (
-                        <Badge variant="outline">{arg.group_name}모둠</Badge>
-                      )}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                      <div>
-                        <h4 className="font-medium mb-2">논증 내용:</h4>
-                        <p className="text-sm bg-gray-50 p-3 rounded">{arg.argument_text}</p>
-                      </div>
-                      
-                      <div>
-                        <h4 className="font-medium mb-2">받은 평가:</h4>
-                        <div className="space-y-2">
-                          {arg.evaluations.map((evaluation, evalIndex) => (
-                            <div key={evalIndex} className="border rounded p-3">
-                              <div className="flex items-center justify-between mb-2">
-                                <div className="flex items-center space-x-2">
-                                  <span className="font-medium text-sm">
-                                    평가자: {evaluation.evaluator_name} ({evaluation.evaluator_id})
-                                  </span>
-                                  {evaluation.evaluator_group && (
-                                    <Badge variant="secondary" className="text-xs">
-                                      {evaluation.evaluator_group}모둠
-                                    </Badge>
+        {/* 기타 버튼들 */}
+        <div className="flex items-center space-x-4">
+          <Button
+            onClick={handleCompletePeerEvaluation}
+            disabled={stats.completedEvaluations === 0}
+            variant="secondary"
+            className="flex items-center space-x-2"
+          >
+            <CheckCircle className="h-4 w-4" />
+            <span>동료평가 완료</span>
+          </Button>
+
+          <Dialog open={showResults} onOpenChange={setShowResults}>
+            <DialogTrigger asChild>
+              <Button
+                onClick={fetchArgumentationData}
+                disabled={loading || stats.completedEvaluations === 0}
+                variant="outline"
+                className="flex items-center space-x-2"
+              >
+                <Eye className="h-4 w-4" />
+                <span>평가 확인</span>
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle className="flex items-center justify-between">
+                  <span>동료평가 결과 - {activityTitle}</span>
+                  <Button
+                    onClick={handleDownloadCSV}
+                    size="sm"
+                    className="flex items-center space-x-2"
+                  >
+                    <Download className="h-4 w-4" />
+                    <span>CSV 다운로드</span>
+                  </Button>
+                </DialogTitle>
+              </DialogHeader>
+              
+              <div className="space-y-4">
+                {argumentationData.map((arg, index) => (
+                  <Card key={index}>
+                    <CardHeader>
+                      <CardTitle className="text-lg flex items-center space-x-2">
+                        <span>{arg.student_name} ({arg.student_id})</span>
+                        {arg.group_name && (
+                          <Badge variant="outline">{arg.group_name}모둠</Badge>
+                        )}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-4">
+                        <div>
+                          <h4 className="font-medium mb-2">논증 내용:</h4>
+                          <p className="text-sm bg-gray-50 p-3 rounded">{arg.argument_text}</p>
+                        </div>
+                        
+                        <div>
+                          <h4 className="font-medium mb-2">받은 평가:</h4>
+                          <div className="space-y-2">
+                            {arg.evaluations.map((evaluation, evalIndex) => (
+                              <div key={evalIndex} className="border rounded p-3">
+                                <div className="flex items-center justify-between mb-2">
+                                  <div className="flex items-center space-x-2">
+                                    <span className="font-medium text-sm">
+                                      평가자: {evaluation.evaluator_name} ({evaluation.evaluator_id})
+                                    </span>
+                                    {evaluation.evaluator_group && (
+                                      <Badge variant="secondary" className="text-xs">
+                                        {evaluation.evaluator_group}모둠
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  {evaluation.usefulness_rating && (
+                                    <div className="flex items-center space-x-1">
+                                      <Star className="h-4 w-4 text-yellow-500" />
+                                      <span className="text-sm">{evaluation.usefulness_rating}/5</span>
+                                    </div>
                                   )}
                                 </div>
-                                {evaluation.usefulness_rating && (
-                                  <div className="flex items-center space-x-1">
-                                    <Star className="h-4 w-4 text-yellow-500" />
-                                    <span className="text-sm">{evaluation.usefulness_rating}/5</span>
-                                  </div>
-                                )}
+                                <p className="text-sm">{evaluation.evaluation_text}</p>
                               </div>
-                              <p className="text-sm">{evaluation.evaluation_text}</p>
-                            </div>
-                          ))}
+                            ))}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </DialogContent>
-        </Dialog>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       {stats.submittedArguments < minStudents && (
