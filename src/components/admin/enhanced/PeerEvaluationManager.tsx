@@ -144,7 +144,7 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
     setLoading(true);
     try {
       const { data, error } = await supabase
-        .rpc('assign_peer_evaluations_specific', { 
+        .rpc('assign_peer_evaluations_specific' as any, { 
           activity_id_param: selectedActivity,
           evaluations_per_student: evaluationsPerStudent,
           group_offset: parseInt(groupOffset)
