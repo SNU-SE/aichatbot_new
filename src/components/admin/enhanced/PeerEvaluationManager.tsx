@@ -92,7 +92,7 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
   };
 
   const handleAssignEvaluations = async () => {
-    const minStudents = evaluationsPerStudent + 1;
+    const minStudents = 1;
     if (stats.submittedArguments < minStudents) {
       toast({
         title: "알림",
@@ -131,7 +131,7 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
   };
 
   const handleAssignSpecificEvaluations = async () => {
-    const minStudents = evaluationsPerStudent + 1;
+    const minStudents = 1;
     if (stats.submittedArguments < minStudents) {
       toast({
         title: "알림",
@@ -290,7 +290,7 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
     );
   }
 
-  const minStudents = evaluationsPerStudent + 1;
+  const minStudents = 1;
 
   return (
     <div className="space-y-4">
@@ -343,7 +343,7 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
             variant="outline"
             size="sm"
             onClick={decreaseEvaluations}
-            disabled={evaluationsPerStudent <= 2}
+            disabled={evaluationsPerStudent <= 1}
             className="h-6 w-6 p-0"
           >
             <Minus className="h-3 w-3" />
@@ -384,16 +384,13 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
             <span>특정 배정</span>
           </Button>
           
-          <div className="flex items-center space-x-2">
-            <span className="text-sm font-medium">+(숫자 1-5):</span>
-            <ToggleGroup type="single" value={groupOffset} onValueChange={setGroupOffset}>
-              <ToggleGroupItem value="1" aria-label="Plus 1">+1</ToggleGroupItem>
-              <ToggleGroupItem value="2" aria-label="Plus 2">+2</ToggleGroupItem>
-              <ToggleGroupItem value="3" aria-label="Plus 3">+3</ToggleGroupItem>
-              <ToggleGroupItem value="4" aria-label="Plus 4">+4</ToggleGroupItem>
-              <ToggleGroupItem value="5" aria-label="Plus 5">+5</ToggleGroupItem>
-            </ToggleGroup>
-          </div>
+          <ToggleGroup type="single" value={groupOffset} onValueChange={setGroupOffset}>
+            <ToggleGroupItem value="1" aria-label="Plus 1">+1</ToggleGroupItem>
+            <ToggleGroupItem value="2" aria-label="Plus 2">+2</ToggleGroupItem>
+            <ToggleGroupItem value="3" aria-label="Plus 3">+3</ToggleGroupItem>
+            <ToggleGroupItem value="4" aria-label="Plus 4">+4</ToggleGroupItem>
+            <ToggleGroupItem value="5" aria-label="Plus 5">+5</ToggleGroupItem>
+          </ToggleGroup>
         </div>
 
         {/* 기타 버튼들 */}
