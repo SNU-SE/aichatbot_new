@@ -35,7 +35,8 @@ export const useChecklistProgress = ({ studentId, activityId }: UseChecklistProg
           studentId: studentId,
           activityId: activityId,
           motherTongue: targetLanguage,
-          isTranslationRequest: true
+          isTranslationRequest: true,
+          translationModel: 'gpt-4o-mini-2024-07-18'
         }
       });
 

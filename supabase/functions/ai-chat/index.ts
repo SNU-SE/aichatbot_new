@@ -30,9 +30,9 @@ serve(async (req) => {
   }
 
   try {
-    const { message, studentId, activityId, fileUrl, fileName, fileType, motherTongue, isTranslationRequest } = await req.json()
+    const { message, studentId, activityId, fileUrl, fileName, fileType, motherTongue, isTranslationRequest, translationModel } = await req.json()
     
-    console.log('Received request:', { studentId, activityId, messageLength: message?.length, motherTongue, isTranslationRequest })
+    console.log('Received request:', { studentId, activityId, messageLength: message?.length, motherTongue, isTranslationRequest, translationModel })
 
     // Initialize Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
@@ -93,6 +93,8 @@ serve(async (req) => {
 
     // Handle translation requests differently
     if (isTranslationRequest) {
+      // Use the specified translation model or default to gpt-4o-mini-2024-07-18
+      const modelToUse = translationModel || 'gpt-4o-mini-2024-07-18';
       let aiResponse: string
 
       if (selectedProvider === 'anthropic' && anthropicApiKey) {
@@ -130,7 +132,7 @@ serve(async (req) => {
           throw new Error('Anthropic AI 응답을 받을 수 없습니다.')
         }
       } else if (openaiApiKey) {
-        // Call OpenAI API for translation
+        // Call OpenAI API for translation with specified model
         const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
           method: 'POST',
           headers: {
@@ -138,7 +140,7 @@ serve(async (req) => {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            model: selectedModel,
+            model: modelToUse,
             messages: [
               {
                 role: 'user',
@@ -171,7 +173,7 @@ serve(async (req) => {
           success: true, 
           response: aiResponse,
           provider: selectedProvider,
-          model: selectedModel,
+          model: modelToUse,
           isTranslation: true
         }),
         { 
