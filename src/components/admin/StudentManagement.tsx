@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -6,10 +5,21 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Edit, Trash2, Search, Upload } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, Upload, AlertTriangle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import CSVUploader from './enhanced/CSVUploader';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 
 interface Student {
   id: string;
@@ -21,6 +31,16 @@ interface Student {
   created_at: string;
 }
 
+interface RelatedData {
+  chat_logs: number;
+  student_sessions: number;
+  argumentation_responses: number;
+  peer_evaluations: number;
+  student_checklist_progress: number;
+  question_frequency: number;
+  evaluation_reflections: number;
+}
+
 const StudentManagement = () => {
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
@@ -29,6 +49,10 @@ const StudentManagement = () => {
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedClass, setSelectedClass] = useState('all');
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [studentToDelete, setStudentToDelete] = useState<Student | null>(null);
+  const [relatedData, setRelatedData] = useState<RelatedData | null>(null);
+  const [checkingRelatedData, setCheckingRelatedData] = useState(false);
   const { toast } = useToast();
 
   const [formData, setFormData] = useState({
@@ -223,28 +247,139 @@ const StudentManagement = () => {
     setShowForm(true);
   };
 
-  const handleDelete = async (studentId: string) => {
-    if (!confirm('정말로 이 학생을 삭제하시겠습니까?')) return;
+  const handleDeleteClick = async (student: Student) => {
+    setStudentToDelete(student);
+    await checkRelatedData(student.student_id);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!studentToDelete) return;
 
     try {
+      const studentId = studentToDelete.student_id;
+      
+      // 관련 데이터가 있는 경우 모두 삭제
+      if (relatedData) {
+        const deletePromises = [];
+        
+        if (relatedData.chat_logs > 0) {
+          deletePromises.push(
+            supabase.from('chat_logs').delete().eq('student_id', studentId)
+          );
+        }
+        
+        if (relatedData.student_sessions > 0) {
+          deletePromises.push(
+            supabase.from('student_sessions').delete().eq('student_id', studentId)
+          );
+        }
+        
+        if (relatedData.argumentation_responses > 0) {
+          deletePromises.push(
+            supabase.from('argumentation_responses').delete().eq('student_id', studentId)
+          );
+        }
+        
+        if (relatedData.peer_evaluations > 0) {
+          deletePromises.push(
+            supabase.from('peer_evaluations').delete().eq('evaluator_id', studentId)
+          );
+        }
+        
+        if (relatedData.student_checklist_progress > 0) {
+          deletePromises.push(
+            supabase.from('student_checklist_progress').delete().eq('student_id', studentId)
+          );
+        }
+        
+        if (relatedData.question_frequency > 0) {
+          deletePromises.push(
+            supabase.from('question_frequency').delete().eq('student_id', studentId)
+          );
+        }
+        
+        if (relatedData.evaluation_reflections > 0) {
+          deletePromises.push(
+            supabase.from('evaluation_reflections').delete().eq('student_id', studentId)
+          );
+        }
+
+        // 모든 관련 데이터 삭제
+        await Promise.all(deletePromises);
+      }
+
+      // 학생 데이터 삭제
       const { error } = await supabase
         .from('students')
         .delete()
-        .eq('id', studentId);
+        .eq('id', studentToDelete.id);
 
       if (error) throw error;
       
       toast({
         title: "성공",
-        description: "학생이 삭제되었습니다."
+        description: "학생과 관련된 모든 데이터가 삭제되었습니다."
       });
+      
       fetchStudents();
+      setDeleteDialogOpen(false);
+      setStudentToDelete(null);
+      setRelatedData(null);
     } catch (error) {
+      console.error('삭제 중 오류:', error);
       toast({
         title: "오류",
         description: "학생 삭제에 실패했습니다.",
         variant: "destructive"
       });
+    }
+  };
+
+  const checkRelatedData = async (studentId: string) => {
+    setCheckingRelatedData(true);
+    try {
+      // 각 테이블에서 해당 학생과 관련된 데이터 개수 확인
+      const [
+        chatLogs,
+        sessions,
+        responses,
+        evaluations,
+        checklistProgress,
+        questionFreq,
+        reflections
+      ] = await Promise.all([
+        supabase.from('chat_logs').select('id', { count: 'exact' }).eq('student_id', studentId),
+        supabase.from('student_sessions').select('id', { count: 'exact' }).eq('student_id', studentId),
+        supabase.from('argumentation_responses').select('id', { count: 'exact' }).eq('student_id', studentId),
+        supabase.from('peer_evaluations').select('id', { count: 'exact' }).eq('evaluator_id', studentId),
+        supabase.from('student_checklist_progress').select('id', { count: 'exact' }).eq('student_id', studentId),
+        supabase.from('question_frequency').select('id', { count: 'exact' }).eq('student_id', studentId),
+        supabase.from('evaluation_reflections').select('id', { count: 'exact' }).eq('student_id', studentId)
+      ]);
+
+      const data: RelatedData = {
+        chat_logs: chatLogs.count || 0,
+        student_sessions: sessions.count || 0,
+        argumentation_responses: responses.count || 0,
+        peer_evaluations: evaluations.count || 0,
+        student_checklist_progress: checklistProgress.count || 0,
+        question_frequency: questionFreq.count || 0,
+        evaluation_reflections: reflections.count || 0
+      };
+
+      setRelatedData(data);
+      return data;
+    } catch (error) {
+      console.error('관련 데이터 확인 중 오류:', error);
+      toast({
+        title: "오류",
+        description: "관련 데이터를 확인하는데 실패했습니다.",
+        variant: "destructive"
+      });
+      return null;
+    } finally {
+      setCheckingRelatedData(false);
     }
   };
 
@@ -258,6 +393,10 @@ const StudentManagement = () => {
     });
     setEditingStudent(null);
     setShowForm(false);
+  };
+
+  const getTotalRelatedDataCount = (data: RelatedData) => {
+    return Object.values(data).reduce((sum, count) => sum + count, 0);
   };
 
   const filteredStudents = students.filter(student => {
@@ -462,7 +601,7 @@ const StudentManagement = () => {
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => handleDelete(student.id)}
+                        onClick={() => handleDeleteClick(student)}
                         className="text-red-600 hover:text-red-700"
                       >
                         <Trash2 className="h-3 w-3" />
@@ -482,6 +621,79 @@ const StudentManagement = () => {
           </Table>
         </CardContent>
       </Card>
+
+      {/* 삭제 확인 다이얼로그 */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent className="max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-orange-500" />
+              학생 삭제 확인
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-left space-y-3">
+              {studentToDelete && (
+                <>
+                  <p className="font-medium">
+                    학생 "{studentToDelete.name || studentToDelete.student_id}"를 삭제하시겠습니까?
+                  </p>
+                  
+                  {checkingRelatedData ? (
+                    <p className="text-sm text-gray-600">관련 데이터 확인 중...</p>
+                  ) : relatedData && getTotalRelatedDataCount(relatedData) > 0 ? (
+                    <div className="bg-orange-50 p-3 rounded-md">
+                      <p className="text-sm font-medium text-orange-800 mb-2">
+                        다음 관련 데이터도 함께 삭제됩니다:
+                      </p>
+                      <ul className="text-xs text-orange-700 space-y-1">
+                        {relatedData.chat_logs > 0 && (
+                          <li>• 채팅 기록: {relatedData.chat_logs}개</li>
+                        )}
+                        {relatedData.student_sessions > 0 && (
+                          <li>• 접속 기록: {relatedData.student_sessions}개</li>
+                        )}
+                        {relatedData.argumentation_responses > 0 && (
+                          <li>• 논증 응답: {relatedData.argumentation_responses}개</li>
+                        )}
+                        {relatedData.peer_evaluations > 0 && (
+                          <li>• 동료평가: {relatedData.peer_evaluations}개</li>
+                        )}
+                        {relatedData.student_checklist_progress > 0 && (
+                          <li>• 체크리스트 진행상황: {relatedData.student_checklist_progress}개</li>
+                        )}
+                        {relatedData.question_frequency > 0 && (
+                          <li>• 질문 빈도: {relatedData.question_frequency}개</li>
+                        )}
+                        {relatedData.evaluation_reflections > 0 && (
+                          <li>• 평가 성찰: {relatedData.evaluation_reflections}개</li>
+                        )}
+                      </ul>
+                      <p className="text-xs text-orange-800 mt-2 font-medium">
+                        총 {getTotalRelatedDataCount(relatedData)}개의 관련 데이터가 삭제됩니다.
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-600">관련된 데이터가 없습니다.</p>
+                  )}
+                  
+                  <p className="text-sm text-red-600 font-medium">
+                    이 작업은 되돌릴 수 없습니다.
+                  </p>
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>취소</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmDelete}
+              className="bg-red-600 hover:bg-red-700"
+              disabled={checkingRelatedData}
+            >
+              {checkingRelatedData ? "확인 중..." : "삭제"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
