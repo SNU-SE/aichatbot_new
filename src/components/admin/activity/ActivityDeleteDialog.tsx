@@ -58,7 +58,7 @@ const ActivityDeleteDialog = ({
       if (error) throw error;
 
       // Json 타입을 ActivityData로 안전하게 변환
-      const activityData = data as ActivityData;
+      const activityData = data as unknown as ActivityData;
       setRelatedData(activityData);
       setShowConfirmation(true);
     } catch (error: any) {
