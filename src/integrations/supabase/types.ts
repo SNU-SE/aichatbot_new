@@ -722,6 +722,14 @@ export type Database = {
         Args: { "": string } | { "": unknown }
         Returns: unknown
       }
+      delete_activity_with_related_data: {
+        Args: { activity_id_param: string }
+        Returns: Json
+      }
+      get_activity_related_data_count: {
+        Args: { activity_id_param: string }
+        Returns: Json
+      }
       get_current_user_role: {
         Args: Record<PropertyKey, never>
         Returns: Database["public"]["Enums"]["app_role"]

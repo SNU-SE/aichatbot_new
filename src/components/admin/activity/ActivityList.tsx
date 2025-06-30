@@ -6,19 +6,29 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Edit, Trash2, FileText } from 'lucide-react';
 import { Activity } from '@/types/activity';
 import { supabase } from '@/integrations/supabase/client';
+import ActivityDeleteDialog from './ActivityDeleteDialog';
 
 interface ActivityListProps {
   activities: Activity[];
   onEdit: (activity: Activity) => void;
-  onDelete: (activityId: string) => void;
+  onDeleteSuccess: () => void;
 }
 
 interface ActivityWithModuleCount extends Activity {
   actualModuleCount?: number;
 }
 
-const ActivityList = ({ activities, onEdit, onDelete }: ActivityListProps) => {
+const ActivityList = ({ activities, onEdit, onDeleteSuccess }: ActivityListProps) => {
   const [activitiesWithCounts, setActivitiesWithCounts] = useState<ActivityWithModuleCount[]>([]);
+  const [deleteDialog, setDeleteDialog] = useState<{
+    open: boolean;
+    activityId: string;
+    activityTitle: string;
+  }>({
+    open: false,
+    activityId: '',
+    activityTitle: ''
+  });
 
   useEffect(() => {
     const loadModuleCounts = async () => {
@@ -43,6 +53,23 @@ const ActivityList = ({ activities, onEdit, onDelete }: ActivityListProps) => {
     loadModuleCounts();
   }, [activities]);
 
+  const handleDeleteClick = (activity: Activity) => {
+    setDeleteDialog({
+      open: true,
+      activityId: activity.id,
+      activityTitle: activity.title
+    });
+  };
+
+  const handleDeleteSuccess = () => {
+    onDeleteSuccess();
+    setDeleteDialog({
+      open: false,
+      activityId: '',
+      activityTitle: ''
+    });
+  };
+
   const getTypeLabel = (type: string) => {
     switch (type) {
       case 'experiment': return '실험';
@@ -53,73 +80,83 @@ const ActivityList = ({ activities, onEdit, onDelete }: ActivityListProps) => {
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>활동 목록 ({activities.length}개)</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>제목</TableHead>
-              <TableHead>유형</TableHead>
-              <TableHead>모듈/질문</TableHead>
-              <TableHead>파일</TableHead>
-              <TableHead>생성일</TableHead>
-              <TableHead>작업</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {activitiesWithCounts.map((activity) => (
-              <TableRow key={activity.id}>
-                <TableCell className="font-medium">{activity.title}</TableCell>
-                <TableCell>{getTypeLabel(activity.type)}</TableCell>
-                <TableCell>
-                  {activity.type === 'experiment' ? 
-                    `${activity.actualModuleCount || 1}개 모듈` : 
-                    activity.final_question ? '최종질문 설정됨' : '-'
-                  }
-                </TableCell>
-                <TableCell>
-                  {activity.file_url ? (
-                    <FileText className="h-4 w-4 text-green-600" />
-                  ) : (
-                    <span className="text-gray-400">없음</span>
-                  )}
-                </TableCell>
-                <TableCell>{new Date(activity.created_at).toLocaleDateString('ko-KR')}</TableCell>
-                <TableCell>
-                  <div className="flex space-x-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => onEdit(activity)}
-                    >
-                      <Edit className="h-3 w-3" />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => onDelete(activity.id)}
-                      className="text-red-600 hover:text-red-700"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
-            {activities.length === 0 && (
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle>활동 목록 ({activities.length}개)</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
               <TableRow>
-                <TableCell colSpan={6} className="text-center py-8 text-gray-500">
-                  생성된 활동이 없습니다.
-                </TableCell>
+                <TableHead>제목</TableHead>
+                <TableHead>유형</TableHead>
+                <TableHead>모듈/질문</TableHead>
+                <TableHead>파일</TableHead>
+                <TableHead>생성일</TableHead>
+                <TableHead>작업</TableHead>
               </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </CardContent>
-    </Card>
+            </TableHeader>
+            <TableBody>
+              {activitiesWithCounts.map((activity) => (
+                <TableRow key={activity.id}>
+                  <TableCell className="font-medium">{activity.title}</TableCell>
+                  <TableCell>{getTypeLabel(activity.type)}</TableCell>
+                  <TableCell>
+                    {activity.type === 'experiment' ? 
+                      `${activity.actualModuleCount || 1}개 모듈` : 
+                      activity.final_question ? '최종질문 설정됨' : '-'
+                    }
+                  </TableCell>
+                  <TableCell>
+                    {activity.file_url ? (
+                      <FileText className="h-4 w-4 text-green-600" />
+                    ) : (
+                      <span className="text-gray-400">없음</span>
+                    )}
+                  </TableCell>
+                  <TableCell>{new Date(activity.created_at).toLocaleDateString('ko-KR')}</TableCell>
+                  <TableCell>
+                    <div className="flex space-x-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => onEdit(activity)}
+                      >
+                        <Edit className="h-3 w-3" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleDeleteClick(activity)}
+                        className="text-red-600 hover:text-red-700"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+              {activities.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center py-8 text-gray-500">
+                    생성된 활동이 없습니다.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      <ActivityDeleteDialog
+        open={deleteDialog.open}
+        onOpenChange={(open) => setDeleteDialog(prev => ({ ...prev, open }))}
+        activityId={deleteDialog.activityId}
+        activityTitle={deleteDialog.activityTitle}
+        onDeleteSuccess={handleDeleteSuccess}
+      />
+    </>
   );
 };
 

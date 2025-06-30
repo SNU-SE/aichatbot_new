@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -18,8 +17,7 @@ const ActivityManagement = () => {
     loading,
     fetchActivities,
     saveExperimentData,
-    saveChecklistData,
-    deleteActivity
+    saveChecklistData
   } = useActivities();
 
   const [showForm, setShowForm] = useState(false);
@@ -208,7 +206,7 @@ const ActivityManagement = () => {
       <ActivityList
         activities={filteredActivities}
         onEdit={handleEdit}
-        onDelete={deleteActivity}
+        onDeleteSuccess={fetchActivities}
       />
     </div>
   );

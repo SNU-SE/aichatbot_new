@@ -68,32 +68,8 @@ export const useActivities = () => {
     }
   };
 
-  const deleteActivity = async (activityId: string) => {
-    if (!confirm('정말로 이 활동을 삭제하시겠습니까?')) return false;
-
-    try {
-      const { error } = await supabase
-        .from('activities')
-        .delete()
-        .eq('id', activityId);
-
-      if (error) throw error;
-      
-      toast({
-        title: "성공",
-        description: "활동이 삭제되었습니다."
-      });
-      fetchActivities();
-      return true;
-    } catch (error) {
-      toast({
-        title: "오류",
-        description: "활동 삭제에 실패했습니다.",
-        variant: "destructive"
-      });
-      return false;
-    }
-  };
+  // 기존 deleteActivity 함수는 제거하고 fetchActivities만 반환
+  // 삭제는 ActivityDeleteDialog에서 직접 처리
 
   useEffect(() => {
     fetchActivities();
@@ -104,7 +80,6 @@ export const useActivities = () => {
     loading,
     fetchActivities,
     saveExperimentData,
-    saveChecklistData,
-    deleteActivity
+    saveChecklistData
   };
 };
