@@ -1,435 +1,158 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+
+import "https://deno.land/x/xhr@0.1.0/mod.ts";
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+};
 
-// 질문 해시 생성 함수
-function generateQuestionHash(question: string): string {
-  const normalized = question
-    .toLowerCase()
-    .replace(/[^\w\s가-힣]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-  
-  let hash = 0;
-  for (let i = 0; i < normalized.length; i++) {
-    const char = normalized.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash;
-  }
-  
-  return Math.abs(hash).toString(16);
+interface ChatRequest {
+  message: string;
+  studentId: string;
+  activityId: string;
+  fileUrl?: string;
+  fileName?: string;
+  fileType?: string;
+  motherTongue?: string;
+  isTranslationRequest?: boolean;
+  translationModel?: string;
 }
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+    return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { message, studentId, activityId, fileUrl, fileName, fileType, motherTongue, isTranslationRequest, translationModel } = await req.json()
-    
-    console.log('Received request:', { studentId, activityId, messageLength: message?.length, motherTongue, isTranslationRequest, translationModel })
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    );
 
-    // Initialize Supabase client
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    const supabase = createClient(supabaseUrl, supabaseKey)
+    const { message, studentId, activityId, fileUrl, fileName, fileType, motherTongue, isTranslationRequest, translationModel } = await req.json() as ChatRequest;
 
-    // Get OpenAI and Anthropic API keys from environment variables
-    const openaiApiKey = Deno.env.get('OPENAI_API_KEY')
-    const anthropicApiKey = Deno.env.get('ANTHROPIC_API_KEY')
+    console.log('AI Chat Request:', { 
+      message: message?.substring(0, 100) + '...', 
+      studentId, 
+      activityId, 
+      motherTongue,
+      isTranslationRequest
+    });
 
-    if (!openaiApiKey && !anthropicApiKey) {
-      throw new Error('API 키가 설정되지 않았습니다. 관리자에게 문의하세요.')
+    if (!message || !studentId) {
+      throw new Error('Message and studentId are required');
     }
 
-    // Get student info to determine class
-    const { data: student, error: studentError } = await supabase
+    let systemPrompt = '';
+    let selectedModel = 'gpt-4o';
+    let selectedProvider = 'openai';
+    let ragEnabled = false;
+
+    // Get student info for class name
+    const { data: studentData } = await supabase
       .from('students')
       .select('class_name')
       .eq('student_id', studentId)
-      .single()
+      .single();
 
-    if (studentError) {
-      console.error('Student lookup error:', studentError)
-      throw new Error('학생 정보를 찾을 수 없습니다.')
-    }
+    const className = studentData?.class_name;
 
-    // Get class-specific settings
-    const { data: classSettings, error: classError } = await supabase
-      .from('class_prompt_settings')
-      .select('*')
-      .eq('class_name', student.class_name)
-      .single()
-
-    // Get global admin settings as fallback
-    const { data: globalSettings, error: globalError } = await supabase
-      .from('admin_settings')
-      .select('*')
-      .single()
-
-    if (globalError) {
-      console.error('Global settings error:', globalError)
-      throw new Error('시스템 설정을 불러올 수 없습니다.')
-    }
-
-    // Determine which settings to use
-    const useClassSettings = classSettings && (classSettings.selected_provider || classSettings.selected_model)
-    const selectedProvider = useClassSettings ? 
-      (classSettings.selected_provider || globalSettings.selected_provider || 'openai') : 
-      (globalSettings.selected_provider || 'openai')
-    
-    const selectedModel = useClassSettings ? 
-      (classSettings.selected_model || globalSettings.selected_model || 'gpt-4o') : 
-      (globalSettings.selected_model || 'gpt-4o')
-
-    const ragEnabled = useClassSettings ? 
-      (classSettings.rag_enabled !== null ? classSettings.rag_enabled : globalSettings.rag_enabled) :
-      (globalSettings.rag_enabled || false)
-
-    // Handle translation requests differently
-    if (isTranslationRequest) {
-      // Use the specified translation model or default to gpt-4o-mini-2024-07-18
-      const modelToUse = translationModel || 'gpt-4o-mini-2024-07-18';
-      let aiResponse: string
-
-      if (selectedProvider === 'anthropic' && anthropicApiKey) {
-        // Call Anthropic API for translation
-        const anthropicResponse = await fetch('https://api.anthropic.com/v1/messages', {
-          method: 'POST',
-          headers: {
-            'x-api-key': anthropicApiKey,
-            'Content-Type': 'application/json',
-            'anthropic-version': '2023-06-01'
-          },
-          body: JSON.stringify({
-            model: selectedModel,
-            max_tokens: 1000,
-            messages: [
-              {
-                role: 'user',
-                content: message
-              }
-            ],
-            temperature: 0.1,
-          }),
-        })
-
-        if (!anthropicResponse.ok) {
-          const error = await anthropicResponse.text()
-          console.error('Anthropic API error:', error)
-          throw new Error(`Anthropic API 오류: ${anthropicResponse.status}`)
+    if (!isTranslationRequest) {
+      // Get AI settings (class-specific first, then global)
+      let settingsData = null;
+      
+      if (className) {
+        const { data: classSettings } = await supabase
+          .from('class_prompt_settings')
+          .select('*')
+          .eq('class_name', className)
+          .single();
+        
+        if (classSettings) {
+          settingsData = classSettings;
         }
-
-        const anthropicData = await anthropicResponse.json()
-        aiResponse = anthropicData.content[0]?.text
-
-        if (!aiResponse) {
-          throw new Error('Anthropic AI 응답을 받을 수 없습니다.')
-        }
-      } else if (openaiApiKey) {
-        // Call OpenAI API for translation with specified model
-        const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${openaiApiKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            model: modelToUse,
-            messages: [
-              {
-                role: 'user',
-                content: message
-              }
-            ],
-            max_tokens: 1000,
-            temperature: 0.1,
-          }),
-        })
-
-        if (!openaiResponse.ok) {
-          const error = await openaiResponse.text()
-          console.error('OpenAI API error:', error)
-          throw new Error(`OpenAI API 오류: ${openaiResponse.status}`)
-        }
-
-        const openaiData = await openaiResponse.json()
-        aiResponse = openaiData.choices[0]?.message?.content
-
-        if (!aiResponse) {
-          throw new Error('OpenAI AI 응답을 받을 수 없습니다.')
-        }
-      } else {
-        throw new Error('사용 가능한 AI API 키가 없습니다.')
+      }
+      
+      if (!settingsData) {
+        const { data: globalSettings } = await supabase
+          .from('admin_settings')
+          .select('*')
+          .single();
+        
+        settingsData = globalSettings;
       }
 
-      return new Response(
-        JSON.stringify({ 
-          success: true, 
-          response: aiResponse,
-          provider: selectedProvider,
-          model: modelToUse,
-          isTranslation: true
-        }),
-        { 
-          headers: { 
-            ...corsHeaders, 
-            'Content-Type': 'application/json' 
-          } 
-        }
-      )
-    }
-
-    // Track question frequency for RAG logic
-    const questionHash = generateQuestionHash(message)
-    
-    // Check if this question has been asked before
-    const { data: existingQuestion, error: questionError } = await supabase
-      .from('question_frequency')
-      .select('*')
-      .eq('student_id', studentId)
-      .eq('activity_id', activityId)
-      .eq('question_hash', questionHash)
-      .single()
-
-    let questionCount = 1
-    let useRAG = false
-    let useCombined = false
-
-    if (existingQuestion) {
-      questionCount = existingQuestion.count + 1
-      
-      // Update count
-      await supabase
-        .from('question_frequency')
-        .update({ 
-          count: questionCount, 
-          last_asked: new Date().toISOString(),
-          question_text: message
-        })
-        .eq('id', existingQuestion.id)
+      if (settingsData) {
+        systemPrompt = settingsData.system_prompt || '학생의 질문에 직접적으로 답을 하지 말고, 그 답이 나오기까지 필요한 최소한의 정보를 제공해. 단계별로 학생들이 생각하고 질문할 수 있도록 유도해줘.';
+        selectedModel = settingsData.selected_model || 'gpt-4o';
+        selectedProvider = settingsData.selected_provider || 'openai';
+        ragEnabled = settingsData.rag_enabled || false;
+      }
     } else {
-      // Insert new question
-      await supabase
-        .from('question_frequency')
-        .insert({
-          student_id: studentId,
-          activity_id: activityId,
-          question_hash: questionHash,
-          question_text: message,
-          count: 1
-        })
+      // For translation requests, use simple translation prompt
+      systemPrompt = 'You are a translation assistant. Translate the given text accurately.';
+      selectedModel = translationModel || 'gpt-4o-mini-2024-07-18';
     }
 
-    // Determine response strategy based on question count and RAG settings
-    if (ragEnabled && questionCount >= 2) {
-      useRAG = true
-      useCombined = questionCount >= 3
-    }
-
-    // Get activity context
-    const { data: activity } = await supabase
-      .from('activities')
-      .select('*')
-      .eq('id', activityId)
-      .single()
-
-    // Get recent chat history for context
-    const { data: chatHistory } = await supabase
-      .from('chat_logs')
-      .select('*')
-      .eq('student_id', studentId)
-      .eq('activity_id', activityId)
-      .order('timestamp', { ascending: true })
-      .limit(10)
-
-    // Determine multilingual response requirement
-    const isMultilingual = motherTongue && motherTongue !== 'Korean'
+    // Handle multilingual support
+    const isMultilingual = motherTongue && motherTongue !== 'Korean';
     
-    // Get active prompt template for the class
-    let systemPrompt = globalSettings.system_prompt || '학생의 질문에 직접적으로 답을 하지 말고, 그 답이 나오기까지 필요한 최소한의 정보를 제공해. 단계별로 학생들이 생각하고 질문할 수 있도록 유도해줘.'
-    
-    if (classSettings?.active_prompt_id) {
-      const { data: activeTemplate } = await supabase
-        .from('prompt_templates')
-        .select('prompt')
-        .eq('id', classSettings.active_prompt_id)
-        .single()
-      
-      if (activeTemplate) {
-        systemPrompt = activeTemplate.prompt
-      }
-    } else if (classSettings?.system_prompt) {
-      systemPrompt = classSettings.system_prompt
-    }
-
-    // Add multilingual instruction to system prompt
-    if (isMultilingual) {
+    if (isMultilingual && !isTranslationRequest) {
       const languageMap: { [key: string]: string } = {
         'Chinese': '중국어',
-        'English': '영어',
-        'Japanese': '일본어'
-      }
+        'English': '영어', 
+        'Japanese': '일본어',
+        'Russian': '러시아어'
+      };
       
-      const nativeLanguageName = languageMap[motherTongue] || motherTongue
+      const nativeLanguageName = languageMap[motherTongue] || motherTongue;
       
       systemPrompt += `\n\n중요: 이 학생의 모국어는 ${nativeLanguageName}입니다. 모든 답변은 다음 형식으로 제공해주세요:
 1. 먼저 ${nativeLanguageName}로 답변
 2. 그 다음 "/"를 구분자로 하여 한국어로 같은 내용을 답변
-형식 예시: "${nativeLanguageName} 답변 / 한국어 답변"
-학생이 어떤 언어로 질문하든 항상 이 형식을 유지해주세요.`
+
+예시 형식:
+[${nativeLanguageName} 답변] / [한국어 답변]`;
     }
 
-    // Prepare context for AI
-    let contextMessage = `활동: ${activity?.title || '알 수 없음'}\n`
-    if (activity?.content?.description) {
-      contextMessage += `설명: ${activity.content.description}\n`
-    }
-
-    // RAG context if enabled and applicable
-    let ragContext = ''
-    let ragSearchType = ''
-    if (useRAG) {
+    let enhancedMessage = message;
+    
+    // RAG search if enabled and not a translation request
+    if (ragEnabled && activityId && !isTranslationRequest) {
       try {
-        const ragResponse = await fetch(`${supabaseUrl}/functions/v1/rag-search`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${supabaseKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
+        const { data: ragData, error: ragError } = await supabase.functions.invoke('rag-search', {
+          body: { 
             query: message,
             activityId: activityId
-          })
-        })
-
-        const ragData = await ragResponse.json()
-        
-        if (ragData.success && ragData.relevantChunks.length > 0) {
-          ragSearchType = ragData.searchType || 'unknown'
-          ragContext = '\n관련 문서 내용:\n'
-          ragData.relevantChunks.forEach((chunk: any, index: number) => {
-            const score = chunk.similarity ? `(유사도: ${(chunk.similarity * 100).toFixed(1)}%)` : 
-                         chunk.score ? `(점수: ${chunk.score})` : ''
-            ragContext += `${index + 1}. ${chunk.text} ${score}\n`
-          })
-          
-          if (useCombined) {
-            ragContext += '\n위 문서 내용을 참고하되, 추가적인 생성형 정보도 함께 제공해주세요.\n'
-          } else {
-            ragContext += '\n위 문서 내용을 바탕으로 답변해주세요.\n'
           }
+        });
+        
+        if (!ragError && ragData?.results && ragData.results.length > 0) {
+          const contextInfo = ragData.results
+            .map((result: any) => result.chunk_text)
+            .join('\n\n');
           
-          // Add search type info for transparency
-          const searchTypeMsg = ragSearchType === 'vector_similarity' ? '벡터 유사도 검색' :
-                               ragSearchType === 'vector_similarity_low_threshold' ? '벡터 유사도 검색 (낮은 임계값)' :
-                               ragSearchType === 'keyword_fallback' ? '키워드 기반 대체 검색' : '알 수 없는 검색'
-          ragContext += `\n[검색 방식: ${searchTypeMsg}]\n`
+          enhancedMessage = `Context from activity materials:
+${contextInfo}
+
+Student question: ${message}`;
         }
       } catch (ragError) {
-        console.error('RAG search error:', ragError)
-        // RAG 실패 시 일반 응답으로 진행
+        console.error('RAG search error:', ragError);
       }
     }
+
+    // Call appropriate AI service
+    let aiResponse = '';
     
-    // Add file context if file was uploaded
-    if (fileUrl && fileName) {
-      if (fileType?.startsWith('image/')) {
-        contextMessage += `\n학생이 이미지 파일을 업로드했습니다: ${fileName}\n`
-        contextMessage += `이미지에 대해 질문하거나 설명을 요청할 수 있도록 도와주세요.\n`
-      } else {
-        contextMessage += `\n학생이 파일을 업로드했습니다: ${fileName} (${fileType})\n`
-        contextMessage += `파일과 관련된 질문이나 도움을 요청할 수 있도록 안내해주세요.\n`
-      }
-    }
-
-    contextMessage += `\n최근 대화 내용:\n`
-    chatHistory?.forEach(chat => {
-      contextMessage += `${chat.sender === 'student' ? '학생' : 'AI'}: ${chat.message}\n`
-    })
-
-    // Add RAG context
-    contextMessage += ragContext
-
-    // Add question frequency info for transparency
-    if (questionCount > 1) {
-      contextMessage += `\n참고: 이 질문은 ${questionCount}번째 질문입니다.`
-      if (useRAG && !useCombined) {
-        contextMessage += ' 문서 기반 답변을 제공합니다.'
-      } else if (useCombined) {
-        contextMessage += ' 문서 기반 답변과 추가 정보를 함께 제공합니다.'
-      }
-      contextMessage += '\n'
-    }
-
-    // Save student message to database first
-    const studentMessageData: any = {
-      student_id: studentId,
-      activity_id: activityId,
-      message: message,
-      sender: 'student',
-      timestamp: new Date().toISOString()
-    }
-
-    // Add file information if provided
-    if (fileUrl) {
-      studentMessageData.file_url = fileUrl
-      studentMessageData.file_name = fileName
-      studentMessageData.file_type = fileType
-    }
-
-    const { error: insertError } = await supabase
-      .from('chat_logs')
-      .insert(studentMessageData)
-
-    if (insertError) {
-      console.error('Error saving student message:', insertError)
-      throw new Error('메시지 저장에 실패했습니다.')
-    }
-
-    let aiResponse: string
-
-    if (selectedProvider === 'anthropic' && anthropicApiKey) {
-      // Call Anthropic API
-      const anthropicResponse = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'x-api-key': anthropicApiKey,
-          'Content-Type': 'application/json',
-          'anthropic-version': '2023-06-01'
-        },
-        body: JSON.stringify({
-          model: selectedModel,
-          max_tokens: 1000,
-          messages: [
-            {
-              role: 'user',
-              content: `${systemPrompt}\n\n${contextMessage}\n\n현재 학생 메시지: ${message}`
-            }
-          ],
-          temperature: 0.7,
-        }),
-      })
-
-      if (!anthropicResponse.ok) {
-        const error = await anthropicResponse.text()
-        console.error('Anthropic API error:', error)
-        throw new Error(`Anthropic API 오류: ${anthropicResponse.status}`)
+    if (selectedProvider === 'openai') {
+      const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
+      if (!openaiApiKey) {
+        throw new Error('OpenAI API key not configured');
       }
 
-      const anthropicData = await anthropicResponse.json()
-      aiResponse = anthropicData.content[0]?.text
-
-      if (!aiResponse) {
-        throw new Error('Anthropic AI 응답을 받을 수 없습니다.')
-      }
-    } else if (openaiApiKey) {
-      // Call OpenAI API
       const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -439,83 +162,129 @@ serve(async (req) => {
         body: JSON.stringify({
           model: selectedModel,
           messages: [
-            {
-              role: 'system',
-              content: systemPrompt
-            },
-            {
-              role: 'user',
-              content: `${contextMessage}\n\n현재 학생 메시지: ${message}`
-            }
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: enhancedMessage }
           ],
-          max_tokens: 1000,
           temperature: 0.7,
+          max_tokens: 1000,
         }),
-      })
+      });
 
       if (!openaiResponse.ok) {
-        const error = await openaiResponse.text()
-        console.error('OpenAI API error:', error)
-        throw new Error(`OpenAI API 오류: ${openaiResponse.status}`)
+        const errorData = await openaiResponse.json();
+        throw new Error(`OpenAI API error: ${errorData.error?.message || 'Unknown error'}`);
       }
 
-      const openaiData = await openaiResponse.json()
-      aiResponse = openaiData.choices[0]?.message?.content
-
-      if (!aiResponse) {
-        throw new Error('OpenAI AI 응답을 받을 수 없습니다.')
+      const openaiData = await openaiResponse.json();
+      aiResponse = openaiData.choices[0]?.message?.content || 'Sorry, I could not generate a response.';
+      
+    } else if (selectedProvider === 'anthropic') {
+      const anthropicApiKey = Deno.env.get('ANTHROPIC_API_KEY');
+      if (!anthropicApiKey) {
+        throw new Error('Anthropic API key not configured');
       }
-    } else {
-      throw new Error('사용 가능한 AI API 키가 없습니다.')
+
+      const anthropicResponse = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${anthropicApiKey}`,
+          'Content-Type': 'application/json',
+          'anthropic-version': '2023-06-01'
+        },
+        body: JSON.stringify({
+          model: selectedModel,
+          max_tokens: 1000,
+          messages: [
+            { 
+              role: 'user', 
+              content: `${systemPrompt}\n\nUser: ${enhancedMessage}` 
+            }
+          ],
+        }),
+      });
+
+      if (!anthropicResponse.ok) {
+        const errorData = await anthropicResponse.json();
+        throw new Error(`Anthropic API error: ${errorData.error?.message || 'Unknown error'}`);
+      }
+
+      const anthropicData = await anthropicResponse.json();
+      aiResponse = anthropicData.content[0]?.text || 'Sorry, I could not generate a response.';
     }
 
-    // Save AI response to database
-    const { error: aiInsertError } = await supabase
-      .from('chat_logs')
-      .insert({
+    // For translation requests, return only the response
+    if (isTranslationRequest) {
+      return new Response(JSON.stringify({ response: aiResponse }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Save chat log
+    await supabase.from('chat_logs').insert([
+      {
         student_id: studentId,
         activity_id: activityId,
-        message: aiResponse,
-        sender: 'bot',
-        timestamp: new Date().toISOString()
-      })
+        sender: 'student',
+        message: message,
+        file_url: fileUrl || null,
+        file_name: fileName || null,
+        file_type: fileType || null,
+        timestamp: new Date().toISOString(),
+      }
+    ]);
 
-    if (aiInsertError) {
-      console.error('Error saving AI response:', aiInsertError)
-      // Don't throw error here, still return the response
+    await supabase.from('chat_logs').insert([
+      {
+        student_id: studentId,
+        activity_id: activityId,
+        sender: 'bot',
+        message: aiResponse,
+        timestamp: new Date().toISOString(),
+      }
+    ]);
+
+    // Track question frequency
+    const questionHash = btoa(message).slice(0, 32);
+    
+    const { data: existingQuestion } = await supabase
+      .from('question_frequency')
+      .select('*')
+      .eq('question_hash', questionHash)
+      .eq('student_id', studentId)
+      .eq('activity_id', activityId)
+      .single();
+
+    if (existingQuestion) {
+      await supabase
+        .from('question_frequency')
+        .update({
+          count: existingQuestion.count + 1,
+          last_asked: new Date().toISOString()
+        })
+        .eq('id', existingQuestion.id);
+    } else {
+      await supabase
+        .from('question_frequency')
+        .insert({
+          student_id: studentId,
+          activity_id: activityId,
+          question_text: message,
+          question_hash: questionHash,
+          count: 1
+        });
     }
 
-    return new Response(
-      JSON.stringify({ 
-        success: true, 
-        response: aiResponse,
-        provider: selectedProvider,
-        model: selectedModel,
-        questionCount: questionCount,
-        ragUsed: useRAG,
-        combinedResponse: useCombined,
-        ragSearchType: ragSearchType,
-        isMultilingual: isMultilingual
-      }),
-      { 
-        headers: { 
-          ...corsHeaders, 
-          'Content-Type': 'application/json' 
-        } 
-      }
-    )
+    return new Response(JSON.stringify({ response: aiResponse }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
 
   } catch (error) {
-    console.error('Error in ai-chat function:', error)
-    return new Response(
-      JSON.stringify({ error: error.message }),
-      { 
-        status: 500,
-        headers: { 
-          ...corsHeaders, 
-          'Content-Type': 'application/json' 
-        } 
-      }
-    )
+    console.error('AI Chat Error:', error);
+    return new Response(JSON.stringify({ 
+      error: error.message || 'An error occurred while processing your request.' 
+    }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 500,
+    });
   }
-})
+});
