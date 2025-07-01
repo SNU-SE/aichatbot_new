@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -491,9 +492,6 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext, argument
           {argumentationContext.activeTask === 'peer-evaluation' && (
             <div className="space-y-4">
               <h3 className="text-lg font-semibold">동료 평가</h3>
-              
-              {/* Debug information */}
-              {console.log('Current peerResponse:', peerResponse)}
               
               {/* 여러 평가 대상 표시 */}
               {peerResponse?.assignments && peerResponse.assignments.length > 0 ? (
