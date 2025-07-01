@@ -8,6 +8,8 @@ import { useToast } from '@/hooks/use-toast';
 import PeerEvaluationStats from './PeerEvaluationStats';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import ResponseCancellationDialog from './ResponseCancellationDialog';
+import PeerEvaluationCancellationDialog from './PeerEvaluationCancellationDialog';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -581,17 +583,38 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
                     <div className="flex items-center space-x-4 text-sm">
                       <div className="flex items-center space-x-1">
                         {student.has_submitted_response ? (
-                          <CheckCircle className="h-4 w-4 text-green-500" />
+                          <div className="flex items-center space-x-1">
+                            <CheckCircle className="h-4 w-4 text-green-500" />
+                            <span>응답 제출</span>
+                            <ResponseCancellationDialog
+                              studentId={student.student_id}
+                              studentName={student.name}
+                              activityId={selectedActivity}
+                              activityTitle={activityTitle}
+                              hasSubmittedResponse={student.has_submitted_response}
+                              onRefresh={fetchEvaluationData}
+                            />
+                          </div>
                         ) : (
-                          <div className="h-4 w-4 rounded-full border-2 border-gray-300" />
+                          <div className="flex items-center space-x-1">
+                            <div className="h-4 w-4 rounded-full border-2 border-gray-300" />
+                            <span>응답 제출</span>
+                          </div>
                         )}
-                        <span>응답 제출</span>
                       </div>
                       
-                      <div className="text-center">
+                      <div className="flex items-center space-x-1">
                         <Badge variant={student.completed_evaluations === student.assigned_evaluations && student.assigned_evaluations > 0 ? "default" : "secondary"}>
                           평가: {student.completed_evaluations}/{student.assigned_evaluations}
                         </Badge>
+                        <PeerEvaluationCancellationDialog
+                          studentId={student.student_id}
+                          studentName={student.name}
+                          activityId={selectedActivity}
+                          activityTitle={activityTitle}
+                          completedEvaluations={student.completed_evaluations}
+                          onRefresh={fetchEvaluationData}
+                        />
                       </div>
                       
                       <div className="text-center">

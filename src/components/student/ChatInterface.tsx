@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -295,6 +294,186 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext, argument
     );
   }
 
+  const checkPeerEvaluationStatus = async () => {
+    try {
+      // Check for assigned peer evaluations - 여러 평가 대상 가져오기
+      const { data: assignments } = await supabase
+        .from('peer_evaluations')
+        .select(`
+          *,
+          argumentation_responses!target_response_id(
+            response_text,
+            students!argumentation_responses_student_id_fkey(name, student_id)
+          )
+        `)
+        .eq('evaluator_id', studentId)
+        .eq('activity_id', activity.id);
+
+      if (assignments && assignments.length > 0) {
+        // 여러 평가 대상을 모두 설정
+        setPeerResponse({ assignments });
+        
+        // 첫 번째 평가의 텍스트를 기본값으로 설정 (기존 호환성)
+        if (assignments[0].evaluation_text) {
+          setEvaluationText(assignments[0].evaluation_text);
+        }
+      }
+
+      // Check if peer evaluations are available for this student's response
+      const { data: studentResponse } = await supabase
+        .from('argumentation_responses')
+        .select('id')
+        .eq('student_id', studentId)
+        .eq('activity_id', activity.id)
+        .single();
+
+      if (studentResponse) {
+        const { data: evaluations } = await supabase
+          .from('peer_evaluations')
+          .select('*')
+          .eq('target_response_id', studentResponse.id)
+          .eq('is_completed', true);
+
+        if (evaluations && evaluations.length > 0) {
+          setPeerEvaluations(evaluations);
+        }
+      }
+    } catch (error) {
+      console.error('동료평가 상태 확인 실패:', error);
+    }
+  };
+
+  const submitArgument = async () => {
+    if (!argumentText.trim()) {
+      toast({
+        title: "오류",
+        description: "논증을 입력해주세요.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('argumentation_responses')
+        .upsert({
+          activity_id: activity.id,
+          student_id: studentId,
+          response_text: argumentText,
+          is_submitted: true
+        }, {
+          onConflict: 'activity_id,student_id'
+        });
+
+      if (error) throw error;
+
+      setIsSubmitted(true);
+      setActiveTask('none');
+      
+      toast({
+        title: "성공",
+        description: "논증이 제출되었습니다."
+      });
+    } catch (error: any) {
+      toast({
+        title: "오류",
+        description: "논증 제출에 실패했습니다.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const submitPeerEvaluation = async () => {
+    if (!evaluationText.trim()) {
+      toast({
+        title: "오류",
+        description: "평가 내용을 입력해주세요.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('peer_evaluations')
+        .update({
+          evaluation_text: evaluationText,
+          is_completed: true,
+          submitted_at: new Date().toISOString()
+        })
+        .eq('id', peerResponse.id);
+
+      if (error) throw error;
+
+      setActiveTask('none');
+      
+      toast({
+        title: "성공",
+        description: "동료평가가 제출되었습니다."
+      });
+    } catch (error: any) {
+      toast({
+        title: "오류",
+        description: "동료평가 제출에 실패했습니다.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const submitReflection = async () => {
+    if (!reflectionText.trim()) {
+      toast({
+        title: "오류",
+        description: "성찰 내용을 입력해주세요.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      // 평가 성찰 저장
+      const { error: reflectionError } = await supabase
+        .from('evaluation_reflections')
+        .upsert({
+          student_id: studentId,
+          activity_id: activity.id,
+          reflection_text: reflectionText,
+          usefulness_rating: usefulnessRating
+        }, {
+          onConflict: 'student_id,activity_id'
+        });
+
+      if (reflectionError) throw reflectionError;
+
+      // 최종 수정 주장이 있다면 저장
+      if (finalRevisedArgument.trim()) {
+        const { error: argumentError } = await supabase
+          .from('argumentation_responses')
+          .update({
+            final_revised_argument: finalRevisedArgument,
+            final_revision_submitted_at: new Date().toISOString()
+          })
+          .eq('activity_id', activity.id)
+          .eq('student_id', studentId);
+
+        if (argumentError) throw argumentError;
+      }
+
+      setActiveTask('none');
+      
+      toast({
+        title: "성공",
+        description: "평가 확인이 제출되었습니다."
+      });
+    } catch (error: any) {
+      toast({
+        title: "오류",
+        description: "평가 확인 제출에 실패했습니다.",
+        variant: "destructive"
+      });
+    }
+  };
+
   return (
     <div className="max-w-4xl mx-auto space-y-6 h-full flex flex-col">
       {/* 활동 정보 헤더 */}
@@ -357,23 +536,65 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext, argument
           {argumentationContext.activeTask === 'peer-evaluation' && (
             <div className="space-y-4">
               <h3 className="text-lg font-semibold">동료 평가</h3>
-              <div>
-                <h4 className="font-medium mb-2">평가할 응답:</h4>
-                <div className="bg-gray-50 p-3 rounded">
-                  <p className="text-gray-700">{argumentationContext.peerResponse?.argumentation_responses?.response_text}</p>
+              
+              {/* 여러 평가 대상 표시 */}
+              {peerResponse?.assignments?.map((assignment, index) => (
+                <div key={assignment.id} className="border rounded-lg p-4 mb-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="font-medium">
+                      평가 대상 {index + 1}: {assignment.argumentation_responses?.students?.name} 
+                      ({assignment.argumentation_responses?.students?.student_id})
+                    </h4>
+                    {assignment.is_completed && (
+                      <span className="text-green-600 text-sm">✓ 완료</span>
+                    )}
+                  </div>
+                  
+                  <div className="mb-3">
+                    <h5 className="font-medium mb-2">평가할 응답:</h5>
+                    <div className="bg-gray-50 p-3 rounded">
+                      <p className="text-gray-700">{assignment.argumentation_responses?.response_text}</p>
+                    </div>
+                  </div>
+                  
+                  <div className="mb-3">
+                    <h5 className="font-medium mb-2">평가 내용:</h5>
+                    <Textarea
+                      value={assignment.evaluation_text || ''}
+                      onChange={(e) => {
+                        // 해당 평가의 텍스트 업데이트
+                        setPeerResponse(prev => ({
+                          ...prev,
+                          assignments: prev.assignments.map(a => 
+                            a.id === assignment.id ? { ...a, evaluation_text: e.target.value } : a
+                          )
+                        }));
+                      }}
+                      placeholder="동료의 응답에 대한 평가를 작성해주세요..."
+                      className="min-h-24"
+                      disabled={assignment.is_completed}
+                    />
+                  </div>
+                  
+                  {!assignment.is_completed && (
+                    <Button 
+                      onClick={() => submitIndividualPeerEvaluation(assignment.id, assignment.evaluation_text)}
+                      disabled={!assignment.evaluation_text?.trim()}
+                      size="sm"
+                    >
+                      이 평가 제출
+                    </Button>
+                  )}
                 </div>
-              </div>
-              <div>
-                <h4 className="font-medium mb-2">평가 내용:</h4>
-                <Textarea
-                  value={argumentationContext.evaluationText}
-                  onChange={(e) => argumentationContext.setEvaluationText(e.target.value)}
-                  placeholder="동료의 응답에 대한 평가를 작성해주세요..."
-                  className="min-h-32"
-                />
-              </div>
+              ))}
+              
               <div className="flex space-x-2">
-                <Button onClick={argumentationContext.submitPeerEvaluation}>평가 제출</Button>
+                <Button 
+                  onClick={argumentationContext.submitPeerEvaluation}
+                  disabled={!allPeerEvaluationsCompleted()}
+                >
+                  {allPeerEvaluationsCompleted() ? '모든 평가 완료' : '전체 평가 제출'}
+                </Button>
                 <Button variant="outline" onClick={() => argumentationContext.setActiveTask('none')}>
                   취소
                 </Button>
@@ -565,6 +786,55 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext, argument
       </Card>
     </div>
   );
+
+  // 개별 평가 제출 함수
+  const submitIndividualPeerEvaluation = async (evaluationId: string, evaluationText: string) => {
+    if (!evaluationText?.trim()) {
+      toast({
+        title: "오류",
+        description: "평가 내용을 입력해주세요.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('peer_evaluations')
+        .update({
+          evaluation_text: evaluationText,
+          is_completed: true,
+          submitted_at: new Date().toISOString()
+        })
+        .eq('id', evaluationId);
+
+      if (error) throw error;
+
+      // 상태 업데이트
+      setPeerResponse(prev => ({
+        ...prev,
+        assignments: prev.assignments.map(a => 
+          a.id === evaluationId ? { ...a, is_completed: true } : a
+        )
+      }));
+
+      toast({
+        title: "성공",
+        description: "개별 평가가 제출되었습니다."
+      });
+    } catch (error: any) {
+      toast({
+        title: "오류",
+        description: "평가 제출에 실패했습니다.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  // 모든 평가 완료 여부 확인
+  const allPeerEvaluationsCompleted = () => {
+    return peerResponse?.assignments?.every(assignment => assignment.is_completed) || false;
+  };
 };
 
 export default ChatInterface;
