@@ -9,19 +9,22 @@ import { useToast } from '@/hooks/use-toast';
 import PeerEvaluationStats from './PeerEvaluationStats';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 
 interface PeerEvaluationManagerProps {
   selectedClass: string;
   selectedActivity: string;
   activityTitle: string;
-}
-
-interface EvaluationStats {
-  total_responses: number;
-  submitted_responses: number;
-  total_evaluations: number;
-  completed_evaluations: number;
-  completion_rate: number;
 }
 
 interface ClassEvaluationStats {
@@ -44,13 +47,13 @@ interface StudentStatus {
 }
 
 const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle }: PeerEvaluationManagerProps) => {
-  const [stats, setStats] = useState<EvaluationStats | null>(null);
   const [classByClassStats, setClassByClassStats] = useState<ClassEvaluationStats[]>([]);
   const [studentStatuses, setStudentStatuses] = useState<StudentStatus[]>([]);
   const [loading, setLoading] = useState(true);
   const [assigning, setAssigning] = useState(false);
   const [completing, setCompleting] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [deletingAll, setDeletingAll] = useState(false);
   const [showStats, setShowStats] = useState(false);
   const [evaluationsPerStudent, setEvaluationsPerStudent] = useState(2);
   const [groupOffset, setGroupOffset] = useState(1);
@@ -65,16 +68,6 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
     
     try {
       setLoading(true);
-      
-      // 전체 통계 가져오기
-      const { data: statsData, error: statsError } = await supabase
-        .rpc('get_peer_evaluation_stats', { activity_id_param: selectedActivity });
-
-      if (statsError) throw statsError;
-
-      if (statsData && statsData.length > 0) {
-        setStats(statsData[0]);
-      }
 
       // 클래스별 통계 가져오기
       const { data: classStatsData, error: classStatsError } = await supabase
@@ -135,7 +128,13 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
   };
 
   const handleRandomAssign = async () => {
-    if (!stats?.submitted_responses || stats.submitted_responses < 2) {
+    const filteredStats = selectedClass === 'all' 
+      ? classByClassStats 
+      : classByClassStats.filter(s => s.class_name === selectedClass);
+    
+    const totalSubmitted = filteredStats.reduce((sum, stat) => sum + stat.submitted_responses, 0);
+
+    if (totalSubmitted < 2) {
       toast({
         title: "알림",
         description: "동료평가를 진행하려면 최소 2명 이상의 학생이 논증을 제출해야 합니다.",
@@ -170,7 +169,13 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
   };
 
   const handleSpecificAssign = async () => {
-    if (!stats?.submitted_responses || stats.submitted_responses < (evaluationsPerStudent + 1)) {
+    const filteredStats = selectedClass === 'all' 
+      ? classByClassStats 
+      : classByClassStats.filter(s => s.class_name === selectedClass);
+    
+    const totalSubmitted = filteredStats.reduce((sum, stat) => sum + stat.submitted_responses, 0);
+
+    if (totalSubmitted < (evaluationsPerStudent + 1)) {
       toast({
         title: "알림",
         description: `특정 배정을 진행하려면 최소 ${evaluationsPerStudent + 1}명 이상의 학생이 논증을 제출해야 합니다.`,
@@ -209,7 +214,13 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
   };
 
   const handleDeleteEvaluations = async () => {
-    if (!stats?.total_evaluations || stats.total_evaluations === 0) {
+    const filteredStats = selectedClass === 'all' 
+      ? classByClassStats 
+      : classByClassStats.filter(s => s.class_name === selectedClass);
+    
+    const totalEvaluations = filteredStats.reduce((sum, stat) => sum + stat.total_evaluations, 0);
+
+    if (totalEvaluations === 0) {
       toast({
         title: "알림",
         description: "삭제할 동료평가가 없습니다.",
@@ -245,8 +256,47 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
     }
   };
 
+  const handleDeleteAllData = async () => {
+    setDeletingAll(true);
+    try {
+      // 먼저 동료평가 삭제
+      await supabase
+        .from('peer_evaluations')
+        .delete()
+        .eq('activity_id', selectedActivity);
+
+      // 그 다음 논증응답 삭제
+      await supabase
+        .from('argumentation_responses')
+        .delete()
+        .eq('activity_id', selectedActivity);
+
+      toast({
+        title: "성공",
+        description: "모든 제출 응답과 동료평가 데이터가 삭제되었습니다."
+      });
+
+      await fetchEvaluationData();
+    } catch (error) {
+      console.error('전체 데이터 삭제 오류:', error);
+      toast({
+        title: "오류",
+        description: "데이터 삭제에 실패했습니다.",
+        variant: "destructive"
+      });
+    } finally {
+      setDeletingAll(false);
+    }
+  };
+
   const handleCompleteEvaluations = async () => {
-    if (!stats?.completed_evaluations || stats.completed_evaluations === 0) {
+    const filteredStats = selectedClass === 'all' 
+      ? classByClassStats 
+      : classByClassStats.filter(s => s.class_name === selectedClass);
+    
+    const totalCompleted = filteredStats.reduce((sum, stat) => sum + stat.completed_evaluations, 0);
+
+    if (totalCompleted === 0) {
       toast({
         title: "알림",
         description: "완료된 동료평가가 없습니다.",
@@ -292,6 +342,8 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
   const filteredClassStats = selectedClass === 'all' 
     ? classByClassStats 
     : classByClassStats.filter(s => s.class_name === selectedClass);
+
+  const totalSubmitted = filteredClassStats.reduce((sum, stat) => sum + stat.submitted_responses, 0);
 
   return (
     <div className="space-y-6">
@@ -348,27 +400,6 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
             </div>
           )}
 
-          {stats && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-              <div className="text-center">
-                <div className="text-2xl font-bold text-blue-600">{stats.submitted_responses}</div>
-                <div className="text-sm text-gray-600">제출된 응답</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-green-600">{stats.total_evaluations}</div>
-                <div className="text-sm text-gray-600">배정된 평가</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-purple-600">{stats.completed_evaluations}</div>
-                <div className="text-sm text-gray-600">완료된 평가</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-orange-600">{stats.completion_rate}%</div>
-                <div className="text-sm text-gray-600">완료율</div>
-              </div>
-            </div>
-          )}
-
           {/* 배정 설정 */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-gray-50 rounded-lg mb-4">
             <div>
@@ -405,7 +436,7 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
             <div className="md:col-span-2 flex items-end space-x-2">
               <Button
                 onClick={handleRandomAssign}
-                disabled={assigning || !stats?.submitted_responses || stats.submitted_responses < 2}
+                disabled={assigning || totalSubmitted < 2}
                 className="flex items-center space-x-2"
               >
                 <Shuffle className="h-4 w-4" />
@@ -414,7 +445,7 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
               
               <Button
                 onClick={handleSpecificAssign}
-                disabled={assigning || !stats?.submitted_responses || stats.submitted_responses < (evaluationsPerStudent + 1)}
+                disabled={assigning || totalSubmitted < (evaluationsPerStudent + 1)}
                 variant="secondary"
                 className="flex items-center space-x-2"
               >
@@ -424,7 +455,7 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
               
               <Button
                 onClick={handleDeleteEvaluations}
-                disabled={deleting || !stats?.total_evaluations}
+                disabled={deleting}
                 variant="destructive"
                 className="flex items-center space-x-2"
               >
@@ -434,7 +465,7 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
               
               <Button
                 onClick={handleCompleteEvaluations}
-                disabled={completing || !stats?.completed_evaluations}
+                disabled={completing}
                 variant="outline"
                 className="flex items-center space-x-2"
               >
@@ -444,7 +475,38 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
             </div>
           </div>
 
-          {stats && stats.submitted_responses < (evaluationsPerStudent + 1) && (
+          {/* 전체 삭제 버튼 */}
+          <div className="flex justify-end mb-4">
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="destructive"
+                  disabled={deletingAll}
+                  className="flex items-center space-x-2"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  <span>전체 데이터 삭제</span>
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>전체 데이터 삭제</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    이 활동의 모든 제출 응답, 동료평가 배정, 완료된 평가 데이터를 삭제합니다. 
+                    이 작업은 되돌릴 수 없습니다. 정말 진행하시겠습니까?
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>취소</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleDeleteAllData}>
+                    {deletingAll ? '삭제 중...' : '삭제'}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
+
+          {totalSubmitted < (evaluationsPerStudent + 1) && (
             <div className="flex items-center space-x-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg mb-4">
               <AlertCircle className="h-4 w-4 text-yellow-600" />
               <span className="text-sm text-yellow-700">
