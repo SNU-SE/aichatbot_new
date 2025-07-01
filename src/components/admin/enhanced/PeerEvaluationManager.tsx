@@ -3,8 +3,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { Users, Shuffle, CheckCircle, Download, Eye, Star, Info, Minus, Plus, ClipboardList } from 'lucide-react';
+import { Users, Shuffle, CheckCircle, Download, Eye, Star, Info, Minus, Plus, ClipboardList, Trash2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { generateCSV, downloadCSV } from '@/utils/csvUtils';
@@ -177,6 +178,43 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
       title: "동료평가 완료", 
       description: "학생들이 이제 동료평가 결과를 확인할 수 있습니다."
     });
+  };
+
+  const handleResetAssignments = async () => {
+    setLoading(true);
+    try {
+      // 해당 활동의 모든 동료평가 관련 데이터 삭제
+      const { error: evaluationsError } = await supabase
+        .from('peer_evaluations')
+        .delete()
+        .eq('activity_id', selectedActivity);
+
+      if (evaluationsError) throw evaluationsError;
+
+      // 해당 활동의 모든 평가 성찰 데이터 삭제
+      const { error: reflectionsError } = await supabase
+        .from('evaluation_reflections')
+        .delete()
+        .eq('activity_id', selectedActivity);
+
+      if (reflectionsError) throw reflectionsError;
+
+      toast({
+        title: "성공",
+        description: "동료평가 배정이 초기화되었습니다. 모든 관련 데이터가 삭제되었습니다."
+      });
+
+      await fetchStats();
+    } catch (error) {
+      console.error('배정 초기화 오류:', error);
+      toast({
+        title: "오류",
+        description: "배정 초기화에 실패했습니다.",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const fetchArgumentationData = async () => {
@@ -412,6 +450,46 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
             <CheckCircle className="h-4 w-4" />
             <span>동료평가 완료</span>
           </Button>
+
+          {/* 배정 초기화 버튼 */}
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                disabled={loading || stats.assignedEvaluations === 0}
+                variant="destructive"
+                className="flex items-center space-x-2"
+              >
+                <Trash2 className="h-4 w-4" />
+                <span>배정 초기화</span>
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>배정 초기화 확인</AlertDialogTitle>
+                <AlertDialogDescription>
+                  모든 동료평가 배정과 관련 데이터가 삭제됩니다. 이 작업은 되돌릴 수 없습니다.
+                  <br />
+                  <br />
+                  삭제될 데이터:
+                  <br />
+                  • 동료평가 배정 ({stats.assignedEvaluations}건)
+                  <br />
+                  • 완료된 평가 ({stats.completedEvaluations}건)
+                  <br />
+                  • 피드백 응답 ({stats.feedbackResponses}건)
+                  <br />
+                  <br />
+                  정말로 초기화하시겠습니까?
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>취소</AlertDialogCancel>
+                <AlertDialogAction onClick={handleResetAssignments}>
+                  초기화
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
 
           {/* 배정 현황 보기 버튼 */}
           <Dialog open={showAssignments} onOpenChange={setShowAssignments}>
