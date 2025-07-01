@@ -71,6 +71,7 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext, argument
   const [peerEvaluations, setPeerEvaluations] = useState<any[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [initialArgument, setInitialArgument] = useState<string>('');
   const { toast } = useToast();
 
   // 모든 평가 완료 여부 확인 함수
@@ -246,12 +247,15 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext, argument
       // Check if peer evaluations are available for this student's response
       const { data: studentResponse } = await supabase
         .from('argumentation_responses')
-        .select('id')
+        .select('id, response_text')
         .eq('student_id', studentId)
         .eq('activity_id', activity.id)
         .single();
 
       if (studentResponse) {
+        // 초기 논증 설정
+        setInitialArgument(studentResponse.response_text);
+        
         const { data: evaluations } = await supabase
           .from('peer_evaluations')
           .select('*')
@@ -563,6 +567,17 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext, argument
           {argumentationContext.activeTask === 'evaluation-check' && (
             <div className="space-y-4">
               <h3 className="text-lg font-semibold">평가 확인</h3>
+              
+              {/* 초기 논증 표시 */}
+              {initialArgument && (
+                <div className="mb-4">
+                  <h4 className="font-medium mb-2">초기 논증:</h4>
+                  <div className="bg-blue-50 p-3 rounded border-l-4 border-blue-400">
+                    <p className="text-gray-800 whitespace-pre-wrap">{initialArgument}</p>
+                  </div>
+                </div>
+              )}
+              
               <div>
                 <h4 className="font-medium mb-2">받은 평가들:</h4>
                 <div className="space-y-2">
@@ -574,6 +589,7 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext, argument
                   ))}
                 </div>
               </div>
+              
               <div>
                 <h4 className="font-medium mb-2">이 평가들이 얼마나 유익했나요?</h4>
                 <Textarea

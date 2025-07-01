@@ -2,10 +2,12 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import ChecklistReset from './enhanced/ChecklistReset';
 import PeerEvaluationManager from './enhanced/PeerEvaluationManager';
+import StudentResponseDialog from './enhanced/StudentResponseDialog';
 
 interface Student {
   student_id: string;
@@ -19,17 +21,37 @@ interface Activity {
   type: string;
 }
 
+interface StudentStatus {
+  student_id: string;
+  name: string | null;
+  class_name: string;
+  has_response: boolean;
+  has_evaluations: boolean;
+  has_reflections: boolean;
+  response_count: number;
+  evaluation_count: number;
+  reflection_count: number;
+}
+
 const ClassManagement = () => {
   const [students, setStudents] = useState<Student[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [selectedClass, setSelectedClass] = useState('all');
   const [selectedActivity, setSelectedActivity] = useState('all');
+  const [studentStatuses, setStudentStatuses] = useState<StudentStatus[]>([]);
+  const [selectedStudent, setSelectedStudent] = useState<{ id: string; name: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
   useEffect(() => {
     fetchData();
   }, []);
+
+  useEffect(() => {
+    if (selectedActivity !== 'all') {
+      fetchStudentStatuses();
+    }
+  }, [selectedActivity, selectedClass]);
 
   const fetchData = async () => {
     try {
@@ -58,6 +80,64 @@ const ClassManagement = () => {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchStudentStatuses = async () => {
+    if (selectedActivity === 'all') return;
+
+    try {
+      let query = supabase.from('students').select('student_id, name, class_name');
+      
+      if (selectedClass !== 'all') {
+        query = query.eq('class_name', selectedClass);
+      }
+
+      const { data: studentsData } = await query;
+
+      if (!studentsData) return;
+
+      const statuses: StudentStatus[] = [];
+
+      for (const student of studentsData) {
+        // 논증 응답 확인
+        const { data: responses } = await supabase
+          .from('argumentation_responses')
+          .select('id')
+          .eq('student_id', student.student_id)
+          .eq('activity_id', selectedActivity);
+
+        // 동료평가 확인
+        const { data: evaluations } = await supabase
+          .from('peer_evaluations')
+          .select('id')
+          .eq('evaluator_id', student.student_id)
+          .eq('activity_id', selectedActivity)
+          .eq('is_completed', true);
+
+        // 평가 성찰 확인
+        const { data: reflections } = await supabase
+          .from('evaluation_reflections')
+          .select('id')
+          .eq('student_id', student.student_id)
+          .eq('activity_id', selectedActivity);
+
+        statuses.push({
+          student_id: student.student_id,
+          name: student.name,
+          class_name: student.class_name,
+          has_response: (responses?.length || 0) > 0,
+          has_evaluations: (evaluations?.length || 0) > 0,
+          has_reflections: (reflections?.length || 0) > 0,
+          response_count: responses?.length || 0,
+          evaluation_count: evaluations?.length || 0,
+          reflection_count: reflections?.length || 0
+        });
+      }
+
+      setStudentStatuses(statuses);
+    } catch (error) {
+      console.error('학생 상태 조회 실패:', error);
     }
   };
 
@@ -150,6 +230,60 @@ const ClassManagement = () => {
         </CardContent>
       </Card>
 
+      {/* 학생 상태 현황 */}
+      {selectedActivity !== 'all' && isArgumentationActivity && (
+        <Card>
+          <CardHeader>
+            <CardTitle>학생별 진행 현황 - {selectedActivityInfo?.title}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {studentStatuses.length > 0 ? (
+              <div className="space-y-2">
+                {studentStatuses.map((status) => (
+                  <div key={status.student_id} className="flex items-center justify-between p-3 border rounded-lg">
+                    <div className="flex items-center space-x-4">
+                      <span className="font-medium">{status.name || '이름 없음'}</span>
+                      <span className="text-sm text-gray-600">({status.student_id})</span>
+                      <span className="text-sm text-gray-500">{status.class_name}</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Button
+                        size="sm"
+                        variant={status.has_response ? "default" : "outline"}
+                        onClick={() => setSelectedStudent({ id: status.student_id, name: status.name || '이름 없음' })}
+                        disabled={!status.has_response}
+                      >
+                        응답제출 ({status.response_count})
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant={status.has_evaluations ? "default" : "outline"}
+                        onClick={() => setSelectedStudent({ id: status.student_id, name: status.name || '이름 없음' })}
+                        disabled={!status.has_evaluations}
+                      >
+                        평가 ({status.evaluation_count})
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant={status.has_reflections ? "default" : "outline"}
+                        onClick={() => setSelectedStudent({ id: status.student_id, name: status.name || '이름 없음' })}
+                        disabled={!status.has_reflections}
+                      >
+                        받은 평가 ({status.reflection_count})
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                선택된 조건에 해당하는 학생이 없습니다.
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* 동료평가 관리 (논증 활동일 때만 표시) */}
       {isArgumentationActivity && (
         <Card>
@@ -185,6 +319,17 @@ const ClassManagement = () => {
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* 학생 응답 다이얼로그 */}
+      {selectedStudent && (
+        <StudentResponseDialog
+          studentId={selectedStudent.id}
+          activityId={selectedActivity}
+          studentName={selectedStudent.name}
+          open={selectedStudent !== null}
+          onOpenChange={(open) => !open && setSelectedStudent(null)}
+        />
       )}
     </div>
   );
