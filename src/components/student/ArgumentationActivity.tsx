@@ -90,7 +90,7 @@ const ArgumentationActivity = ({ activity, studentId, onBack }: ArgumentationAct
       if (assignments && assignments.length > 0) {
         setPeerResponse({ assignments });
         
-        // 모든 평가가 완료되었는지 확인
+        // 모든 평가가 완료되었는지 확인 (모든 assignments가 is_completed = true)
         const allCompleted = assignments.every(assignment => assignment.is_completed);
         setIsPeerEvaluationCompleted(allCompleted);
         
@@ -164,40 +164,18 @@ const ArgumentationActivity = ({ activity, studentId, onBack }: ArgumentationAct
   };
 
   const submitPeerEvaluation = async () => {
-    if (!evaluationText.trim()) {
-      toast({
-        title: "오류",
-        description: "평가 내용을 입력해주세요.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    try {
-      const { error } = await supabase
-        .from('peer_evaluations')
-        .update({
-          evaluation_text: evaluationText,
-          is_completed: true,
-          submitted_at: new Date().toISOString()
-        })
-        .eq('id', peerResponse.id);
-
-      if (error) throw error;
-
-      setActiveTask('none');
-      
-      toast({
-        title: "성공",
-        description: "동료평가가 제출되었습니다."
-      });
-    } catch (error: any) {
-      toast({
-        title: "오류",
-        description: "동료평가 제출에 실패했습니다.",
-        variant: "destructive"
-      });
-    }
+    // 이 함수는 ChatInterface에서 전체 제출을 처리하므로 빈 함수로 유지
+    // 실제 제출은 ChatInterface의 submitAllPeerEvaluations에서 처리됩니다
+    setActiveTask('none');
+    setIsPeerEvaluationCompleted(true);
+    
+    // 상태 재확인
+    await checkPeerEvaluationStatus();
+    
+    toast({
+      title: "성공",
+      description: "동료평가가 제출되었습니다."
+    });
   };
 
   const submitReflection = async () => {

@@ -73,7 +73,7 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext, argument
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
-  // 모든 평가 완료 여부 확인 함수를 먼저 선언
+  // 모든 평가 완료 여부 확인 함수
   const allPeerEvaluationsCompleted = () => {
     return peerResponse?.assignments?.every(assignment => assignment.is_completed) || false;
   };
@@ -85,85 +85,59 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext, argument
     ) || false;
   };
 
-  // 개별 평가 제출 함수 (자동 제출 포함)
-  const submitIndividualPeerEvaluation = async (evaluationId: string, evaluationText: string, autoSubmit = false) => {
-    if (!evaluationText?.trim()) {
-      if (!autoSubmit) {
-        toast({
-          title: "오류",
-          description: "평가 내용을 입력해주세요.",
-          variant: "destructive"
-        });
-      }
+  // 전체 동료평가 제출 함수
+  const submitAllPeerEvaluations = async () => {
+    if (!peerResponse?.assignments || !allEvaluationsInputted()) {
+      toast({
+        title: "오류",
+        description: "모든 평가 내용을 입력해주세요.",
+        variant: "destructive"
+      });
       return;
     }
 
     try {
-      const { error } = await supabase
-        .from('peer_evaluations')
-        .update({
-          evaluation_text: evaluationText,
-          is_completed: true,
-          submitted_at: new Date().toISOString()
-        })
-        .eq('id', evaluationId);
+      // 모든 평가를 한 번에 제출
+      const updatePromises = peerResponse.assignments.map(assignment => 
+        supabase
+          .from('peer_evaluations')
+          .update({
+            evaluation_text: assignment.evaluation_text,
+            is_completed: true,
+            submitted_at: new Date().toISOString()
+          })
+          .eq('id', assignment.id)
+      );
 
-      if (error) throw error;
+      const results = await Promise.all(updatePromises);
+      
+      // 에러 확인
+      const errors = results.filter(result => result.error);
+      if (errors.length > 0) {
+        throw new Error('일부 평가 제출에 실패했습니다.');
+      }
 
       // 상태 업데이트
       setPeerResponse(prev => ({
         ...prev,
-        assignments: prev.assignments.map(a => 
-          a.id === evaluationId ? { ...a, is_completed: true } : a
-        )
+        assignments: prev.assignments.map(a => ({ ...a, is_completed: true }))
       }));
 
-      if (!autoSubmit) {
-        toast({
-          title: "성공",
-          description: "개별 평가가 제출되었습니다."
-        });
+      // argumentationContext의 submitPeerEvaluation 호출
+      if (argumentationContext) {
+        argumentationContext.submitPeerEvaluation();
       }
 
-      // 동료평가 상태 다시 확인
-      await checkPeerEvaluationStatus();
+      toast({
+        title: "성공",
+        description: "모든 동료평가가 제출되었습니다."
+      });
     } catch (error: any) {
-      if (!autoSubmit) {
-        toast({
-          title: "오류",
-          description: "평가 제출에 실패했습니다.",
-          variant: "destructive"
-        });
-      }
-    }
-  };
-
-  // 자동 제출 함수
-  const autoSubmitAllEvaluations = async () => {
-    if (!peerResponse?.assignments || allPeerEvaluationsCompleted()) return;
-
-    try {
-      // 모든 미완료 평가를 자동으로 제출
-      const unsubmittedEvaluations = peerResponse.assignments.filter(
-        assignment => !assignment.is_completed && assignment.evaluation_text?.trim()
-      );
-
-      for (const assignment of unsubmittedEvaluations) {
-        await submitIndividualPeerEvaluation(assignment.id, assignment.evaluation_text, true);
-      }
-
-      // 모든 평가가 완료되었는지 확인 후 전체 완료 처리
-      if (allEvaluationsInputted()) {
-        if (argumentationContext) {
-          argumentationContext.submitPeerEvaluation();
-        }
-        toast({
-          title: "완료",
-          description: "모든 동료 평가가 자동으로 제출되었습니다."
-        });
-      }
-    } catch (error) {
-      console.error('자동 제출 실패:', error);
+      toast({
+        title: "오류",
+        description: "동료평가 제출에 실패했습니다.",
+        variant: "destructive"
+      });
     }
   };
 
@@ -523,77 +497,70 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext, argument
               
               {/* 여러 평가 대상 표시 */}
               {peerResponse?.assignments && peerResponse.assignments.length > 0 ? (
-                peerResponse.assignments.map((assignment, index) => (
-                  <div key={assignment.id} className="border rounded-lg p-4 mb-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <h4 className="font-medium">
-                        평가 대상 {index + 1}: {assignment.argumentation_responses?.students?.name || '이름 없음'} 
-                        ({assignment.argumentation_responses?.students?.student_id || '학번 없음'})
-                      </h4>
-                      {assignment.is_completed && (
-                        <span className="text-green-600 text-sm">✓ 완료</span>
-                      )}
-                    </div>
-                    
-                    <div className="mb-3">
-                      <h5 className="font-medium mb-2">평가할 응답:</h5>
-                      <div className="bg-gray-50 p-3 rounded">
-                        <p className="text-gray-700">
-                          {assignment.argumentation_responses?.response_text || '응답 텍스트가 없습니다.'}
-                        </p>
+                <>
+                  {peerResponse.assignments.map((assignment, index) => (
+                    <div key={assignment.id} className="border rounded-lg p-4 mb-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="font-medium">
+                          평가 대상 {index + 1}: {assignment.argumentation_responses?.students?.name || '이름 없음'} 
+                          ({assignment.argumentation_responses?.students?.student_id || '학번 없음'})
+                        </h4>
+                        {assignment.is_completed && (
+                          <span className="text-green-600 text-sm">✓ 완료</span>
+                        )}
+                      </div>
+                      
+                      <div className="mb-3">
+                        <h5 className="font-medium mb-2">평가할 응답:</h5>
+                        <div className="bg-gray-50 p-3 rounded">
+                          <p className="text-gray-700">
+                            {assignment.argumentation_responses?.response_text || '응답 텍스트가 없습니다.'}
+                          </p>
+                        </div>
+                      </div>
+                      
+                      <div className="mb-3">
+                        <h5 className="font-medium mb-2">평가 내용:</h5>
+                        <Textarea
+                          value={assignment.evaluation_text || ''}
+                          onChange={(e) => {
+                            const newText = e.target.value;
+                            // 해당 평가의 텍스트 업데이트
+                            setPeerResponse(prev => ({
+                              ...prev,
+                              assignments: prev.assignments.map(a => 
+                                a.id === assignment.id ? { ...a, evaluation_text: newText } : a
+                              )
+                            }));
+                          }}
+                          placeholder="동료의 응답에 대한 평가를 작성해주세요..."
+                          className="min-h-24"
+                          disabled={assignment.is_completed}
+                        />
                       </div>
                     </div>
-                    
-                    <div className="mb-3">
-                      <h5 className="font-medium mb-2">평가 내용:</h5>
-                      <Textarea
-                        value={assignment.evaluation_text || ''}
-                        onChange={async (e) => {
-                          const newText = e.target.value;
-                          // 해당 평가의 텍스트 업데이트
-                          setPeerResponse(prev => ({
-                            ...prev,
-                            assignments: prev.assignments.map(a => 
-                              a.id === assignment.id ? { ...a, evaluation_text: newText } : a
-                            )
-                          }));
-                          
-                          // 텍스트가 입력되고 모든 평가가 입력되었다면 자동 제출
-                          setTimeout(() => {
-                            if (newText.trim() && allEvaluationsInputted()) {
-                              autoSubmitAllEvaluations();
-                            }
-                          }, 500); // 짧은 지연 후 자동 제출
-                        }}
-                        placeholder="동료의 응답에 대한 평가를 작성해주세요..."
-                        className="min-h-24"
-                        disabled={assignment.is_completed}
-                      />
-                    </div>
-                    
-                    {!assignment.is_completed && (
-                      <Button 
-                        onClick={() => submitIndividualPeerEvaluation(assignment.id, assignment.evaluation_text)}
-                        disabled={!assignment.evaluation_text?.trim()}
-                        size="sm"
-                      >
-                        이 평가 제출
-                      </Button>
-                    )}
+                  ))}
+                  
+                  {/* 전체 제출 버튼 */}
+                  <div className="flex space-x-2 pt-4 border-t">
+                    <Button 
+                      onClick={submitAllPeerEvaluations}
+                      disabled={!allEvaluationsInputted() || allPeerEvaluationsCompleted()}
+                      className="bg-blue-600 hover:bg-blue-700"
+                    >
+                      {allPeerEvaluationsCompleted() ? '평가 제출완료' : '평가 제출'}
+                    </Button>
+                    <Button variant="outline" onClick={() => argumentationContext.setActiveTask('none')}>
+                      취소
+                    </Button>
                   </div>
-                ))
+                </>
               ) : (
                 <div className="text-center py-8 text-gray-500">
                   <p>배정된 동료평가가 없습니다.</p>
                   <p className="text-sm mt-1">관리자가 동료평가를 배정할 때까지 기다려주세요.</p>
                 </div>
               )}
-              
-              <div className="flex space-x-2">
-                <Button variant="outline" onClick={() => argumentationContext.setActiveTask('none')}>
-                  취소
-                </Button>
-              </div>
             </div>
           )}
 
