@@ -20,6 +20,18 @@ interface ChatRequest {
   translationModel?: string;
 }
 
+// UTF-8 안전한 해시 생성 함수
+const generateSafeHash = (text: string): string => {
+  const normalized = text.toLowerCase().replace(/[^\w\s가-힣]/g, '').replace(/\s+/g, ' ').trim();
+  let hash = 0;
+  for (let i = 0; i < normalized.length; i++) {
+    const char = normalized.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // 32bit integer로 변환
+  }
+  return Math.abs(hash).toString(16);
+};
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -243,8 +255,8 @@ Student question: ${message}`;
       }
     ]);
 
-    // Track question frequency
-    const questionHash = btoa(message).slice(0, 32);
+    // Track question frequency with safe hash generation
+    const questionHash = generateSafeHash(message);
     
     const { data: existingQuestion } = await supabase
       .from('question_frequency')
