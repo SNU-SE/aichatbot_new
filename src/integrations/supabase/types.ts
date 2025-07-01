@@ -752,6 +752,17 @@ export type Database = {
           completion_rate: number
         }[]
       }
+      get_peer_evaluation_stats_by_class: {
+        Args: { activity_id_param: string }
+        Returns: {
+          class_name: string
+          total_responses: number
+          submitted_responses: number
+          total_evaluations: number
+          completed_evaluations: number
+          completion_rate: number
+        }[]
+      }
       get_student_evaluation_status: {
         Args: { student_id_param: string; activity_id_param: string }
         Returns: {

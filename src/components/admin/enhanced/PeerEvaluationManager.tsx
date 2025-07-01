@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Users, FileText, Shuffle, CheckCircle, AlertCircle, Settings } from 'lucide-react';
+import { Users, FileText, Shuffle, CheckCircle, AlertCircle, Settings, Trash2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import PeerEvaluationStats from './PeerEvaluationStats';
@@ -24,6 +24,15 @@ interface EvaluationStats {
   completion_rate: number;
 }
 
+interface ClassEvaluationStats {
+  class_name: string;
+  total_responses: number;
+  submitted_responses: number;
+  total_evaluations: number;
+  completed_evaluations: number;
+  completion_rate: number;
+}
+
 interface StudentStatus {
   student_id: string;
   name: string;
@@ -36,10 +45,12 @@ interface StudentStatus {
 
 const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle }: PeerEvaluationManagerProps) => {
   const [stats, setStats] = useState<EvaluationStats | null>(null);
+  const [classByClassStats, setClassByClassStats] = useState<ClassEvaluationStats[]>([]);
   const [studentStatuses, setStudentStatuses] = useState<StudentStatus[]>([]);
   const [loading, setLoading] = useState(true);
   const [assigning, setAssigning] = useState(false);
   const [completing, setCompleting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [showStats, setShowStats] = useState(false);
   const [evaluationsPerStudent, setEvaluationsPerStudent] = useState(2);
   const [groupOffset, setGroupOffset] = useState(1);
@@ -64,6 +75,14 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
       if (statsData && statsData.length > 0) {
         setStats(statsData[0]);
       }
+
+      // 클래스별 통계 가져오기
+      const { data: classStatsData, error: classStatsError } = await supabase
+        .rpc('get_peer_evaluation_stats_by_class', { activity_id_param: selectedActivity });
+
+      if (classStatsError) throw classStatsError;
+
+      setClassByClassStats(classStatsData || []);
 
       // 활동에 참여한 학생들 목록 가져오기 (클래스 필터링 적용)
       let studentsQuery = supabase
@@ -189,6 +208,43 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
     }
   };
 
+  const handleDeleteEvaluations = async () => {
+    if (!stats?.total_evaluations || stats.total_evaluations === 0) {
+      toast({
+        title: "알림",
+        description: "삭제할 동료평가가 없습니다.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setDeleting(true);
+    try {
+      const { error } = await supabase
+        .from('peer_evaluations')
+        .delete()
+        .eq('activity_id', selectedActivity);
+
+      if (error) throw error;
+
+      toast({
+        title: "성공",
+        description: "모든 동료평가가 삭제되었습니다."
+      });
+
+      await fetchEvaluationData();
+    } catch (error) {
+      console.error('동료평가 삭제 오류:', error);
+      toast({
+        title: "오류",
+        description: "동료평가 삭제에 실패했습니다.",
+        variant: "destructive"
+      });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const handleCompleteEvaluations = async () => {
     if (!stats?.completed_evaluations || stats.completed_evaluations === 0) {
       toast({
@@ -233,6 +289,10 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
     ? studentStatuses 
     : studentStatuses.filter(s => s.class_name === selectedClass);
 
+  const filteredClassStats = selectedClass === 'all' 
+    ? classByClassStats 
+    : classByClassStats.filter(s => s.class_name === selectedClass);
+
   return (
     <div className="space-y-6">
       <Card>
@@ -256,6 +316,38 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
           </CardTitle>
         </CardHeader>
         <CardContent>
+          {/* 클래스별 통계 */}
+          {filteredClassStats.length > 0 && (
+            <div className="mb-6">
+              <h3 className="text-lg font-semibold mb-3">클래스별 통계</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {filteredClassStats.map((classStats) => (
+                  <Card key={classStats.class_name} className="p-4">
+                    <h4 className="font-medium text-center mb-3">{classStats.class_name}</h4>
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div className="text-center">
+                        <div className="text-lg font-bold text-blue-600">{classStats.submitted_responses}</div>
+                        <div className="text-xs text-gray-600">제출 응답</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-lg font-bold text-green-600">{classStats.total_evaluations}</div>
+                        <div className="text-xs text-gray-600">배정 평가</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-lg font-bold text-purple-600">{classStats.completed_evaluations}</div>
+                        <div className="text-xs text-gray-600">완료 평가</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-lg font-bold text-orange-600">{classStats.completion_rate}%</div>
+                        <div className="text-xs text-gray-600">완료율</div>
+                      </div>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            </div>
+          )}
+
           {stats && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
               <div className="text-center">
@@ -328,6 +420,16 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
               >
                 <Settings className="h-4 w-4" />
                 <span>{assigning ? '배정 중...' : '특정 배정'}</span>
+              </Button>
+              
+              <Button
+                onClick={handleDeleteEvaluations}
+                disabled={deleting || !stats?.total_evaluations}
+                variant="destructive"
+                className="flex items-center space-x-2"
+              >
+                <Trash2 className="h-4 w-4" />
+                <span>{deleting ? '삭제 중...' : '배정 삭제'}</span>
               </Button>
               
               <Button
