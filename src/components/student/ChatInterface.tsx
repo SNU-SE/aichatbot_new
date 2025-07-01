@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -6,6 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Send, Bot, User, ArrowLeft, BookOpen, Paperclip, Microscope, Users } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { uploadFile } from '@/utils/fileUpload';
 import FilePreview from './FilePreview';
 import MessageFile from './MessageFile';

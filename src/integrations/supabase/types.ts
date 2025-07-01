@@ -110,6 +110,8 @@ export type Database = {
       argumentation_responses: {
         Row: {
           activity_id: string
+          final_revised_argument: string | null
+          final_revision_submitted_at: string | null
           id: string
           is_submitted: boolean | null
           response_text: string
@@ -118,6 +120,8 @@ export type Database = {
         }
         Insert: {
           activity_id: string
+          final_revised_argument?: string | null
+          final_revision_submitted_at?: string | null
           id?: string
           is_submitted?: boolean | null
           response_text: string
@@ -126,6 +130,8 @@ export type Database = {
         }
         Update: {
           activity_id?: string
+          final_revised_argument?: string | null
+          final_revision_submitted_at?: string | null
           id?: string
           is_submitted?: boolean | null
           response_text?: string
