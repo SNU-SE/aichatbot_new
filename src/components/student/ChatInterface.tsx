@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -248,7 +249,7 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext, argument
       // Check if peer evaluations are available for this student's response
       const { data: studentResponse } = await supabase
         .from('argumentation_responses')
-        .select('id, response_text')
+        .select('id, response_text, final_revised_argument')
         .eq('student_id', studentId)
         .eq('activity_id', activity.id)
         .single();
@@ -256,6 +257,11 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext, argument
       if (studentResponse) {
         // 초기 논증 설정
         setInitialArgument(studentResponse.response_text);
+        
+        // 최종 수정 논증이 있으면 설정
+        if (studentResponse.final_revised_argument && argumentationContext) {
+          argumentationContext.setFinalRevisedArgument(studentResponse.final_revised_argument);
+        }
         
         const { data: evaluations } = await supabase
           .from('peer_evaluations')
@@ -285,11 +291,6 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext, argument
               };
             });
             setIndividualEvaluationReflections(reflectionsMap);
-
-            // 첫 번째 반영의 최종 수정 논증을 argumentationContext에 설정
-            if (existingReflections[0] && argumentationContext) {
-              argumentationContext.setFinalRevisedArgument(existingReflections[0].final_revised_argument || '');
-            }
           }
         }
       }
@@ -683,7 +684,6 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext, argument
                               activity_id: activity.id,
                               reflection_text: reflectionData.reflection,
                               usefulness_rating: reflectionData.rating,
-                              final_revised_argument: argumentationContext.finalRevisedArgument,
                               submitted_at: new Date().toISOString()
                             });
                         }
