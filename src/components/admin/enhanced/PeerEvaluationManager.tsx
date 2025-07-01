@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -145,8 +144,12 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
 
     setAssigning(true);
     try {
+      // 명확하게 매개변수를 전달하여 함수 오버로딩 문제 해결
       const { data, error } = await supabase
-        .rpc('assign_peer_evaluations', { activity_id_param: selectedActivity });
+        .rpc('assign_peer_evaluations', { 
+          activity_id_param: selectedActivity,
+          evaluations_per_student: evaluationsPerStudent 
+        });
 
       if (error) throw error;
 
