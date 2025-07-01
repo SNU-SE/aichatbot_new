@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -143,12 +144,12 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
 
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .rpc('assign_peer_evaluations_specific' as any, { 
-          activity_id_param: selectedActivity,
-          evaluations_per_student: evaluationsPerStudent,
-          group_offset: parseInt(groupOffset)
-        });
+      // 직접 SQL 함수 호출 대신 타입 안전한 방식으로 호출
+      const { data, error } = await supabase.rpc('assign_peer_evaluations_specific', { 
+        activity_id_param: selectedActivity,
+        evaluations_per_student: evaluationsPerStudent,
+        group_offset: parseInt(groupOffset)
+      });
 
       if (error) throw error;
 
@@ -172,7 +173,7 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
 
   const handleCompletePeerEvaluation = async () => {
     toast({
-      title: "동료평가 완료",
+      title: "동료평가 완료", 
       description: "학생들이 이제 동료평가 결과를 확인할 수 있습니다."
     });
   };
