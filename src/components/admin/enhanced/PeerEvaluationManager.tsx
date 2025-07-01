@@ -3,12 +3,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { Users, Shuffle, CheckCircle, Download, Eye, Star, Info, Minus, Plus } from 'lucide-react';
+import { Users, Shuffle, CheckCircle, Download, Eye, Star, Info, Minus, Plus, ClipboardList } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { generateCSV, downloadCSV } from '@/utils/csvUtils';
+import PeerEvaluationAssignmentDashboard from './PeerEvaluationAssignmentDashboard';
 
 interface PeerEvaluationManagerProps {
   selectedClass: string;
@@ -53,6 +53,7 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
   const [groupOffset, setGroupOffset] = useState("1");
   const [loading, setLoading] = useState(false);
   const [showResults, setShowResults] = useState(false);
+  const [showAssignments, setShowAssignments] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -411,6 +412,29 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
             <CheckCircle className="h-4 w-4" />
             <span>동료평가 완료</span>
           </Button>
+
+          {/* 배정 현황 보기 버튼 */}
+          <Dialog open={showAssignments} onOpenChange={setShowAssignments}>
+            <DialogTrigger asChild>
+              <Button
+                disabled={loading || stats.assignedEvaluations === 0}
+                variant="outline"
+                className="flex items-center space-x-2"
+              >
+                <ClipboardList className="h-4 w-4" />
+                <span>배정 현황 보기</span>
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-7xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>동료평가 배정 현황</DialogTitle>
+              </DialogHeader>
+              <PeerEvaluationAssignmentDashboard 
+                activityId={selectedActivity} 
+                activityTitle={activityTitle} 
+              />
+            </DialogContent>
+          </Dialog>
 
           <Dialog open={showResults} onOpenChange={setShowResults}>
             <DialogTrigger asChild>
