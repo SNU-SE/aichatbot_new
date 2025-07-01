@@ -43,6 +43,11 @@ interface StudentStatus {
   assigned_evaluations: number;
   completed_evaluations: number;
   received_evaluations: number;
+  evaluation_targets?: {
+    target_student_name: string;
+    target_student_id: string;
+    is_completed: boolean;
+  }[];
 }
 
 const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle }: PeerEvaluationManagerProps) => {
@@ -93,7 +98,7 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
 
       if (studentsError) throw studentsError;
 
-      // 각 학생의 상태 가져오기
+      // 각 학생의 상태와 평가 대상 가져오기
       const studentStatusPromises = studentsData?.map(async (student) => {
         const { data: statusData, error: statusError } = await supabase
           .rpc('get_student_evaluation_status', {
@@ -103,10 +108,32 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
 
         if (statusError) throw statusError;
 
+        // 해당 학생이 평가해야 할 대상들 가져오기
+        const { data: targetsData, error: targetsError } = await supabase
+          .from('peer_evaluations')
+          .select(`
+            is_completed,
+            argumentation_responses!inner(
+              student_id,
+              students!inner(name)
+            )
+          `)
+          .eq('evaluator_id', student.student_id)
+          .eq('activity_id', selectedActivity);
+
+        if (targetsError) throw targetsError;
+
+        const evaluationTargets = targetsData?.map(target => ({
+          target_student_name: target.argumentation_responses?.students?.name || '이름없음',
+          target_student_id: target.argumentation_responses?.student_id || '',
+          is_completed: target.is_completed || false
+        })) || [];
+
         return {
           student_id: student.student_id,
           name: student.students.name || '이름없음',
           class_name: student.students.class_name,
+          evaluation_targets: evaluationTargets,
           ...statusData[0]
         };
       }) || [];
@@ -536,40 +563,66 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-3">
+            <div className="space-y-4">
               {filteredStudents.map((student) => (
-                <div key={student.student_id} className="flex items-center justify-between p-3 border rounded-lg">
-                  <div className="flex items-center space-x-3">
-                    <div>
-                      <div className="font-medium">{student.name}</div>
-                      <div className="text-sm text-gray-600">
-                        {student.student_id} | {student.class_name}
+                <div key={student.student_id} className="p-4 border rounded-lg">
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-center space-x-3">
+                      <div>
+                        <div className="font-medium">{student.name}</div>
+                        <div className="text-sm text-gray-600">
+                          {student.student_id} | {student.class_name}
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center space-x-4 text-sm">
+                      <div className="flex items-center space-x-1">
+                        {student.has_submitted_response ? (
+                          <CheckCircle className="h-4 w-4 text-green-500" />
+                        ) : (
+                          <div className="h-4 w-4 rounded-full border-2 border-gray-300" />
+                        )}
+                        <span>응답 제출</span>
+                      </div>
+                      
+                      <div className="text-center">
+                        <Badge variant={student.completed_evaluations === student.assigned_evaluations && student.assigned_evaluations > 0 ? "default" : "secondary"}>
+                          평가: {student.completed_evaluations}/{student.assigned_evaluations}
+                        </Badge>
+                      </div>
+                      
+                      <div className="text-center">
+                        <Badge variant="outline">
+                          받은 평가: {student.received_evaluations}
+                        </Badge>
                       </div>
                     </div>
                   </div>
-                  
-                  <div className="flex items-center space-x-4 text-sm">
-                    <div className="flex items-center space-x-1">
-                      {student.has_submitted_response ? (
-                        <CheckCircle className="h-4 w-4 text-green-500" />
-                      ) : (
-                        <div className="h-4 w-4 rounded-full border-2 border-gray-300" />
-                      )}
-                      <span>응답 제출</span>
+
+                  {/* 평가 대상 학생들 표시 */}
+                  {student.evaluation_targets && student.evaluation_targets.length > 0 && (
+                    <div className="mt-3 pt-3 border-t">
+                      <div className="text-sm font-medium text-gray-700 mb-2">평가 대상:</div>
+                      <div className="flex flex-wrap gap-2">
+                        {student.evaluation_targets.map((target, index) => (
+                          <div key={index} className="flex items-center space-x-1">
+                            <Badge 
+                              variant={target.is_completed ? "default" : "secondary"}
+                              className="text-xs"
+                            >
+                              {target.is_completed ? (
+                                <CheckCircle className="h-3 w-3 mr-1" />
+                              ) : (
+                                <div className="h-3 w-3 rounded-full border border-current mr-1" />
+                              )}
+                              {target.target_student_name}
+                            </Badge>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                    
-                    <div className="text-center">
-                      <Badge variant={student.completed_evaluations === student.assigned_evaluations && student.assigned_evaluations > 0 ? "default" : "secondary"}>
-                        평가: {student.completed_evaluations}/{student.assigned_evaluations}
-                      </Badge>
-                    </div>
-                    
-                    <div className="text-center">
-                      <Badge variant="outline">
-                        받은 평가: {student.received_evaluations}
-                      </Badge>
-                    </div>
-                  </div>
+                  )}
                 </div>
               ))}
               
