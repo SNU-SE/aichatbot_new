@@ -46,6 +46,7 @@ interface StudentStatus {
   evaluation_targets?: {
     target_student_name: string;
     target_student_id: string;
+    target_group_name: string;
     is_completed: boolean;
   }[];
 }
@@ -108,14 +109,14 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
 
         if (statusError) throw statusError;
 
-        // 해당 학생이 평가해야 할 대상들 가져오기
+        // 해당 학생이 평가해야 할 대상들 가져오기 (상세 정보 포함)
         const { data: targetsData, error: targetsError } = await supabase
           .from('peer_evaluations')
           .select(`
             is_completed,
             argumentation_responses!inner(
               student_id,
-              students!inner(name)
+              students!inner(name, student_id, group_name)
             )
           `)
           .eq('evaluator_id', student.student_id)
@@ -125,7 +126,8 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
 
         const evaluationTargets = targetsData?.map(target => ({
           target_student_name: target.argumentation_responses?.students?.name || '이름없음',
-          target_student_id: target.argumentation_responses?.student_id || '',
+          target_student_id: target.argumentation_responses?.students?.student_id || '',
+          target_group_name: target.argumentation_responses?.students?.group_name || '조 없음',
           is_completed: target.is_completed || false
         })) || [];
 
@@ -616,7 +618,7 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
                               ) : (
                                 <div className="h-3 w-3 rounded-full border border-current mr-1" />
                               )}
-                              {target.target_student_name}
+                              {target.target_student_name}({target.target_student_id}, {target.target_group_name})
                             </Badge>
                           </div>
                         ))}
