@@ -1,5 +1,5 @@
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -23,11 +23,31 @@ const ClassAISettings = ({ selectedClass, classSettings, onClassSettingsUpdate }
   const currentClassSetting = classSettings.find(cs => cs.class_name === selectedClass);
 
   const [currentClassSettings, setCurrentClassSettings] = useState({
-    selected_provider: currentClassSetting?.selected_provider || 'openai',
-    selected_model: currentClassSetting?.selected_model || 'gpt-4.1-2025-04-14',
-    system_prompt: currentClassSetting?.system_prompt || '',
-    rag_enabled: currentClassSetting?.rag_enabled || false
+    selected_provider: 'openai',
+    selected_model: 'gpt-4.1-2025-04-14',
+    system_prompt: '',
+    rag_enabled: false
   });
+
+  // 클래스 변경 시 설정값 업데이트
+  useEffect(() => {
+    if (currentClassSetting) {
+      setCurrentClassSettings({
+        selected_provider: currentClassSetting.selected_provider || 'openai',
+        selected_model: currentClassSetting.selected_model || 'gpt-4.1-2025-04-14',
+        system_prompt: currentClassSetting.system_prompt || '',
+        rag_enabled: currentClassSetting.rag_enabled || false
+      });
+    } else {
+      // 새로운 클래스인 경우 기본값으로 리셋
+      setCurrentClassSettings({
+        selected_provider: 'openai',
+        selected_model: 'gpt-4.1-2025-04-14',
+        system_prompt: '',
+        rag_enabled: false
+      });
+    }
+  }, [selectedClass, currentClassSetting]);
 
   const getModelOptions = (provider: string) => {
     if (provider === 'openai') {
@@ -179,7 +199,7 @@ const ClassAISettings = ({ selectedClass, classSettings, onClassSettingsUpdate }
             rows={4}
           />
           <p className="text-sm text-gray-500 mt-1">
-            {selectedClass} 클래스에만 적용되는 프롬프트입니다.
+            {selectedClass} 클래스에만 적용되는 프롬프트입니다. 비어있으면 전역 설정을 사용합니다.
           </p>
         </div>
 
