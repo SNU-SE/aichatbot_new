@@ -78,14 +78,23 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext, argument
     return peerResponse?.assignments?.every(assignment => assignment.is_completed) || false;
   };
 
-  // 개별 평가 제출 함수
-  const submitIndividualPeerEvaluation = async (evaluationId: string, evaluationText: string) => {
+  // 모든 평가가 입력되었는지 확인하는 함수
+  const allEvaluationsInputted = () => {
+    return peerResponse?.assignments?.every(assignment => 
+      assignment.evaluation_text && assignment.evaluation_text.trim().length > 0
+    ) || false;
+  };
+
+  // 개별 평가 제출 함수 (자동 제출 포함)
+  const submitIndividualPeerEvaluation = async (evaluationId: string, evaluationText: string, autoSubmit = false) => {
     if (!evaluationText?.trim()) {
-      toast({
-        title: "오류",
-        description: "평가 내용을 입력해주세요.",
-        variant: "destructive"
-      });
+      if (!autoSubmit) {
+        toast({
+          title: "오류",
+          description: "평가 내용을 입력해주세요.",
+          variant: "destructive"
+        });
+      }
       return;
     }
 
@@ -109,19 +118,52 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext, argument
         )
       }));
 
-      toast({
-        title: "성공",
-        description: "개별 평가가 제출되었습니다."
-      });
+      if (!autoSubmit) {
+        toast({
+          title: "성공",
+          description: "개별 평가가 제출되었습니다."
+        });
+      }
 
       // 동료평가 상태 다시 확인
       await checkPeerEvaluationStatus();
     } catch (error: any) {
-      toast({
-        title: "오류",
-        description: "평가 제출에 실패했습니다.",
-        variant: "destructive"
-      });
+      if (!autoSubmit) {
+        toast({
+          title: "오류",
+          description: "평가 제출에 실패했습니다.",
+          variant: "destructive"
+        });
+      }
+    }
+  };
+
+  // 자동 제출 함수
+  const autoSubmitAllEvaluations = async () => {
+    if (!peerResponse?.assignments || allPeerEvaluationsCompleted()) return;
+
+    try {
+      // 모든 미완료 평가를 자동으로 제출
+      const unsubmittedEvaluations = peerResponse.assignments.filter(
+        assignment => !assignment.is_completed && assignment.evaluation_text?.trim()
+      );
+
+      for (const assignment of unsubmittedEvaluations) {
+        await submitIndividualPeerEvaluation(assignment.id, assignment.evaluation_text, true);
+      }
+
+      // 모든 평가가 완료되었는지 확인 후 전체 완료 처리
+      if (allEvaluationsInputted()) {
+        if (argumentationContext) {
+          argumentationContext.submitPeerEvaluation();
+        }
+        toast({
+          title: "완료",
+          description: "모든 동료 평가가 자동으로 제출되었습니다."
+        });
+      }
+    } catch (error) {
+      console.error('자동 제출 실패:', error);
     }
   };
 
@@ -506,14 +548,22 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext, argument
                       <h5 className="font-medium mb-2">평가 내용:</h5>
                       <Textarea
                         value={assignment.evaluation_text || ''}
-                        onChange={(e) => {
+                        onChange={async (e) => {
+                          const newText = e.target.value;
                           // 해당 평가의 텍스트 업데이트
                           setPeerResponse(prev => ({
                             ...prev,
                             assignments: prev.assignments.map(a => 
-                              a.id === assignment.id ? { ...a, evaluation_text: e.target.value } : a
+                              a.id === assignment.id ? { ...a, evaluation_text: newText } : a
                             )
                           }));
+                          
+                          // 텍스트가 입력되고 모든 평가가 입력되었다면 자동 제출
+                          setTimeout(() => {
+                            if (newText.trim() && allEvaluationsInputted()) {
+                              autoSubmitAllEvaluations();
+                            }
+                          }, 500); // 짧은 지연 후 자동 제출
                         }}
                         placeholder="동료의 응답에 대한 평가를 작성해주세요..."
                         className="min-h-24"
@@ -540,12 +590,6 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext, argument
               )}
               
               <div className="flex space-x-2">
-                <Button 
-                  onClick={argumentationContext.submitPeerEvaluation}
-                  disabled={!allPeerEvaluationsCompleted()}
-                >
-                  {allPeerEvaluationsCompleted() ? '모든 평가 완료' : '전체 평가 제출'}
-                </Button>
                 <Button variant="outline" onClick={() => argumentationContext.setActiveTask('none')}>
                   취소
                 </Button>

@@ -29,6 +29,7 @@ const ArgumentationActivity = ({ activity, studentId, onBack }: ArgumentationAct
   const [peerResponse, setPeerResponse] = useState<any>(null);
   const [peerEvaluations, setPeerEvaluations] = useState<any[]>([]);
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [isPeerEvaluationCompleted, setIsPeerEvaluationCompleted] = useState(false);
   const { toast } = useToast();
 
   // 컴포넌트 마운트 시 스크롤을 상단으로 고정
@@ -87,7 +88,12 @@ const ArgumentationActivity = ({ activity, studentId, onBack }: ArgumentationAct
         .eq('activity_id', activity.id);
 
       if (assignments && assignments.length > 0) {
-        setPeerResponse(assignments[0]);
+        setPeerResponse({ assignments });
+        
+        // 모든 평가가 완료되었는지 확인
+        const allCompleted = assignments.every(assignment => assignment.is_completed);
+        setIsPeerEvaluationCompleted(allCompleted);
+        
         if (assignments[0].evaluation_text) {
           setEvaluationText(assignments[0].evaluation_text);
         }
@@ -305,9 +311,9 @@ const ArgumentationActivity = ({ activity, studentId, onBack }: ArgumentationAct
               onClick={() => setActiveTask(activeTask === 'peer-evaluation' ? 'none' : 'peer-evaluation')}
               className="w-full rounded-lg"
               variant={activeTask === 'peer-evaluation' ? 'default' : 'outline'}
-              disabled={!peerResponse || peerResponse.is_completed}
+              disabled={isPeerEvaluationCompleted || !peerResponse}
             >
-              {peerResponse?.is_completed ? '동료평가 완료' : '동료 평가'}
+              {isPeerEvaluationCompleted ? '동료 평가완료' : '동료 평가'}
             </Button>
             <Button 
               onClick={() => setActiveTask(activeTask === 'evaluation-check' ? 'none' : 'evaluation-check')}
