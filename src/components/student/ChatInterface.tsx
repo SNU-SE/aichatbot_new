@@ -72,6 +72,7 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext, argument
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [initialArgument, setInitialArgument] = useState<string>('');
+  const [individualEvaluationReflections, setIndividualEvaluationReflections] = useState<{[key: string]: {reflection: string, rating: number}}>({});
   const { toast } = useToast();
 
   // 모든 평가 완료 여부 확인 함수
@@ -266,6 +267,29 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext, argument
           setPeerEvaluations(evaluations);
           if (argumentationContext) {
             argumentationContext.peerEvaluations = evaluations;
+          }
+
+          // 기존 개별 평가 반영 데이터 불러오기
+          const { data: existingReflections } = await supabase
+            .from('evaluation_reflections')
+            .select('*')
+            .eq('student_id', studentId)
+            .eq('activity_id', activity.id);
+
+          if (existingReflections && existingReflections.length > 0) {
+            const reflectionsMap = {};
+            existingReflections.forEach((reflection, index) => {
+              reflectionsMap[`evaluation_${index}`] = {
+                reflection: reflection.reflection_text,
+                rating: reflection.usefulness_rating || 1
+              };
+            });
+            setIndividualEvaluationReflections(reflectionsMap);
+
+            // 첫 번째 반영의 최종 수정 논증을 argumentationContext에 설정
+            if (existingReflections[0] && argumentationContext) {
+              argumentationContext.setFinalRevisedArgument(existingReflections[0].final_revised_argument || '');
+            }
           }
         }
       }
@@ -578,58 +602,131 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext, argument
                 </div>
               )}
               
-              <div>
-                <h4 className="font-medium mb-2">받은 평가들:</h4>
-                <div className="space-y-2">
+              {/* 개별 평가별 반영 */}
+              {argumentationContext.peerEvaluations.length > 0 ? (
+                <div className="space-y-6">
                   {argumentationContext.peerEvaluations.map((evaluation, index) => (
-                    <div key={evaluation.id} className="bg-gray-50 p-3 rounded">
-                      <p className="text-sm text-gray-600">평가 {index + 1}</p>
-                      <p className="text-gray-700">{evaluation.evaluation_text}</p>
+                    <div key={evaluation.id} className="border rounded-lg p-4 bg-gray-50">
+                      <h4 className="font-medium mb-3">평가자 {index + 1}의 평가</h4>
+                      
+                      <div className="mb-4">
+                        <div className="bg-white p-3 rounded border">
+                          <p className="text-gray-700 whitespace-pre-wrap">{evaluation.evaluation_text}</p>
+                        </div>
+                      </div>
+                      
+                      <div className="mb-4">
+                        <h5 className="font-medium mb-2">이 평가가 얼마나 유익했나요?</h5>
+                        <Textarea
+                          value={individualEvaluationReflections[`evaluation_${index}`]?.reflection || ''}
+                          onChange={(e) => {
+                            setIndividualEvaluationReflections(prev => ({
+                              ...prev,
+                              [`evaluation_${index}`]: {
+                                ...prev[`evaluation_${index}`],
+                                reflection: e.target.value
+                              }
+                            }));
+                          }}
+                          placeholder="이 평가에 대한 생각을 작성해주세요..."
+                          className="min-h-20"
+                        />
+                      </div>
+                      
+                      <div className="mb-4">
+                        <h5 className="font-medium mb-2">유익함 정도 (1-5점):</h5>
+                        <div className="flex space-x-2">
+                          {[1, 2, 3, 4, 5].map((rating) => (
+                            <Button
+                              key={rating}
+                              variant={individualEvaluationReflections[`evaluation_${index}`]?.rating === rating ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => {
+                                setIndividualEvaluationReflections(prev => ({
+                                  ...prev,
+                                  [`evaluation_${index}`]: {
+                                    ...prev[`evaluation_${index}`],
+                                    rating: rating
+                                  }
+                                }));
+                              }}
+                            >
+                              {rating}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
                     </div>
                   ))}
-                </div>
-              </div>
-              
-              <div>
-                <h4 className="font-medium mb-2">이 평가들이 얼마나 유익했나요?</h4>
-                <Textarea
-                  value={argumentationContext.reflectionText}
-                  onChange={(e) => argumentationContext.setReflectionText(e.target.value)}
-                  placeholder="받은 평가에 대한 생각을 작성해주세요..."
-                  className="min-h-24"
-                />
-              </div>
-              <div>
-                <h4 className="font-medium mb-2">유익함 정도 (1-5점):</h4>
-                <div className="flex space-x-2">
-                  {[1, 2, 3, 4, 5].map((rating) => (
-                    <Button
-                      key={rating}
-                      variant={argumentationContext.usefulnessRating === rating ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => argumentationContext.setUsefulnessRating(rating)}
-                    >
-                      {rating}
+                  
+                  <div className="border-t pt-4">
+                    <h4 className="font-medium mb-2">최종 검토 반영:</h4>
+                    <p className="text-sm text-gray-600 mb-2">받은 평가들을 바탕으로 자신의 주장을 최종적으로 수정해서 작성해주세요.</p>
+                    <Textarea
+                      value={argumentationContext.finalRevisedArgument}
+                      onChange={(e) => argumentationContext.setFinalRevisedArgument(e.target.value)}
+                      placeholder="평가를 바탕으로 수정된 최종 주장을 작성해주세요..."
+                      className="min-h-32"
+                    />
+                  </div>
+                  
+                  <div className="flex space-x-2">
+                    <Button onClick={async () => {
+                      // 개별 평가 반영들을 저장
+                      const savePromises = argumentationContext.peerEvaluations.map(async (evaluation, index) => {
+                        const reflectionData = individualEvaluationReflections[`evaluation_${index}`];
+                        if (reflectionData?.reflection && reflectionData?.rating) {
+                          return supabase
+                            .from('evaluation_reflections')
+                            .upsert({
+                              student_id: studentId,
+                              activity_id: activity.id,
+                              reflection_text: reflectionData.reflection,
+                              usefulness_rating: reflectionData.rating,
+                              final_revised_argument: argumentationContext.finalRevisedArgument,
+                              submitted_at: new Date().toISOString()
+                            });
+                        }
+                      });
+
+                      try {
+                        await Promise.all(savePromises.filter(Boolean));
+                        
+                        // 최종 수정 논증 저장
+                        if (argumentationContext.finalRevisedArgument) {
+                          await supabase
+                            .from('argumentation_responses')
+                            .update({
+                              final_revised_argument: argumentationContext.finalRevisedArgument,
+                              final_revision_submitted_at: new Date().toISOString()
+                            })
+                            .eq('student_id', studentId)
+                            .eq('activity_id', activity.id);
+                        }
+
+                        argumentationContext.submitReflection();
+                        toast({
+                          title: "성공",
+                          description: "평가 반영이 저장되었습니다."
+                        });
+                      } catch (error) {
+                        toast({
+                          title: "오류",
+                          description: "저장에 실패했습니다.",
+                          variant: "destructive"
+                        });
+                      }
+                    }}>저장</Button>
+                    <Button variant="outline" onClick={() => argumentationContext.setActiveTask('none')}>
+                      취소
                     </Button>
-                  ))}
+                  </div>
                 </div>
-              </div>
-              <div>
-                <h4 className="font-medium mb-2">최종 검토 반영:</h4>
-                <p className="text-sm text-gray-600 mb-2">받은 평가를 바탕으로 자신의 주장을 최종적으로 수정해서 작성해주세요.</p>
-                <Textarea
-                  value={argumentationContext.finalRevisedArgument}
-                  onChange={(e) => argumentationContext.setFinalRevisedArgument(e.target.value)}
-                  placeholder="평가를 바탕으로 수정된 최종 주장을 작성해주세요..."
-                  className="min-h-32"
-                />
-              </div>
-              <div className="flex space-x-2">
-                <Button onClick={argumentationContext.submitReflection}>저장</Button>
-                <Button variant="outline" onClick={() => argumentationContext.setActiveTask('none')}>
-                  취소
-                </Button>
-              </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  받은 평가가 없습니다.
+                </div>
+              )}
             </div>
           )}
         </div>

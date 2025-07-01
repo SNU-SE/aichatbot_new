@@ -1,13 +1,14 @@
-
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { Download } from 'lucide-react';
 import ChecklistReset from './enhanced/ChecklistReset';
 import PeerEvaluationManager from './enhanced/PeerEvaluationManager';
 import StudentResponseDialog from './enhanced/StudentResponseDialog';
+import { downloadCSV, generateCSV } from '@/utils/csvUtils';
 
 interface Student {
   student_id: string;
@@ -152,6 +153,132 @@ const ClassManagement = () => {
   const selectedActivityInfo = getSelectedActivityInfo();
   const isArgumentationActivity = selectedActivityInfo?.type === 'argumentation';
 
+  const downloadAllStudentDataCSV = async () => {
+    if (selectedActivity === 'all' || !isArgumentationActivity) {
+      toast({
+        title: "오류",
+        description: "논증 활동을 선택해주세요.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      const csvData = [];
+      
+      for (const status of studentStatuses) {
+        // 논증 응답 데이터
+        const { data: responses } = await supabase
+          .from('argumentation_responses')
+          .select('*')
+          .eq('student_id', status.student_id)
+          .eq('activity_id', selectedActivity);
+
+        // 동료평가 데이터
+        const { data: evaluations } = await supabase
+          .from('peer_evaluations')
+          .select(`
+            *,
+            argumentation_responses!target_response_id(
+              response_text,
+              students!argumentation_responses_student_id_fkey(name)
+            )
+          `)
+          .eq('evaluator_id', status.student_id)
+          .eq('activity_id', selectedActivity);
+
+        // 평가 성찰 데이터
+        const { data: reflections } = await supabase
+          .from('evaluation_reflections')
+          .select('*')
+          .eq('student_id', status.student_id)
+          .eq('activity_id', selectedActivity);
+
+        // 채팅 로그 데이터
+        const { data: chatLogs } = await supabase
+          .from('chat_logs')
+          .select('*')
+          .eq('student_id', status.student_id)
+          .eq('activity_id', selectedActivity);
+
+        // 각 학생의 데이터를 CSV 행으로 추가
+        responses?.forEach(response => {
+          csvData.push({
+            '학생ID': status.student_id,
+            '학생명': status.name || '이름 없음',
+            '클래스': status.class_name,
+            '유형': '논증 응답',
+            '내용': response.response_text,
+            '제출일시': response.submitted_at,
+            '최종수정논증': response.final_revised_argument || '',
+            '최종수정일시': response.final_revision_submitted_at || ''
+          });
+        });
+
+        evaluations?.forEach(evaluation => {
+          csvData.push({
+            '학생ID': status.student_id,
+            '학생명': status.name || '이름 없음',
+            '클래스': status.class_name,
+            '유형': '동료 평가',
+            '내용': evaluation.evaluation_text || '',
+            '제출일시': evaluation.submitted_at || '',
+            '평가대상': evaluation.argumentation_responses?.students?.name || '알 수 없음',
+            '완료여부': evaluation.is_completed ? '완료' : '미완료'
+          });
+        });
+
+        reflections?.forEach(reflection => {
+          csvData.push({
+            '학생ID': status.student_id,
+            '학생명': status.name || '이름 없음',
+            '클래스': status.class_name,
+            '유형': '평가 성찰',
+            '내용': reflection.reflection_text,
+            '유익함점수': reflection.usefulness_rating,
+            '제출일시': reflection.submitted_at
+          });
+        });
+
+        csvData.push({
+          '학생ID': status.student_id,
+          '학생명': status.name || '이름 없음',
+          '클래스': status.class_name,
+          '유형': '채팅 메시지 수',
+          '내용': `총 ${chatLogs?.length || 0}개 메시지`,
+          '제출일시': ''
+        });
+      }
+
+      if (csvData.length === 0) {
+        toast({
+          title: "정보",
+          description: "다운로드할 데이터가 없습니다.",
+        });
+        return;
+      }
+
+      const csv = generateCSV(csvData, [
+        '학생ID', '학생명', '클래스', '유형', '내용', '제출일시', 
+        '최종수정논증', '최종수정일시', '평가대상', '완료여부', '유익함점수'
+      ]);
+      
+      const activityInfo = getSelectedActivityInfo();
+      downloadCSV(csv, `전체학생_${activityInfo?.title || '활동'}_데이터.csv`);
+      
+      toast({
+        title: "다운로드 완료",
+        description: "전체 학생 데이터가 CSV 파일로 다운로드되었습니다."
+      });
+    } catch (error) {
+      toast({
+        title: "오류",
+        description: "데이터 다운로드에 실패했습니다.",
+        variant: "destructive"
+      });
+    }
+  };
+
   if (loading) {
     return <div className="flex justify-center py-8">로딩 중...</div>;
   }
@@ -234,7 +361,18 @@ const ClassManagement = () => {
       {selectedActivity !== 'all' && isArgumentationActivity && (
         <Card>
           <CardHeader>
-            <CardTitle>학생별 진행 현황 - {selectedActivityInfo?.title}</CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle>학생별 진행 현황 - {selectedActivityInfo?.title}</CardTitle>
+              <Button
+                onClick={downloadAllStudentDataCSV}
+                size="sm"
+                variant="outline"
+                className="flex items-center space-x-1"
+              >
+                <Download className="h-4 w-4" />
+                <span>전체 데이터 CSV 다운로드</span>
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             {studentStatuses.length > 0 ? (
