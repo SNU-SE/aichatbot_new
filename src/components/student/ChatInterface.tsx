@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -493,15 +492,14 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext, argument
             <div className="space-y-4">
               <h3 className="text-lg font-semibold">동료 평가</h3>
               
-              {/* 여러 평가 대상 표시 */}
+              {/* 여러 평가 대상 표시 - 평가 대상 정보 숨김 */}
               {peerResponse?.assignments && peerResponse.assignments.length > 0 ? (
                 <>
                   {peerResponse.assignments.map((assignment, index) => (
                     <div key={assignment.id} className="border rounded-lg p-4 mb-4">
                       <div className="flex items-center justify-between mb-2">
                         <h4 className="font-medium">
-                          평가 대상 {index + 1}: {assignment.argumentation_responses?.students?.name || '이름 없음'} 
-                          ({assignment.argumentation_responses?.students?.student_id || '학번 없음'})
+                          평가 대상 {index + 1}
                         </h4>
                         {assignment.is_completed && (
                           <span className="text-green-600 text-sm">✓ 완료</span>
