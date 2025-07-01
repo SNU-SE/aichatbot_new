@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -67,9 +68,60 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext, argument
   const [isLoading, setIsLoading] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [motherTongue, setMotherTongue] = useState<string>('Korean');
+  const [peerResponse, setPeerResponse] = useState<any>(null);
+  const [peerEvaluations, setPeerEvaluations] = useState<any[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+
+  // 개별 평가 제출 함수
+  const submitIndividualPeerEvaluation = async (evaluationId: string, evaluationText: string) => {
+    if (!evaluationText?.trim()) {
+      toast({
+        title: "오류",
+        description: "평가 내용을 입력해주세요.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('peer_evaluations')
+        .update({
+          evaluation_text: evaluationText,
+          is_completed: true,
+          submitted_at: new Date().toISOString()
+        })
+        .eq('id', evaluationId);
+
+      if (error) throw error;
+
+      // 상태 업데이트
+      setPeerResponse(prev => ({
+        ...prev,
+        assignments: prev.assignments.map(a => 
+          a.id === evaluationId ? { ...a, is_completed: true } : a
+        )
+      }));
+
+      toast({
+        title: "성공",
+        description: "개별 평가가 제출되었습니다."
+      });
+    } catch (error: any) {
+      toast({
+        title: "오류",
+        description: "평가 제출에 실패했습니다.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  // 모든 평가 완료 여부 확인
+  const allPeerEvaluationsCompleted = () => {
+    return peerResponse?.assignments?.every(assignment => assignment.is_completed) || false;
+  };
 
   useEffect(() => {
     fetchStudentInfo();
@@ -314,8 +366,8 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext, argument
         setPeerResponse({ assignments });
         
         // 첫 번째 평가의 텍스트를 기본값으로 설정 (기존 호환성)
-        if (assignments[0].evaluation_text) {
-          setEvaluationText(assignments[0].evaluation_text);
+        if (assignments[0].evaluation_text && argumentationContext) {
+          argumentationContext.setEvaluationText(assignments[0].evaluation_text);
         }
       }
 
@@ -344,7 +396,7 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext, argument
   };
 
   const submitArgument = async () => {
-    if (!argumentText.trim()) {
+    if (!argumentationContext?.argumentText.trim()) {
       toast({
         title: "오류",
         description: "논증을 입력해주세요.",
@@ -359,7 +411,7 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext, argument
         .upsert({
           activity_id: activity.id,
           student_id: studentId,
-          response_text: argumentText,
+          response_text: argumentationContext.argumentText,
           is_submitted: true
         }, {
           onConflict: 'activity_id,student_id'
@@ -367,8 +419,7 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext, argument
 
       if (error) throw error;
 
-      setIsSubmitted(true);
-      setActiveTask('none');
+      argumentationContext.setActiveTask('none');
       
       toast({
         title: "성공",
@@ -384,7 +435,7 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext, argument
   };
 
   const submitPeerEvaluation = async () => {
-    if (!evaluationText.trim()) {
+    if (!argumentationContext?.evaluationText.trim()) {
       toast({
         title: "오류",
         description: "평가 내용을 입력해주세요.",
@@ -397,15 +448,15 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext, argument
       const { error } = await supabase
         .from('peer_evaluations')
         .update({
-          evaluation_text: evaluationText,
+          evaluation_text: argumentationContext.evaluationText,
           is_completed: true,
           submitted_at: new Date().toISOString()
         })
-        .eq('id', peerResponse.id);
+        .eq('id', argumentationContext.peerResponse.id);
 
       if (error) throw error;
 
-      setActiveTask('none');
+      argumentationContext.setActiveTask('none');
       
       toast({
         title: "성공",
@@ -421,7 +472,7 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext, argument
   };
 
   const submitReflection = async () => {
-    if (!reflectionText.trim()) {
+    if (!argumentationContext?.reflectionText.trim()) {
       toast({
         title: "오류",
         description: "성찰 내용을 입력해주세요.",
@@ -437,8 +488,8 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext, argument
         .upsert({
           student_id: studentId,
           activity_id: activity.id,
-          reflection_text: reflectionText,
-          usefulness_rating: usefulnessRating
+          reflection_text: argumentationContext.reflectionText,
+          usefulness_rating: argumentationContext.usefulnessRating
         }, {
           onConflict: 'student_id,activity_id'
         });
@@ -446,11 +497,11 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext, argument
       if (reflectionError) throw reflectionError;
 
       // 최종 수정 주장이 있다면 저장
-      if (finalRevisedArgument.trim()) {
+      if (argumentationContext.finalRevisedArgument.trim()) {
         const { error: argumentError } = await supabase
           .from('argumentation_responses')
           .update({
-            final_revised_argument: finalRevisedArgument,
+            final_revised_argument: argumentationContext.finalRevisedArgument,
             final_revision_submitted_at: new Date().toISOString()
           })
           .eq('activity_id', activity.id)
@@ -459,7 +510,7 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext, argument
         if (argumentError) throw argumentError;
       }
 
-      setActiveTask('none');
+      argumentationContext.setActiveTask('none');
       
       toast({
         title: "성공",
@@ -525,7 +576,7 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext, argument
                 />
               </div>
               <div className="flex space-x-2">
-                <Button onClick={argumentationContext.submitArgument}>제출</Button>
+                <Button onClick={submitArgument}>제출</Button>
                 <Button variant="outline" onClick={() => argumentationContext.setActiveTask('none')}>
                   취소
                 </Button>
@@ -651,7 +702,7 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext, argument
                 />
               </div>
               <div className="flex space-x-2">
-                <Button onClick={argumentationContext.submitReflection}>저장</Button>
+                <Button onClick={submitReflection}>저장</Button>
                 <Button variant="outline" onClick={() => argumentationContext.setActiveTask('none')}>
                   취소
                 </Button>
@@ -786,55 +837,6 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext, argument
       </Card>
     </div>
   );
-
-  // 개별 평가 제출 함수
-  const submitIndividualPeerEvaluation = async (evaluationId: string, evaluationText: string) => {
-    if (!evaluationText?.trim()) {
-      toast({
-        title: "오류",
-        description: "평가 내용을 입력해주세요.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    try {
-      const { error } = await supabase
-        .from('peer_evaluations')
-        .update({
-          evaluation_text: evaluationText,
-          is_completed: true,
-          submitted_at: new Date().toISOString()
-        })
-        .eq('id', evaluationId);
-
-      if (error) throw error;
-
-      // 상태 업데이트
-      setPeerResponse(prev => ({
-        ...prev,
-        assignments: prev.assignments.map(a => 
-          a.id === evaluationId ? { ...a, is_completed: true } : a
-        )
-      }));
-
-      toast({
-        title: "성공",
-        description: "개별 평가가 제출되었습니다."
-      });
-    } catch (error: any) {
-      toast({
-        title: "오류",
-        description: "평가 제출에 실패했습니다.",
-        variant: "destructive"
-      });
-    }
-  };
-
-  // 모든 평가 완료 여부 확인
-  const allPeerEvaluationsCompleted = () => {
-    return peerResponse?.assignments?.every(assignment => assignment.is_completed) || false;
-  };
 };
 
 export default ChatInterface;
