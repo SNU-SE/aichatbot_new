@@ -20,11 +20,13 @@ interface ArgumentationData {
   student_id: string;
   student_name: string;
   group_name: string | null;
+  class_name: string | null;
   argument_text: string;
   evaluations: {
     evaluator_id: string;
     evaluator_name: string;
     evaluator_group: string | null;
+    evaluator_class: string | null;
     evaluation_text: string;
     usefulness_rating?: number;
   }[];
@@ -114,7 +116,7 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
 
       toast({
         title: "성공",
-        description: `${data}개의 동료평가가 랜덤 배정되었습니다. 각 학생은 ${evaluationsPerStudent}개의 응답을 평가합니다.`
+        description: `${data}개의 동료평가가 클래스별로 랜덤 배정되었습니다. 각 학생은 같은 클래스 내에서 ${evaluationsPerStudent}개의 응답을 평가합니다.`
       });
 
       await fetchStats();
@@ -143,7 +145,6 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
 
     setLoading(true);
     try {
-      // 타입 안전성을 위해 타입 단언 사용
       const { data, error } = await supabase.rpc('assign_peer_evaluations_specific' as any, { 
         activity_id_param: selectedActivity,
         evaluations_per_student: evaluationsPerStudent,
@@ -154,7 +155,7 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
 
       toast({
         title: "성공",
-        description: `${data}개의 동료평가가 특정 배정되었습니다. 각 학생은 자신의 조 +${groupOffset}조의 ${evaluationsPerStudent}개 응답을 평가합니다.`
+        description: `${data}개의 동료평가가 클래스별로 특정 배정되었습니다. 각 학생은 같은 클래스 내에서 자신의 조 +${groupOffset}조의 ${evaluationsPerStudent}개 응답을 평가합니다.`
       });
 
       await fetchStats();
@@ -180,14 +181,14 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
   const fetchArgumentationData = async () => {
     setLoading(true);
     try {
-      // 모든 논증 응답 가져오기 (모둠 정보 포함)
+      // 모든 논증 응답 가져오기 (모둠 및 클래스 정보 포함)
       const { data: responses, error: responsesError } = await supabase
         .from('argumentation_responses')
         .select(`
           id,
           student_id,
           response_text,
-          students!inner(name, group_name)
+          students!inner(name, group_name, class_name)
         `)
         .eq('activity_id', selectedActivity)
         .eq('is_submitted', true);
@@ -197,13 +198,13 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
       const data: ArgumentationData[] = [];
 
       for (const response of responses || []) {
-        // 해당 응답에 대한 모든 평가 가져오기 (평가자의 모둠 정보 포함)
+        // 해당 응답에 대한 모든 평가 가져오기 (평가자의 모둠 및 클래스 정보 포함)
         const { data: evaluations, error: evaluationsError } = await supabase
           .from('peer_evaluations')
           .select(`
             evaluator_id,
             evaluation_text,
-            students!inner(name, group_name)
+            students!inner(name, group_name, class_name)
           `)
           .eq('target_response_id', response.id)
           .eq('is_completed', true);
@@ -223,6 +224,7 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
           evaluator_id: evaluation.evaluator_id,
           evaluator_name: evaluation.students.name || '이름없음',
           evaluator_group: evaluation.students.group_name,
+          evaluator_class: evaluation.students.class_name,
           evaluation_text: evaluation.evaluation_text || '',
           usefulness_rating: reflections?.[index]?.usefulness_rating
         })) || [];
@@ -231,6 +233,7 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
           student_id: response.student_id,
           student_name: response.students.name || '이름없음',
           group_name: response.students.group_name,
+          class_name: response.students.class_name,
           argument_text: response.response_text,
           evaluations: evaluationsWithRating
         });
@@ -255,10 +258,12 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
       arg.evaluations.map(evaluation => ({
         '학생ID': arg.student_id,
         '학생이름': arg.student_name,
+        '학생클래스': arg.class_name || '-',
         '학생모둠': arg.group_name || '-',
         '논증내용': arg.argument_text,
         '평가자ID': evaluation.evaluator_id,
         '평가자이름': evaluation.evaluator_name,
+        '평가자클래스': evaluation.evaluator_class || '-',
         '평가자모둠': evaluation.evaluator_group || '-',
         '평가내용': evaluation.evaluation_text,
         '도움정도평가': evaluation.usefulness_rating || '미평가'
@@ -266,7 +271,8 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
     );
 
     const csv = generateCSV(csvData, [
-      '학생ID', '학생이름', '학생모둠', '논증내용', '평가자ID', '평가자이름', '평가자모둠', '평가내용', '도움정도평가'
+      '학생ID', '학생이름', '학생클래스', '학생모둠', '논증내용', 
+      '평가자ID', '평가자이름', '평가자클래스', '평가자모둠', '평가내용', '도움정도평가'
     ]);
 
     downloadCSV(csv, `peer_evaluation_${activityTitle}_${new Date().toISOString().split('T')[0]}.csv`);
@@ -294,15 +300,16 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
 
   return (
     <div className="space-y-4">
-      {/* 모둠 기반 동료평가 안내 */}
-      <Card className="border-blue-200 bg-blue-50">
+      {/* 클래스별 분리 동료평가 안내 */}
+      <Card className="border-green-200 bg-green-50">
         <CardContent className="pt-4">
           <div className="flex items-start space-x-2">
-            <Info className="h-4 w-4 text-blue-600 mt-0.5" />
-            <div className="text-sm text-blue-800">
-              <p className="font-medium mb-1">모둠 기반 동료평가</p>
-              <p><strong>랜덤 배정:</strong> 다른 모둠의 학생들을 랜덤하게 배정합니다.</p>
-              <p><strong>특정 배정:</strong> 자신의 조번호에 지정된 숫자를 더한 조의 학생들을 배정합니다. (순환 구조)</p>
+            <Info className="h-4 w-4 text-green-600 mt-0.5" />
+            <div className="text-sm text-green-800">
+              <p className="font-medium mb-1">클래스별 분리 동료평가</p>
+              <p><strong>✅ 클래스 분리:</strong> 각 클래스 학생들은 같은 클래스 내에서만 평가합니다.</p>
+              <p><strong>랜덤 배정:</strong> 같은 클래스의 다른 모둠 학생들을 랜덤하게 배정합니다.</p>
+              <p><strong>특정 배정:</strong> 같은 클래스에서 자신의 조번호에 지정된 숫자를 더한 조를 배정합니다.</p>
             </div>
           </div>
         </CardContent>
@@ -368,7 +375,7 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
             className="flex items-center space-x-2"
           >
             <Shuffle className="h-4 w-4" />
-            <span>모둠별 동료평가 배정 (랜덤)</span>
+            <span>클래스별 동료평가 배정 (랜덤)</span>
           </Button>
         </div>
 
@@ -381,7 +388,7 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
             className="flex items-center space-x-2"
           >
             <Users className="h-4 w-4" />
-            <span>특정 배정</span>
+            <span>클래스별 특정 배정</span>
           </Button>
           
           <ToggleGroup type="single" value={groupOffset} onValueChange={setGroupOffset}>
@@ -438,6 +445,9 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
                     <CardHeader>
                       <CardTitle className="text-lg flex items-center space-x-2">
                         <span>{arg.student_name} ({arg.student_id})</span>
+                        {arg.class_name && (
+                          <Badge variant="secondary">{arg.class_name}</Badge>
+                        )}
                         {arg.group_name && (
                           <Badge variant="outline">{arg.group_name}모둠</Badge>
                         )}
@@ -460,8 +470,13 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
                                     <span className="font-medium text-sm">
                                       평가자: {evaluation.evaluator_name} ({evaluation.evaluator_id})
                                     </span>
-                                    {evaluation.evaluator_group && (
+                                    {evaluation.evaluator_class && (
                                       <Badge variant="secondary" className="text-xs">
+                                        {evaluation.evaluator_class}
+                                      </Badge>
+                                    )}
+                                    {evaluation.evaluator_group && (
+                                      <Badge variant="outline" className="text-xs">
                                         {evaluation.evaluator_group}모둠
                                       </Badge>
                                     )}

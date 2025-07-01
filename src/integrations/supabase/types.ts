@@ -718,6 +718,14 @@ export type Database = {
           | { activity_id_param: string; evaluations_per_student?: number }
         Returns: number
       }
+      assign_peer_evaluations_specific: {
+        Args: {
+          activity_id_param: string
+          evaluations_per_student?: number
+          group_offset?: number
+        }
+        Returns: number
+      }
       binary_quantize: {
         Args: { "": string } | { "": unknown }
         Returns: unknown
