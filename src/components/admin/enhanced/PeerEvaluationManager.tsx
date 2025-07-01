@@ -1,15 +1,14 @@
+
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { Users, Shuffle, CheckCircle, Download, Eye, Star, Info, Minus, Plus, ClipboardList, Trash2 } from 'lucide-react';
+import { Users, FileText, Shuffle, CheckCircle, AlertCircle, Settings } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { generateCSV, downloadCSV } from '@/utils/csvUtils';
-import PeerEvaluationAssignmentDashboard from './PeerEvaluationAssignmentDashboard';
+import PeerEvaluationStats from './PeerEvaluationStats';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 interface PeerEvaluationManagerProps {
   selectedClass: string;
@@ -17,116 +16,98 @@ interface PeerEvaluationManagerProps {
   activityTitle: string;
 }
 
-interface ArgumentationData {
-  student_id: string;
-  student_name: string;
-  group_name: string | null;
-  class_name: string | null;
-  argument_text: string;
-  evaluations: {
-    evaluator_id: string;
-    evaluator_name: string;
-    evaluator_group: string | null;
-    evaluator_class: string | null;
-    evaluation_text: string;
-    usefulness_rating?: number;
-  }[];
+interface EvaluationStats {
+  total_responses: number;
+  submitted_responses: number;
+  total_evaluations: number;
+  completed_evaluations: number;
+  completion_rate: number;
 }
 
-interface Stats {
-  totalStudents: number;
-  submittedArguments: number;
-  assignedEvaluations: number;
-  completedEvaluations: number;
-  feedbackResponses: number;
+interface StudentStatus {
+  student_id: string;
+  name: string;
+  class_name: string;
+  has_submitted_response: boolean;
+  assigned_evaluations: number;
+  completed_evaluations: number;
+  received_evaluations: number;
 }
 
 const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle }: PeerEvaluationManagerProps) => {
-  const [stats, setStats] = useState<Stats>({
-    totalStudents: 0,
-    submittedArguments: 0,
-    assignedEvaluations: 0,
-    completedEvaluations: 0,
-    feedbackResponses: 0
-  });
-  const [argumentationData, setArgumentationData] = useState<ArgumentationData[]>([]);
-  const [evaluationsPerStudent, setEvaluationsPerStudent] = useState(1);
-  const [groupOffset, setGroupOffset] = useState("1");
-  const [loading, setLoading] = useState(false);
-  const [showResults, setShowResults] = useState(false);
-  const [showAssignments, setShowAssignments] = useState(false);
+  const [stats, setStats] = useState<EvaluationStats | null>(null);
+  const [studentStatuses, setStudentStatuses] = useState<StudentStatus[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [assigning, setAssigning] = useState(false);
+  const [completing, setCompleting] = useState(false);
+  const [showStats, setShowStats] = useState(false);
+  const [evaluationsPerStudent, setEvaluationsPerStudent] = useState(2);
+  const [groupOffset, setGroupOffset] = useState(1);
   const { toast } = useToast();
 
   useEffect(() => {
-    if (selectedActivity && selectedActivity !== 'all') {
-      fetchStats();
-    }
+    fetchEvaluationData();
   }, [selectedActivity, selectedClass]);
 
-  const fetchStats = async () => {
+  const fetchEvaluationData = async () => {
+    if (selectedActivity === 'all') return;
+    
     try {
-      // 기본 통계 가져오기
+      setLoading(true);
+      
+      // 전체 통계 가져오기
       const { data: statsData, error: statsError } = await supabase
         .rpc('get_peer_evaluation_stats', { activity_id_param: selectedActivity });
 
       if (statsError) throw statsError;
 
       if (statsData && statsData.length > 0) {
-        const stat = statsData[0];
-        
-        // 피드백 응답 수 가져오기
-        const { data: feedbackData, error: feedbackError } = await supabase
-          .from('evaluation_reflections')
-          .select('id')
-          .eq('activity_id', selectedActivity);
-
-        if (feedbackError) throw feedbackError;
-
-        setStats({
-          totalStudents: stat.total_responses || 0,
-          submittedArguments: stat.submitted_responses || 0,
-          assignedEvaluations: stat.total_evaluations || 0,
-          completedEvaluations: stat.completed_evaluations || 0,
-          feedbackResponses: feedbackData?.length || 0
-        });
+        setStats(statsData[0]);
       }
+
+      // 활동에 참여한 학생들 목록 가져오기 (클래스 필터링 적용)
+      let studentsQuery = supabase
+        .from('argumentation_responses')
+        .select(`
+          student_id,
+          students!inner(name, class_name)
+        `)
+        .eq('activity_id', selectedActivity);
+
+      if (selectedClass !== 'all') {
+        studentsQuery = studentsQuery.eq('students.class_name', selectedClass);
+      }
+
+      const { data: studentsData, error: studentsError } = await studentsQuery;
+
+      if (studentsError) throw studentsError;
+
+      // 각 학생의 상태 가져오기
+      const studentStatusPromises = studentsData?.map(async (student) => {
+        const { data: statusData, error: statusError } = await supabase
+          .rpc('get_student_evaluation_status', {
+            student_id_param: student.student_id,
+            activity_id_param: selectedActivity
+          });
+
+        if (statusError) throw statusError;
+
+        return {
+          student_id: student.student_id,
+          name: student.students.name || '이름없음',
+          class_name: student.students.class_name,
+          ...statusData[0]
+        };
+      }) || [];
+
+      const resolvedStatuses = await Promise.all(studentStatusPromises);
+      setStudentStatuses(resolvedStatuses);
+
     } catch (error) {
-      console.error('통계 가져오기 오류:', error);
-    }
-  };
-
-  const handleAssignEvaluations = async () => {
-    const minStudents = evaluationsPerStudent + 1;
-    if (stats.submittedArguments < minStudents) {
-      toast({
-        title: "알림",
-        description: `동료평가를 진행하려면 최소 ${minStudents}명 이상의 학생이 논증을 제출해야 합니다.`,
-        variant: "destructive"
-      });
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const { data, error } = await supabase
-        .rpc('assign_peer_evaluations', { 
-          activity_id_param: selectedActivity,
-          evaluations_per_student: evaluationsPerStudent
-        });
-
-      if (error) throw error;
-
-      toast({
-        title: "성공",
-        description: `${data}개의 동료평가가 클래스별로 랜덤 배정되었습니다. 각 학생은 같은 클래스 내에서 ${evaluationsPerStudent}개의 응답을 평가합니다.`
-      });
-
-      await fetchStats();
-    } catch (error) {
-      console.error('동료평가 배정 오류:', error);
+      console.error('동료평가 데이터 로딩 오류:', error);
       toast({
         title: "오류",
-        description: error.message || "동료평가 배정에 실패했습니다.",
+        description: "동료평가 데이터를 불러오는데 실패했습니다.",
         variant: "destructive"
       });
     } finally {
@@ -134,34 +115,69 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
     }
   };
 
-  const handleAssignSpecificEvaluations = async () => {
-    const minStudents = evaluationsPerStudent + 1;
-    if (stats.submittedArguments < minStudents) {
+  const handleRandomAssign = async () => {
+    if (!stats?.submitted_responses || stats.submitted_responses < 2) {
       toast({
         title: "알림",
-        description: `동료평가를 진행하려면 최소 ${minStudents}명 이상의 학생이 논증을 제출해야 합니다.`,
+        description: "동료평가를 진행하려면 최소 2명 이상의 학생이 논증을 제출해야 합니다.",
         variant: "destructive"
       });
       return;
     }
 
-    setLoading(true);
+    setAssigning(true);
     try {
-      const { data, error } = await supabase.rpc('assign_peer_evaluations_specific' as any, { 
-        activity_id_param: selectedActivity,
-        evaluations_per_student: evaluationsPerStudent,
-        group_offset: parseInt(groupOffset)
-      });
+      const { data, error } = await supabase
+        .rpc('assign_peer_evaluations', { activity_id_param: selectedActivity });
 
       if (error) throw error;
 
       toast({
         title: "성공",
-        description: `${data}개의 동료평가가 클래스별로 특정 배정되었습니다. 각 학생은 같은 클래스 내에서 자신의 조 +${groupOffset}조의 ${evaluationsPerStudent}개 응답을 평가합니다.`
+        description: `${data}개의 동료평가가 랜덤 배정되었습니다.`
       });
 
-      await fetchStats();
+      await fetchEvaluationData();
     } catch (error) {
+      console.error('동료평가 배정 오류:', error);
+      toast({
+        title: "오류",
+        description: "동료평가 배정에 실패했습니다.",
+        variant: "destructive"
+      });
+    } finally {
+      setAssigning(false);
+    }
+  };
+
+  const handleSpecificAssign = async () => {
+    if (!stats?.submitted_responses || stats.submitted_responses < (evaluationsPerStudent + 1)) {
+      toast({
+        title: "알림",
+        description: `특정 배정을 진행하려면 최소 ${evaluationsPerStudent + 1}명 이상의 학생이 논증을 제출해야 합니다.`,
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setAssigning(true);
+    try {
+      const { data, error } = await supabase
+        .rpc('assign_peer_evaluations_specific', { 
+          activity_id_param: selectedActivity,
+          evaluations_per_student: evaluationsPerStudent,
+          group_offset: groupOffset
+        });
+
+      if (error) throw error;
+
+      toast({
+        title: "성공",
+        description: `${data}개의 동료평가가 특정 배정되었습니다.`
+      });
+
+      await fetchEvaluationData();
+    } catch (error: any) {
       console.error('특정 동료평가 배정 오류:', error);
       toast({
         title: "오류",
@@ -169,449 +185,235 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
         variant: "destructive"
       });
     } finally {
-      setLoading(false);
+      setAssigning(false);
     }
   };
 
-  const handleCompletePeerEvaluation = async () => {
-    toast({
-      title: "동료평가 완료", 
-      description: "학생들이 이제 동료평가 결과를 확인할 수 있습니다."
-    });
-  };
+  const handleCompleteEvaluations = async () => {
+    if (!stats?.completed_evaluations || stats.completed_evaluations === 0) {
+      toast({
+        title: "알림",
+        description: "완료된 동료평가가 없습니다.",
+        variant: "destructive"
+      });
+      return;
+    }
 
-  const handleResetAssignments = async () => {
-    setLoading(true);
+    setCompleting(true);
     try {
-      // 해당 활동의 모든 동료평가 관련 데이터 삭제
-      const { error: evaluationsError } = await supabase
-        .from('peer_evaluations')
-        .delete()
-        .eq('activity_id', selectedActivity);
-
-      if (evaluationsError) throw evaluationsError;
-
-      // 해당 활동의 모든 평가 성찰 데이터 삭제
-      const { error: reflectionsError } = await supabase
-        .from('evaluation_reflections')
-        .delete()
-        .eq('activity_id', selectedActivity);
-
-      if (reflectionsError) throw reflectionsError;
-
       toast({
         title: "성공",
-        description: "동료평가 배정이 초기화되었습니다. 모든 관련 데이터가 삭제되었습니다."
+        description: "학생들이 동료평가 결과를 확인할 수 있습니다."
       });
-
-      await fetchStats();
     } catch (error) {
-      console.error('배정 초기화 오류:', error);
+      console.error('동료평가 완료 처리 오류:', error);
       toast({
         title: "오류",
-        description: "배정 초기화에 실패했습니다.",
+        description: "동료평가 완료 처리에 실패했습니다.",
         variant: "destructive"
       });
     } finally {
-      setLoading(false);
+      setCompleting(false);
     }
-  };
-
-  const fetchArgumentationData = async () => {
-    setLoading(true);
-    try {
-      // 모든 논증 응답 가져오기 (모둠 및 클래스 정보 포함)
-      const { data: responses, error: responsesError } = await supabase
-        .from('argumentation_responses')
-        .select(`
-          id,
-          student_id,
-          response_text,
-          students!inner(name, group_name, class_name)
-        `)
-        .eq('activity_id', selectedActivity)
-        .eq('is_submitted', true);
-
-      if (responsesError) throw responsesError;
-
-      const data: ArgumentationData[] = [];
-
-      for (const response of responses || []) {
-        // 해당 응답에 대한 모든 평가 가져오기 (평가자의 모둠 및 클래스 정보 포함)
-        const { data: evaluations, error: evaluationsError } = await supabase
-          .from('peer_evaluations')
-          .select(`
-            evaluator_id,
-            evaluation_text,
-            students!inner(name, group_name, class_name)
-          `)
-          .eq('target_response_id', response.id)
-          .eq('is_completed', true);
-
-        if (evaluationsError) throw evaluationsError;
-
-        // 피드백 평가 가져오기
-        const { data: reflections, error: reflectionsError } = await supabase
-          .from('evaluation_reflections')
-          .select('usefulness_rating')
-          .eq('student_id', response.student_id)
-          .eq('activity_id', selectedActivity);
-
-        if (reflectionsError) throw reflectionsError;
-
-        const evaluationsWithRating = evaluations?.map((evaluation, index) => ({
-          evaluator_id: evaluation.evaluator_id,
-          evaluator_name: evaluation.students.name || '이름없음',
-          evaluator_group: evaluation.students.group_name,
-          evaluator_class: evaluation.students.class_name,
-          evaluation_text: evaluation.evaluation_text || '',
-          usefulness_rating: reflections?.[index]?.usefulness_rating
-        })) || [];
-
-        data.push({
-          student_id: response.student_id,
-          student_name: response.students.name || '이름없음',
-          group_name: response.students.group_name,
-          class_name: response.students.class_name,
-          argument_text: response.response_text,
-          evaluations: evaluationsWithRating
-        });
-      }
-
-      setArgumentationData(data);
-      setShowResults(true);
-    } catch (error) {
-      console.error('논증 데이터 가져오기 오류:', error);
-      toast({
-        title: "오류",
-        description: "데이터를 불러오는데 실패했습니다.",
-        variant: "destructive"
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDownloadCSV = () => {
-    const csvData = argumentationData.flatMap(arg => 
-      arg.evaluations.map(evaluation => ({
-        '학생ID': arg.student_id,
-        '학생이름': arg.student_name,
-        '학생클래스': arg.class_name || '-',
-        '학생모둠': arg.group_name || '-',
-        '논증내용': arg.argument_text,
-        '평가자ID': evaluation.evaluator_id,
-        '평가자이름': evaluation.evaluator_name,
-        '평가자클래스': evaluation.evaluator_class || '-',
-        '평가자모둠': evaluation.evaluator_group || '-',
-        '평가내용': evaluation.evaluation_text,
-        '도움정도평가': evaluation.usefulness_rating || '미평가'
-      }))
-    );
-
-    const csv = generateCSV(csvData, [
-      '학생ID', '학생이름', '학생클래스', '학생모둠', '논증내용', 
-      '평가자ID', '평가자이름', '평가자클래스', '평가자모둠', '평가내용', '도움정도평가'
-    ]);
-
-    downloadCSV(csv, `peer_evaluation_${activityTitle}_${new Date().toISOString().split('T')[0]}.csv`);
-  };
-
-  const decreaseEvaluations = () => {
-    if (evaluationsPerStudent > 1) {
-      setEvaluationsPerStudent(evaluationsPerStudent - 1);
-    }
-  };
-
-  const increaseEvaluations = () => {
-    setEvaluationsPerStudent(evaluationsPerStudent + 1);
   };
 
   if (selectedActivity === 'all') {
     return (
       <div className="text-center py-8 text-gray-500">
-        동료평가 관리를 위해 특정 논증 활동을 선택해주세요.
+        <p>특정 논증 활동을 선택해주세요.</p>
       </div>
     );
   }
 
-  const minStudents = evaluationsPerStudent + 1;
+  if (loading) {
+    return <div className="flex justify-center py-8">로딩 중...</div>;
+  }
+
+  const filteredStudents = selectedClass === 'all' 
+    ? studentStatuses 
+    : studentStatuses.filter(s => s.class_name === selectedClass);
 
   return (
-    <div className="space-y-4">
-      {/* 클래스별 분리 동료평가 안내 */}
-      <Card className="border-green-200 bg-green-50">
-        <CardContent className="pt-4">
-          <div className="flex items-start space-x-2">
-            <Info className="h-4 w-4 text-green-600 mt-0.5" />
-            <div className="text-sm text-green-800">
-              <p className="font-medium mb-1">클래스별 분리 동료평가</p>
-              <p><strong>✅ 클래스 분리:</strong> 각 클래스 학생들은 같은 클래스 내에서만 평가합니다.</p>
-              <p><strong>랜덤 배정:</strong> 같은 클래스의 다른 모둠 학생들을 랜덤하게 배정합니다.</p>
-              <p><strong>특정 배정:</strong> 같은 클래스에서 자신의 조번호에 지정된 숫자를 더한 조를 배정합니다.</p>
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <FileText className="h-5 w-5" />
+              <span>{activityTitle} - 동료평가 관리</span>
+              {selectedClass !== 'all' && (
+                <Badge variant="outline" className="ml-2">
+                  {selectedClass}
+                </Badge>
+              )}
+            </div>
+            <Button
+              variant="outline"
+              onClick={() => setShowStats(!showStats)}
+            >
+              {showStats ? '기본 보기' : '상세 통계'}
+            </Button>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {stats && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+              <div className="text-center">
+                <div className="text-2xl font-bold text-blue-600">{stats.submitted_responses}</div>
+                <div className="text-sm text-gray-600">제출된 응답</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-green-600">{stats.total_evaluations}</div>
+                <div className="text-sm text-gray-600">배정된 평가</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-purple-600">{stats.completed_evaluations}</div>
+                <div className="text-sm text-gray-600">완료된 평가</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-orange-600">{stats.completion_rate}%</div>
+                <div className="text-sm text-gray-600">완료율</div>
+              </div>
+            </div>
+          )}
+
+          {/* 배정 설정 */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-gray-50 rounded-lg mb-4">
+            <div>
+              <Label htmlFor="evaluations-per-student" className="text-sm font-medium">
+                학생당 평가 개수
+              </Label>
+              <Input
+                id="evaluations-per-student"
+                type="number"
+                min="1"
+                max="10"
+                value={evaluationsPerStudent}
+                onChange={(e) => setEvaluationsPerStudent(parseInt(e.target.value) || 2)}
+                className="mt-1"
+              />
+            </div>
+            
+            <div>
+              <Label htmlFor="group-offset" className="text-sm font-medium">
+                그룹 오프셋
+              </Label>
+              <Input
+                id="group-offset"
+                type="number"
+                min="1"
+                max="5"
+                value={groupOffset}
+                onChange={(e) => setGroupOffset(parseInt(e.target.value) || 1)}
+                className="mt-1"
+              />
+              <p className="text-xs text-gray-500 mt-1">1조→2조, 2조→3조 등</p>
+            </div>
+
+            <div className="md:col-span-2 flex items-end space-x-2">
+              <Button
+                onClick={handleRandomAssign}
+                disabled={assigning || !stats?.submitted_responses || stats.submitted_responses < 2}
+                className="flex items-center space-x-2"
+              >
+                <Shuffle className="h-4 w-4" />
+                <span>{assigning ? '배정 중...' : '랜덤 배정'}</span>
+              </Button>
+              
+              <Button
+                onClick={handleSpecificAssign}
+                disabled={assigning || !stats?.submitted_responses || stats.submitted_responses < (evaluationsPerStudent + 1)}
+                variant="secondary"
+                className="flex items-center space-x-2"
+              >
+                <Settings className="h-4 w-4" />
+                <span>{assigning ? '배정 중...' : '특정 배정'}</span>
+              </Button>
+              
+              <Button
+                onClick={handleCompleteEvaluations}
+                disabled={completing || !stats?.completed_evaluations}
+                variant="outline"
+                className="flex items-center space-x-2"
+              >
+                <CheckCircle className="h-4 w-4" />
+                <span>{completing ? '처리 중...' : '평가완료'}</span>
+              </Button>
             </div>
           </div>
+
+          {stats && stats.submitted_responses < (evaluationsPerStudent + 1) && (
+            <div className="flex items-center space-x-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg mb-4">
+              <AlertCircle className="h-4 w-4 text-yellow-600" />
+              <span className="text-sm text-yellow-700">
+                특정 배정을 진행하려면 최소 {evaluationsPerStudent + 1}명 이상의 학생이 논증을 제출해야 합니다.
+              </span>
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      {/* 통계 카드 */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        <div className="text-center p-4 bg-blue-50 rounded-lg">
-          <div className="text-2xl font-bold text-blue-600">{stats.submittedArguments}</div>
-          <div className="text-sm text-gray-600">논증 제출</div>
-        </div>
-        <div className="text-center p-4 bg-green-50 rounded-lg">
-          <div className="text-2xl font-bold text-green-600">{stats.assignedEvaluations}</div>
-          <div className="text-sm text-gray-600">평가 배정</div>
-        </div>
-        <div className="text-center p-4 bg-purple-50 rounded-lg">
-          <div className="text-2xl font-bold text-purple-600">{stats.completedEvaluations}</div>
-          <div className="text-sm text-gray-600">평가 완료</div>
-        </div>
-        <div className="text-center p-4 bg-orange-50 rounded-lg">
-          <div className="text-2xl font-bold text-orange-600">{stats.feedbackResponses}</div>
-          <div className="text-sm text-gray-600">피드백 응답</div>
-        </div>
-        <div className="text-center p-4 bg-gray-50 rounded-lg">
-          <div className="text-2xl font-bold text-gray-600">
-            {stats.assignedEvaluations > 0 ? Math.round((stats.completedEvaluations / stats.assignedEvaluations) * 100) : 0}%
-          </div>
-          <div className="text-sm text-gray-600">완료율</div>
-        </div>
-      </div>
-
-      {/* 동료평가 관리 버튼 */}
-      <div className="space-y-4">
-        {/* 평가할 학생 수 설정 */}
-        <div className="flex items-center space-x-2 bg-gray-50 px-3 py-2 rounded-lg">
-          <span className="text-sm font-medium">학생수:</span>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={decreaseEvaluations}
-            disabled={evaluationsPerStudent <= 1}
-            className="h-6 w-6 p-0"
-          >
-            <Minus className="h-3 w-3" />
-          </Button>
-          <span className="text-sm font-bold w-6 text-center">{evaluationsPerStudent}</span>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={increaseEvaluations}
-            className="h-6 w-6 p-0"
-          >
-            <Plus className="h-3 w-3" />
-          </Button>
-          <span className="text-xs text-gray-500">(최소 {minStudents}명 필요)</span>
-        </div>
-
-        {/* 랜덤 배정 */}
-        <div className="flex items-center space-x-4">
-          <Button
-            onClick={handleAssignEvaluations}
-            disabled={loading || stats.submittedArguments < minStudents}
-            className="flex items-center space-x-2"
-          >
-            <Shuffle className="h-4 w-4" />
-            <span>클래스별 동료평가 배정 (랜덤)</span>
-          </Button>
-        </div>
-
-        {/* 특정 배정 */}
-        <div className="flex items-center space-x-4">
-          <Button
-            onClick={handleAssignSpecificEvaluations}
-            disabled={loading || stats.submittedArguments < minStudents}
-            variant="outline"
-            className="flex items-center space-x-2"
-          >
-            <Users className="h-4 w-4" />
-            <span>클래스별 특정 배정</span>
-          </Button>
-          
-          <ToggleGroup type="single" value={groupOffset} onValueChange={setGroupOffset}>
-            <ToggleGroupItem value="1" aria-label="Plus 1">+1</ToggleGroupItem>
-            <ToggleGroupItem value="2" aria-label="Plus 2">+2</ToggleGroupItem>
-            <ToggleGroupItem value="3" aria-label="Plus 3">+3</ToggleGroupItem>
-            <ToggleGroupItem value="4" aria-label="Plus 4">+4</ToggleGroupItem>
-            <ToggleGroupItem value="5" aria-label="Plus 5">+5</ToggleGroupItem>
-          </ToggleGroup>
-        </div>
-
-        {/* 기타 버튼들 */}
-        <div className="flex items-center space-x-4">
-          <Button
-            onClick={handleCompletePeerEvaluation}
-            disabled={stats.completedEvaluations === 0}
-            variant="secondary"
-            className="flex items-center space-x-2"
-          >
-            <CheckCircle className="h-4 w-4" />
-            <span>동료평가 완료</span>
-          </Button>
-
-          {/* 배정 초기화 버튼 */}
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button
-                disabled={loading || stats.assignedEvaluations === 0}
-                variant="destructive"
-                className="flex items-center space-x-2"
-              >
-                <Trash2 className="h-4 w-4" />
-                <span>배정 초기화</span>
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>배정 초기화 확인</AlertDialogTitle>
-                <AlertDialogDescription>
-                  모든 동료평가 배정과 관련 데이터가 삭제됩니다. 이 작업은 되돌릴 수 없습니다.
-                  <br />
-                  <br />
-                  삭제될 데이터:
-                  <br />
-                  • 동료평가 배정 ({stats.assignedEvaluations}건)
-                  <br />
-                  • 완료된 평가 ({stats.completedEvaluations}건)
-                  <br />
-                  • 피드백 응답 ({stats.feedbackResponses}건)
-                  <br />
-                  <br />
-                  정말로 초기화하시겠습니까?
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>취소</AlertDialogCancel>
-                <AlertDialogAction onClick={handleResetAssignments}>
-                  초기화
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-
-          {/* 배정 현황 보기 버튼 */}
-          <Dialog open={showAssignments} onOpenChange={setShowAssignments}>
-            <DialogTrigger asChild>
-              <Button
-                disabled={loading || stats.assignedEvaluations === 0}
-                variant="outline"
-                className="flex items-center space-x-2"
-              >
-                <ClipboardList className="h-4 w-4" />
-                <span>배정 현황 보기</span>
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-7xl max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>동료평가 배정 현황</DialogTitle>
-              </DialogHeader>
-              <PeerEvaluationAssignmentDashboard 
-                activityId={selectedActivity} 
-                activityTitle={activityTitle} 
-              />
-            </DialogContent>
-          </Dialog>
-
-          <Dialog open={showResults} onOpenChange={setShowResults}>
-            <DialogTrigger asChild>
-              <Button
-                onClick={fetchArgumentationData}
-                disabled={loading || stats.completedEvaluations === 0}
-                variant="outline"
-                className="flex items-center space-x-2"
-              >
-                <Eye className="h-4 w-4" />
-                <span>평가 확인</span>
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle className="flex items-center justify-between">
-                  <span>동료평가 결과 - {activityTitle}</span>
-                  <Button
-                    onClick={handleDownloadCSV}
-                    size="sm"
-                    className="flex items-center space-x-2"
-                  >
-                    <Download className="h-4 w-4" />
-                    <span>CSV 다운로드</span>
-                  </Button>
-                </DialogTitle>
-              </DialogHeader>
-              
-              <div className="space-y-4">
-                {argumentationData.map((arg, index) => (
-                  <Card key={index}>
-                    <CardHeader>
-                      <CardTitle className="text-lg flex items-center space-x-2">
-                        <span>{arg.student_name} ({arg.student_id})</span>
-                        {arg.class_name && (
-                          <Badge variant="secondary">{arg.class_name}</Badge>
-                        )}
-                        {arg.group_name && (
-                          <Badge variant="outline">{arg.group_name}모둠</Badge>
-                        )}
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-4">
-                        <div>
-                          <h4 className="font-medium mb-2">논증 내용:</h4>
-                          <p className="text-sm bg-gray-50 p-3 rounded">{arg.argument_text}</p>
-                        </div>
-                        
-                        <div>
-                          <h4 className="font-medium mb-2">받은 평가:</h4>
-                          <div className="space-y-2">
-                            {arg.evaluations.map((evaluation, evalIndex) => (
-                              <div key={evalIndex} className="border rounded p-3">
-                                <div className="flex items-center justify-between mb-2">
-                                  <div className="flex items-center space-x-2">
-                                    <span className="font-medium text-sm">
-                                      평가자: {evaluation.evaluator_name} ({evaluation.evaluator_id})
-                                    </span>
-                                    {evaluation.evaluator_class && (
-                                      <Badge variant="secondary" className="text-xs">
-                                        {evaluation.evaluator_class}
-                                      </Badge>
-                                    )}
-                                    {evaluation.evaluator_group && (
-                                      <Badge variant="outline" className="text-xs">
-                                        {evaluation.evaluator_group}모둠
-                                      </Badge>
-                                    )}
-                                  </div>
-                                  {evaluation.usefulness_rating && (
-                                    <div className="flex items-center space-x-1">
-                                      <Star className="h-4 w-4 text-yellow-500" />
-                                      <span className="text-sm">{evaluation.usefulness_rating}/5</span>
-                                    </div>
-                                  )}
-                                </div>
-                                <p className="text-sm">{evaluation.evaluation_text}</p>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+      {showStats ? (
+        <PeerEvaluationStats activityId={selectedActivity} activityTitle={activityTitle} />
+      ) : (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <Users className="h-5 w-5" />
+                <span>학생별 동료평가 현황</span>
               </div>
-            </DialogContent>
-          </Dialog>
-        </div>
-      </div>
-
-      {stats.submittedArguments < minStudents && (
-        <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-          <p className="text-sm text-yellow-700">
-            동료평가를 진행하려면 최소 {minStudents}명 이상의 학생이 논증을 제출해야 합니다.
-            현재 {stats.submittedArguments}명이 제출했습니다.
-          </p>
-        </div>
+              <div className="text-sm text-gray-500">
+                총 {filteredStudents.length}명
+              </div>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {filteredStudents.map((student) => (
+                <div key={student.student_id} className="flex items-center justify-between p-3 border rounded-lg">
+                  <div className="flex items-center space-x-3">
+                    <div>
+                      <div className="font-medium">{student.name}</div>
+                      <div className="text-sm text-gray-600">
+                        {student.student_id} | {student.class_name}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center space-x-4 text-sm">
+                    <div className="flex items-center space-x-1">
+                      {student.has_submitted_response ? (
+                        <CheckCircle className="h-4 w-4 text-green-500" />
+                      ) : (
+                        <div className="h-4 w-4 rounded-full border-2 border-gray-300" />
+                      )}
+                      <span>응답 제출</span>
+                    </div>
+                    
+                    <div className="text-center">
+                      <Badge variant={student.completed_evaluations === student.assigned_evaluations && student.assigned_evaluations > 0 ? "default" : "secondary"}>
+                        평가: {student.completed_evaluations}/{student.assigned_evaluations}
+                      </Badge>
+                    </div>
+                    
+                    <div className="text-center">
+                      <Badge variant="outline">
+                        받은 평가: {student.received_evaluations}
+                      </Badge>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              
+              {filteredStudents.length === 0 && (
+                <div className="text-center py-8 text-gray-500">
+                  <p>해당 조건에 맞는 학생이 없습니다.</p>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
       )}
     </div>
   );
