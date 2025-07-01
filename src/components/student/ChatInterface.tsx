@@ -36,6 +36,8 @@ interface ArgumentationContext {
   setEvaluationText: (text: string) => void;
   reflectionText: string;
   setReflectionText: (text: string) => void;
+  finalRevisedArgument: string;
+  setFinalRevisedArgument: (text: string) => void;
   usefulnessRating: number;
   setUsefulnessRating: (rating: number) => void;
   peerResponse: any;
@@ -414,6 +416,16 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext, argument
                     </Button>
                   ))}
                 </div>
+              </div>
+              <div>
+                <h4 className="font-medium mb-2">최종 검토 반영:</h4>
+                <p className="text-sm text-gray-600 mb-2">받은 평가를 바탕으로 자신의 주장을 최종적으로 수정해서 작성해주세요.</p>
+                <Textarea
+                  value={argumentationContext.finalRevisedArgument}
+                  onChange={(e) => argumentationContext.setFinalRevisedArgument(e.target.value)}
+                  placeholder="평가를 바탕으로 수정된 최종 주장을 작성해주세요..."
+                  className="min-h-32"
+                />
               </div>
               <div className="flex space-x-2">
                 <Button onClick={argumentationContext.submitReflection}>저장</Button>

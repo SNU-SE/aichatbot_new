@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -25,6 +24,7 @@ const ArgumentationActivity = ({ activity, studentId, onBack }: ArgumentationAct
   const [argumentText, setArgumentText] = useState('');
   const [evaluationText, setEvaluationText] = useState('');
   const [reflectionText, setReflectionText] = useState('');
+  const [finalRevisedArgument, setFinalRevisedArgument] = useState('');
   const [usefulnessRating, setUsefulnessRating] = useState(3);
   const [peerResponse, setPeerResponse] = useState<any>(null);
   const [peerEvaluations, setPeerEvaluations] = useState<any[]>([]);
@@ -53,6 +53,7 @@ const ArgumentationActivity = ({ activity, studentId, onBack }: ArgumentationAct
 
       if (argResponse) {
         setArgumentText(argResponse.response_text);
+        setFinalRevisedArgument(argResponse.final_revised_argument || '');
         setIsSubmitted(argResponse.is_submitted);
       }
 
@@ -204,7 +205,8 @@ const ArgumentationActivity = ({ activity, studentId, onBack }: ArgumentationAct
     }
 
     try {
-      const { error } = await supabase
+      // 평가 성찰 저장
+      const { error: reflectionError } = await supabase
         .from('evaluation_reflections')
         .upsert({
           student_id: studentId,
@@ -215,7 +217,21 @@ const ArgumentationActivity = ({ activity, studentId, onBack }: ArgumentationAct
           onConflict: 'student_id,activity_id'
         });
 
-      if (error) throw error;
+      if (reflectionError) throw reflectionError;
+
+      // 최종 수정 주장이 있다면 저장
+      if (finalRevisedArgument.trim()) {
+        const { error: argumentError } = await supabase
+          .from('argumentation_responses')
+          .update({
+            final_revised_argument: finalRevisedArgument,
+            final_revision_submitted_at: new Date().toISOString()
+          })
+          .eq('activity_id', activity.id)
+          .eq('student_id', studentId);
+
+        if (argumentError) throw argumentError;
+      }
 
       setActiveTask('none');
       
@@ -325,6 +341,8 @@ const ArgumentationActivity = ({ activity, studentId, onBack }: ArgumentationAct
               setEvaluationText,
               reflectionText,
               setReflectionText,
+              finalRevisedArgument,
+              setFinalRevisedArgument,
               usefulnessRating,
               setUsefulnessRating,
               peerResponse,
