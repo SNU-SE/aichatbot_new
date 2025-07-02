@@ -1,341 +1,294 @@
+
 import { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { useChecklistProgress } from '@/hooks/useChecklistProgress';
-import ChatInterface from './ChatInterface';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Textarea } from '@/components/ui/textarea';
+import { ArrowLeft, Send, Save, RefreshCw, AlertCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { Activity } from '@/types/activity';
+import ChatInterface from './ChatInterface';
+import ModuleProgress from './ModuleProgress';
+import { useSessionRecovery } from '@/hooks/useSessionRecovery';
+import { Badge } from '@/components/ui/badge';
 
 interface ArgumentationActivityProps {
-  activity: any;
+  activity: Activity;
   studentId: string;
   onBack: () => void;
+  saveDraft?: (studentId: string, activityId: string, workType: string, content: any) => Promise<void>;
+  loadDraft?: (studentId: string, activityId: string, workType: string) => Promise<any>;
 }
 
-const ArgumentationActivity = ({ activity, studentId, onBack }: ArgumentationActivityProps) => {
-  const { items, loading, toggleItem } = useChecklistProgress({ 
-    studentId, 
-    activityId: activity.id 
-  });
-  const [activeTask, setActiveTask] = useState<'none' | 'argument' | 'peer-evaluation' | 'evaluation-check'>('none');
-  
-  const [argumentText, setArgumentText] = useState('');
-  const [evaluationText, setEvaluationText] = useState('');
-  const [reflectionText, setReflectionText] = useState('');
-  const [finalRevisedArgument, setFinalRevisedArgument] = useState('');
-  const [usefulnessRating, setUsefulnessRating] = useState(3);
-  const [peerResponse, setPeerResponse] = useState<any>(null);
-  const [peerEvaluations, setPeerEvaluations] = useState<any[]>([]);
+const ArgumentationActivity = ({ 
+  activity, 
+  studentId, 
+  onBack, 
+  saveDraft, 
+  loadDraft 
+}: ArgumentationActivityProps) => {
+  const [argument, setArgument] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
-  const [isPeerEvaluationCompleted, setIsPeerEvaluationCompleted] = useState(false);
+  const [isDraftSaving, setIsDraftSaving] = useState(false);
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const { toast } = useToast();
-
-  // 컴포넌트 마운트 시 스크롤을 상단으로 고정
-  useEffect(() => {
-    window.scrollTo(0, 0);
-  }, []);
+  const { updateSession } = useSessionRecovery();
 
   useEffect(() => {
-    checkStudentStatus();
-    checkPeerEvaluationStatus();
+    loadExistingResponse();
+    loadSavedDraft();
   }, [activity.id, studentId]);
 
-  const checkStudentStatus = async () => {
+  // 자동 저장 (30초마다)
+  useEffect(() => {
+    if (!argument.trim() || isSubmitted) return;
+
+    const autoSaveInterval = setInterval(() => {
+      handleSaveDraft();
+    }, 30000); // 30초
+
+    return () => clearInterval(autoSaveInterval);
+  }, [argument, isSubmitted]);
+
+  const loadExistingResponse = async () => {
     try {
-      // Check if student has submitted argument
-      const { data: argResponse } = await supabase
+      const { data, error } = await supabase
         .from('argumentation_responses')
         .select('*')
-        .eq('activity_id', activity.id)
         .eq('student_id', studentId)
+        .eq('activity_id', activity.id)
         .single();
 
-      if (argResponse) {
-        setArgumentText(argResponse.response_text);
-        setFinalRevisedArgument(argResponse.final_revised_argument || '');
-        setIsSubmitted(argResponse.is_submitted);
-      }
-
-      // Check if evaluation reflection exists
-      const { data: reflection } = await supabase
-        .from('evaluation_reflections')
-        .select('*')
-        .eq('activity_id', activity.id)
-        .eq('student_id', studentId)
-        .single();
-
-      if (reflection) {
-        setReflectionText(reflection.reflection_text);
-        setUsefulnessRating(reflection.usefulness_rating || 3);
+      if (data && !error) {
+        setArgument(data.response_text);
+        setIsSubmitted(data.is_submitted || false);
       }
     } catch (error) {
-      console.error('상태 확인 실패:', error);
+      console.error('Failed to load existing response:', error);
     }
   };
 
-  const checkPeerEvaluationStatus = async () => {
+  const loadSavedDraft = async () => {
+    if (!loadDraft) return;
+
     try {
-      // Check for assigned peer evaluations
-      const { data: assignments } = await supabase
-        .from('peer_evaluations')
-        .select(`
-          *,
-          argumentation_responses!target_response_id(response_text)
-        `)
-        .eq('evaluator_id', studentId)
-        .eq('activity_id', activity.id);
-
-      if (assignments && assignments.length > 0) {
-        setPeerResponse({ assignments });
-        
-        // 모든 평가가 완료되었는지 확인 (모든 assignments가 is_completed = true)
-        const allCompleted = assignments.every(assignment => assignment.is_completed);
-        setIsPeerEvaluationCompleted(allCompleted);
-        
-        if (assignments[0].evaluation_text) {
-          setEvaluationText(assignments[0].evaluation_text);
-        }
-      }
-
-      // Check if peer evaluations are available for this student's response
-      const { data: studentResponse } = await supabase
-        .from('argumentation_responses')
-        .select('id')
-        .eq('student_id', studentId)
-        .eq('activity_id', activity.id)
-        .single();
-
-      if (studentResponse) {
-        const { data: evaluations } = await supabase
-          .from('peer_evaluations')
-          .select('*')
-          .eq('target_response_id', studentResponse.id)
-          .eq('is_completed', true);
-
-        if (evaluations && evaluations.length > 0) {
-          setPeerEvaluations(evaluations);
-        }
+      const draft = await loadDraft(studentId, activity.id, 'argumentation');
+      if (draft && draft.argument && !isSubmitted) {
+        setArgument(draft.argument);
+        setLastSaved(new Date(draft.savedAt));
+        toast({
+          title: "임시 저장된 내용 복원",
+          description: "이전에 작성하던 내용을 불러왔습니다."
+        });
       }
     } catch (error) {
-      console.error('동료평가 상태 확인 실패:', error);
+      console.error('Failed to load draft:', error);
     }
   };
 
-  const submitArgument = async () => {
-    if (!argumentText.trim()) {
+  const handleSaveDraft = async () => {
+    if (!saveDraft || !argument.trim() || isSubmitted) return;
+
+    setIsDraftSaving(true);
+    try {
+      await saveDraft(studentId, activity.id, 'argumentation', {
+        argument,
+        savedAt: new Date().toISOString()
+      });
+      setLastSaved(new Date());
+    } catch (error) {
+      console.error('Failed to save draft:', error);
+    } finally {
+      setIsDraftSaving(false);
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (!argument.trim()) {
       toast({
         title: "오류",
-        description: "논증을 입력해주세요.",
+        description: "논증을 작성해주세요.",
         variant: "destructive"
       });
       return;
     }
 
+    setIsSubmitting(true);
+    
     try {
+      // 세션 업데이트
+      await updateSession(studentId);
+
       const { error } = await supabase
         .from('argumentation_responses')
         .upsert({
-          activity_id: activity.id,
-          student_id: studentId,
-          response_text: argumentText,
-          is_submitted: true
-        }, {
-          onConflict: 'activity_id,student_id'
-        });
-
-      if (error) throw error;
-
-      setIsSubmitted(true);
-      setActiveTask('none');
-      
-      toast({
-        title: "성공",
-        description: "논증이 제출되었습니다."
-      });
-    } catch (error: any) {
-      toast({
-        title: "오류",
-        description: "논증 제출에 실패했습니다.",
-        variant: "destructive"
-      });
-    }
-  };
-
-  const submitPeerEvaluation = async () => {
-    // 이 함수는 ChatInterface에서 전체 제출을 처리하므로 빈 함수로 유지
-    // 실제 제출은 ChatInterface의 submitAllPeerEvaluations에서 처리됩니다
-    setActiveTask('none');
-    setIsPeerEvaluationCompleted(true);
-    
-    // 상태 재확인
-    await checkPeerEvaluationStatus();
-    
-    toast({
-      title: "성공",
-      description: "동료평가가 제출되었습니다."
-    });
-  };
-
-  const submitReflection = async () => {
-    if (!reflectionText.trim()) {
-      toast({
-        title: "오류",
-        description: "성찰 내용을 입력해주세요.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    try {
-      // 평가 성찰 저장
-      const { error: reflectionError } = await supabase
-        .from('evaluation_reflections')
-        .upsert({
           student_id: studentId,
           activity_id: activity.id,
-          reflection_text: reflectionText,
-          usefulness_rating: usefulnessRating
+          response_text: argument,
+          is_submitted: true,
+          submitted_at: new Date().toISOString()
         }, {
           onConflict: 'student_id,activity_id'
         });
 
-      if (reflectionError) throw reflectionError;
-
-      // 최종 수정 주장이 있다면 저장
-      if (finalRevisedArgument.trim()) {
-        const { error: argumentError } = await supabase
-          .from('argumentation_responses')
-          .update({
-            final_revised_argument: finalRevisedArgument,
-            final_revision_submitted_at: new Date().toISOString()
-          })
-          .eq('activity_id', activity.id)
-          .eq('student_id', studentId);
-
-        if (argumentError) throw argumentError;
+      if (error) {
+        throw error;
       }
 
-      setActiveTask('none');
+      setIsSubmitted(true);
+      toast({
+        title: "제출 완료",
+        description: "논증이 성공적으로 제출되었습니다."
+      });
+
+      // 임시 저장 내용 삭제 (제출 완료 후)
+      if (saveDraft) {
+        await saveDraft(studentId, activity.id, 'argumentation', {});
+      }
       
-      toast({
-        title: "성공",
-        description: "평가 확인이 제출되었습니다."
-      });
     } catch (error: any) {
-      toast({
-        title: "오류",
-        description: "평가 확인 제출에 실패했습니다.",
-        variant: "destructive"
-      });
+      console.error('Submission failed:', error);
+      
+      if (error.message?.includes('not found') || error.message?.includes('student')) {
+        toast({
+          title: "등록되지 않은 사용자입니다",
+          description: "관리자에게 문의하거나 다시 로그인해주세요.",
+          variant: "destructive"
+        });
+      } else {
+        toast({
+          title: "제출 실패",
+          description: "네트워크 연결을 확인하고 다시 시도해주세요.",
+          variant: "destructive"
+        });
+      }
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center py-12">
-        <div className="text-gray-500">논증 정보를 불러오는 중...</div>
-      </div>
-    );
-  }
-
   return (
-    <div className="h-screen flex bg-gray-50 overflow-hidden p-4">
-      {/* Left Panel: Checklist and Controls */}
-      <div className="w-80 bg-white shadow-lg flex flex-col flex-shrink-0 rounded-lg">
-        <div className="p-4 border-b">
-          <h2 className="text-lg font-semibold">{activity.title}</h2>
-          <p className="text-sm text-gray-600 mt-1">논증 활동</p>
-        </div>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <Button 
+          onClick={onBack}
+          variant="outline"
+          className="flex items-center space-x-2"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          <span>활동 목록으로</span>
+        </Button>
         
-        {/* Checklist */}
-        <div className="p-4">
-          <Card className="border-0 shadow-none rounded-lg">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-lg">체크리스트</CardTitle>
+        {lastSaved && (
+          <div className="flex items-center space-x-2 text-sm text-gray-500">
+            <Save className="h-4 w-4" />
+            <span>마지막 저장: {lastSaved.toLocaleTimeString()}</span>
+            {isDraftSaving && <RefreshCw className="h-3 w-3 animate-spin" />}
+          </div>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between">
+                <span>{activity.title}</span>
+                {isSubmitted && (
+                  <Badge variant="default" className="bg-green-600">
+                    제출 완료
+                  </Badge>
+                )}
+              </CardTitle>
             </CardHeader>
-            <CardContent className="pt-0">
-              <div className="space-y-2" style={{ height: '160px', overflowY: 'auto' }}>
-                {items.slice(0, 5).map((item) => (
-                  <div key={item.id} className="flex items-start space-x-2 p-2 rounded-lg hover:bg-gray-50">
-                    <Checkbox 
-                      checked={item.is_completed}
-                      onCheckedChange={() => toggleItem(item.id)}
-                      className="mt-1"
-                    />
-                    <span className={`text-sm ${item.is_completed ? 'text-gray-500 line-through' : 'text-gray-900'}`}>
-                      {item.description}
-                    </span>
+            <CardContent>
+              <div className="space-y-4">
+                <div>
+                  <h3 className="font-semibold mb-2">활동 내용</h3>
+                  <div className="prose prose-sm max-w-none">
+                    {typeof activity.content === 'string' 
+                      ? activity.content 
+                      : JSON.stringify(activity.content)
+                    }
                   </div>
-                ))}
+                </div>
+                
+                {activity.final_question && (
+                  <div>
+                    <h3 className="font-semibold mb-2">논증 질문</h3>
+                    <p className="text-gray-700 bg-blue-50 p-3 rounded-lg">
+                      {activity.final_question}
+                    </p>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
-        </div>
 
-        {/* Action Buttons */}
-        <div className="px-4 pb-4">
-          <div className="space-y-2">
-            <Button 
-              onClick={() => setActiveTask(activeTask === 'argument' ? 'none' : 'argument')}
-              className="w-full rounded-lg"
-              disabled={isSubmitted}
-              variant={activeTask === 'argument' ? 'default' : 'outline'}
-            >
-              {isSubmitted ? '논증 제출완료' : '논증 입력'}
-            </Button>
-            <Button 
-              onClick={() => setActiveTask(activeTask === 'peer-evaluation' ? 'none' : 'peer-evaluation')}
-              className="w-full rounded-lg"
-              variant={activeTask === 'peer-evaluation' ? 'default' : 'outline'}
-              disabled={isPeerEvaluationCompleted || !peerResponse}
-            >
-              {isPeerEvaluationCompleted ? '동료 평가완료' : '동료 평가'}
-            </Button>
-            <Button 
-              onClick={() => setActiveTask(activeTask === 'evaluation-check' ? 'none' : 'evaluation-check')}
-              className="w-full rounded-lg"
-              variant={activeTask === 'evaluation-check' ? 'default' : 'outline'}
-              disabled={peerEvaluations.length === 0}
-            >
-              평가 확인
-            </Button>
-          </div>
-        </div>
-      </div>
-
-      {/* Right Panel: Chat Interface */}
-      <div className="flex-1 min-w-0 flex flex-col overflow-hidden p-4">
-        <div className="flex-1 min-h-0 rounded-lg overflow-hidden">
-          <ChatInterface 
-            activity={activity}
+          <ModuleProgress 
+            activityId={activity.id}
             studentId={studentId}
-            onBack={onBack}
-            checklistContext={{
-              currentStep: items.find(item => !item.is_completed)?.description || "모든 단계가 완료되었습니다.",
-              allSteps: items
-            }}
-            argumentationContext={{
-              activeTask,
-              setActiveTask,
-              argumentText,
-              setArgumentText,
-              evaluationText,
-              setEvaluationText,
-              reflectionText,
-              setReflectionText,
-              finalRevisedArgument,
-              setFinalRevisedArgument,
-              usefulnessRating,
-              setUsefulnessRating,
-              peerResponse,
-              peerEvaluations,
-              isSubmitted,
-              submitArgument,
-              submitPeerEvaluation,
-              submitReflection
-            }}
+            totalModules={activity.modules_count || 1}
+          />
+        </div>
+
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>논증 작성</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <Textarea
+                  value={argument}
+                  onChange={(e) => setArgument(e.target.value)}
+                  placeholder="여기에 논증을 작성해주세요..."
+                  className="min-h-[300px]"
+                  disabled={isSubmitted}
+                />
+                
+                <div className="flex justify-between items-center">
+                  <div className="flex space-x-2">
+                    {!isSubmitted && (
+                      <Button
+                        onClick={handleSaveDraft}
+                        variant="outline"
+                        disabled={isDraftSaving || !argument.trim()}
+                        className="flex items-center space-x-2"
+                      >
+                        {isDraftSaving ? (
+                          <RefreshCw className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Save className="h-4 w-4" />
+                        )}
+                        <span>임시 저장</span>
+                      </Button>
+                    )}
+                  </div>
+                  
+                  {!isSubmitted && (
+                    <Button
+                      onClick={handleSubmit}
+                      disabled={isSubmitting || !argument.trim()}
+                      className="flex items-center space-x-2"
+                    >
+                      {isSubmitting ? (
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Send className="h-4 w-4" />
+                      )}
+                      <span>제출하기</span>
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <ChatInterface 
+            activityId={activity.id}
+            studentId={studentId}
           />
         </div>
       </div>

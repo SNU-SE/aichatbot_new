@@ -2,20 +2,18 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { LogOut, Users, Settings, BookOpen, BarChart3, Monitor, GraduationCap } from 'lucide-react';
+import { LogOut, Settings, Users, Activity, MessageCircle, BarChart3, Monitor } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useToast } from '@/hooks/use-toast';
-
-// Import admin components
 import StudentManagement from '@/components/admin/StudentManagement';
-import AISettings from '@/components/admin/AISettings';
 import ActivityManagement from '@/components/admin/ActivityManagement';
+import AISettings from '@/components/admin/AISettings';
 import RealTimeMonitoring from '@/components/admin/RealTimeMonitoring';
 import StudentRecords from '@/components/admin/StudentRecords';
-import ClassManagement from '@/components/admin/ClassManagement';
+import SessionMonitoring from '@/components/admin/enhanced/SessionMonitoring';
+import { useToast } from '@/hooks/use-toast';
 
 const AdminDashboard = () => {
-  const [activeTab, setActiveTab] = useState('monitoring');
+  const [activeTab, setActiveTab] = useState('students');
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -40,8 +38,8 @@ const AdminDashboard = () => {
                 <Settings className="h-6 w-6 text-white" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">관리자 대시보드</h1>
-                <p className="text-sm text-gray-600">관리자</p>
+                <h1 className="text-2xl font-bold text-gray-900">AI 학습 도우미 관리자</h1>
+                <p className="text-sm text-gray-600">시스템 관리 및 모니터링</p>
               </div>
             </div>
             <Button 
@@ -60,54 +58,54 @@ const AdminDashboard = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="grid w-full grid-cols-6">
-            <TabsTrigger value="monitoring" className="flex items-center space-x-2">
-              <Monitor className="h-4 w-4" />
-              <span>실시간 모니터링</span>
-            </TabsTrigger>
             <TabsTrigger value="students" className="flex items-center space-x-2">
               <Users className="h-4 w-4" />
-              <span>학생 관리</span>
-            </TabsTrigger>
-            <TabsTrigger value="class-management" className="flex items-center space-x-2">
-              <GraduationCap className="h-4 w-4" />
-              <span>수업 관리</span>
+              <span>학생관리</span>
             </TabsTrigger>
             <TabsTrigger value="activities" className="flex items-center space-x-2">
-              <BookOpen className="h-4 w-4" />
-              <span>수업 활동</span>
+              <Activity className="h-4 w-4" />
+              <span>활동관리</span>
+            </TabsTrigger>
+            <TabsTrigger value="ai-settings" className="flex items-center space-x-2">
+              <Settings className="h-4 w-4" />
+              <span>AI설정</span>
+            </TabsTrigger>
+            <TabsTrigger value="monitoring" className="flex items-center space-x-2">
+              <MessageCircle className="h-4 w-4" />
+              <span>실시간모니터</span>
+            </TabsTrigger>
+            <TabsTrigger value="sessions" className="flex items-center space-x-2">
+              <Monitor className="h-4 w-4" />
+              <span>세션모니터</span>
             </TabsTrigger>
             <TabsTrigger value="records" className="flex items-center space-x-2">
               <BarChart3 className="h-4 w-4" />
-              <span>학습 기록</span>
-            </TabsTrigger>
-            <TabsTrigger value="settings" className="flex items-center space-x-2">
-              <Settings className="h-4 w-4" />
-              <span>AI 설정</span>
+              <span>학습기록</span>
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="monitoring">
-            <RealTimeMonitoring />
-          </TabsContent>
-
           <TabsContent value="students">
             <StudentManagement />
-          </TabsContent>
-
-          <TabsContent value="class-management">
-            <ClassManagement />
           </TabsContent>
 
           <TabsContent value="activities">
             <ActivityManagement />
           </TabsContent>
 
-          <TabsContent value="records">
-            <StudentRecords />
+          <TabsContent value="ai-settings">
+            <AISettings />
           </TabsContent>
 
-          <TabsContent value="settings">
-            <AISettings />
+          <TabsContent value="monitoring">
+            <RealTimeMonitoring />
+          </TabsContent>
+
+          <TabsContent value="sessions">
+            <SessionMonitoring />
+          </TabsContent>
+
+          <TabsContent value="records">
+            <StudentRecords />
           </TabsContent>
         </Tabs>
       </div>

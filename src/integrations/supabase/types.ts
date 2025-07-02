@@ -644,6 +644,44 @@ export type Database = {
           },
         ]
       }
+      student_work_drafts: {
+        Row: {
+          activity_id: string
+          created_at: string | null
+          draft_content: Json
+          id: string
+          student_id: string
+          updated_at: string | null
+          work_type: string
+        }
+        Insert: {
+          activity_id: string
+          created_at?: string | null
+          draft_content: Json
+          id?: string
+          student_id: string
+          updated_at?: string | null
+          work_type: string
+        }
+        Update: {
+          activity_id?: string
+          created_at?: string | null
+          draft_content?: Json
+          id?: string
+          student_id?: string
+          updated_at?: string | null
+          work_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "student_work_drafts_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "activities"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       students: {
         Row: {
           class_name: string
@@ -735,6 +773,10 @@ export type Database = {
       binary_quantize: {
         Args: { "": string } | { "": unknown }
         Returns: unknown
+      }
+      cleanup_inactive_sessions: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
       }
       delete_activity_with_related_data: {
         Args: { activity_id_param: string }
@@ -861,6 +903,10 @@ export type Database = {
       sparsevec_typmod_in: {
         Args: { "": unknown[] }
         Returns: number
+      }
+      update_student_session: {
+        Args: { student_id_param: string }
+        Returns: undefined
       }
       vector_avg: {
         Args: { "": number[] }
