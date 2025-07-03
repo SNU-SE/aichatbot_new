@@ -174,7 +174,7 @@ const ClassManagement = () => {
           .eq('student_id', status.student_id)
           .eq('activity_id', selectedActivity);
 
-        // 동료평가 데이터
+        // 동료평가 데이터 (평가한 것들)
         const { data: evaluations } = await supabase
           .from('peer_evaluations')
           .select(`
@@ -186,6 +186,21 @@ const ClassManagement = () => {
           `)
           .eq('evaluator_id', status.student_id)
           .eq('activity_id', selectedActivity);
+
+        // 받은 동료평가 데이터 (평가자 정보 포함)
+        const { data: receivedEvaluations } = await supabase
+          .from('peer_evaluations')
+          .select(`
+            *,
+            argumentation_responses!target_response_id(
+              student_id,
+              response_text
+            ),
+            students!evaluator_id(name, student_id)
+          `)
+          .eq('argumentation_responses.student_id', status.student_id)
+          .eq('activity_id', selectedActivity)
+          .eq('is_completed', true);
 
         // 평가 성찰 데이터
         const { data: reflections } = await supabase
@@ -211,7 +226,10 @@ const ClassManagement = () => {
             '내용': response.response_text,
             '제출일시': response.submitted_at,
             '최종수정논증': response.final_revised_argument || '',
-            '최종수정일시': response.final_revision_submitted_at || ''
+            '최종수정일시': response.final_revision_submitted_at || '',
+            '평가자': '',
+            '평가자학번': '',
+            '유용성점수': ''
           });
         });
 
@@ -220,11 +238,30 @@ const ClassManagement = () => {
             '학생ID': status.student_id,
             '학생명': status.name || '이름 없음',
             '클래스': status.class_name,
-            '유형': '동료 평가',
+            '유형': '동료 평가 (작성)',
             '내용': evaluation.evaluation_text || '',
             '제출일시': evaluation.submitted_at || '',
             '평가대상': evaluation.argumentation_responses?.students?.name || '알 수 없음',
-            '완료여부': evaluation.is_completed ? '완료' : '미완료'
+            '완료여부': evaluation.is_completed ? '완료' : '미완료',
+            '평가자': '',
+            '평가자학번': '',
+            '유용성점수': ''
+          });
+        });
+
+        // 받은 동료평가 데이터 (평가자 정보 포함)
+        receivedEvaluations?.forEach(evaluation => {
+          csvData.push({
+            '학생ID': status.student_id,
+            '학생명': status.name || '이름 없음',
+            '클래스': status.class_name,
+            '유형': '동료 평가 (받음)',
+            '내용': evaluation.evaluation_text || '',
+            '제출일시': evaluation.submitted_at || '',
+            '평가자': evaluation.students?.name || '알 수 없음',
+            '평가자학번': evaluation.students?.student_id || '',
+            '완료여부': evaluation.is_completed ? '완료' : '미완료',
+            '유용성점수': ''
           });
         });
 
@@ -236,7 +273,10 @@ const ClassManagement = () => {
             '유형': '평가 성찰',
             '내용': reflection.reflection_text,
             '유익함점수': reflection.usefulness_rating,
-            '제출일시': reflection.submitted_at
+            '제출일시': reflection.submitted_at,
+            '평가자': '',
+            '평가자학번': '',
+            '유용성점수': reflection.usefulness_rating
           });
         });
 
@@ -246,7 +286,10 @@ const ClassManagement = () => {
           '클래스': status.class_name,
           '유형': '채팅 메시지 수',
           '내용': `총 ${chatLogs?.length || 0}개 메시지`,
-          '제출일시': ''
+          '제출일시': '',
+          '평가자': '',
+          '평가자학번': '',
+          '유용성점수': ''
         });
       }
 
@@ -260,7 +303,8 @@ const ClassManagement = () => {
 
       const csv = generateCSV(csvData, [
         '학생ID', '학생명', '클래스', '유형', '내용', '제출일시', 
-        '최종수정논증', '최종수정일시', '평가대상', '완료여부', '유익함점수'
+        '최종수정논증', '최종수정일시', '평가대상', '완료여부', '유익함점수',
+        '평가자', '평가자학번', '유용성점수'
       ]);
       
       const activityInfo = getSelectedActivityInfo();

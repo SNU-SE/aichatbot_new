@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -43,16 +42,32 @@ interface ChecklistHistory {
   reset_at: string | null;
 }
 
+interface PeerEvaluationHistory {
+  id: string;
+  student_id: string;
+  activity_id: string;
+  evaluation_type: 'given' | 'received';
+  evaluation_text: string;
+  evaluator_name: string;
+  evaluator_id: string;
+  target_name: string;
+  target_id: string;
+  submitted_at: string;
+  activity_title: string;
+}
+
 interface UnifiedLogEntry {
   id: string;
   timestamp: string;
   student_id: string;
-  type: 'chat' | 'checklist';
+  type: 'chat' | 'checklist' | 'peer_evaluation';
   content: string;
   activity_id?: string | null;
   activity_title?: string;
   sender?: string;
   is_reset?: boolean;
+  evaluator_name?: string;
+  evaluation_type?: 'given' | 'received';
 }
 
 const StudentRecords = () => {
@@ -60,6 +75,7 @@ const StudentRecords = () => {
   const [students, setStudents] = useState<Student[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [checklistHistory, setChecklistHistory] = useState<ChecklistHistory[]>([]);
+  const [peerEvaluationHistory, setPeerEvaluationHistory] = useState<PeerEvaluationHistory[]>([]);
   const [unifiedLogs, setUnifiedLogs] = useState<UnifiedLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -76,7 +92,7 @@ const StudentRecords = () => {
 
   useEffect(() => {
     createUnifiedLogs();
-  }, [chatLogs, checklistHistory]);
+  }, [chatLogs, checklistHistory, peerEvaluationHistory]);
 
   const fetchData = async () => {
     try {
@@ -124,6 +140,69 @@ const StudentRecords = () => {
         .order('completed_at', { ascending: false });
 
       if (historyError) throw historyError;
+
+      // 동료평가 히스토리 가져오기 (평가한 것과 받은 것 모두)
+      const { data: givenEvaluations } = await supabase
+        .from('peer_evaluations')
+        .select(`
+          *,
+          activities!inner(title),
+          argumentation_responses!target_response_id(
+            students!argumentation_responses_student_id_fkey(name, student_id)
+          ),
+          students!evaluator_id(name)
+        `)
+        .eq('is_completed', true);
+
+      const { data: receivedEvaluations } = await supabase
+        .from('peer_evaluations')
+        .select(`
+          *,
+          activities!inner(title),
+          argumentation_responses!target_response_id(
+            student_id,
+            students!argumentation_responses_student_id_fkey(name)
+          ),
+          students!evaluator_id(name, student_id)
+        `)
+        .eq('is_completed', true);
+
+      // 평가 히스토리 통합
+      const allPeerEvaluations: PeerEvaluationHistory[] = [];
+
+      // 평가한 것들
+      givenEvaluations?.forEach(evaluation => {
+        allPeerEvaluations.push({
+          id: `given_${evaluation.id}`,
+          student_id: evaluation.evaluator_id,
+          activity_id: evaluation.activity_id,
+          evaluation_type: 'given',
+          evaluation_text: evaluation.evaluation_text || '',
+          evaluator_name: evaluation.students?.name || '알 수 없음',
+          evaluator_id: evaluation.evaluator_id,
+          target_name: evaluation.argumentation_responses?.students?.name || '알 수 없음',
+          target_id: evaluation.argumentation_responses?.students?.student_id || '',
+          submitted_at: evaluation.submitted_at || '',
+          activity_title: evaluation.activities?.title || '알 수 없는 활동'
+        });
+      });
+
+      // 받은 것들
+      receivedEvaluations?.forEach(evaluation => {
+        allPeerEvaluations.push({
+          id: `received_${evaluation.id}`,
+          student_id: evaluation.argumentation_responses?.student_id || '',
+          activity_id: evaluation.activity_id,
+          evaluation_type: 'received',
+          evaluation_text: evaluation.evaluation_text || '',
+          evaluator_name: evaluation.students?.name || '알 수 없음',
+          evaluator_id: evaluation.students?.student_id || '',
+          target_name: evaluation.argumentation_responses?.students?.name || '알 수 없음',
+          target_id: evaluation.argumentation_responses?.student_id || '',
+          submitted_at: evaluation.submitted_at || '',
+          activity_title: evaluation.activities?.title || '알 수 없는 활동'
+        });
+      });
 
       // 현재 진행도와 히스토리를 통합
       const currentProgressFormatted = currentProgress?.map(p => ({
@@ -194,6 +273,25 @@ const StudentRecords = () => {
       });
     });
 
+    // 동료평가 히스토리 추가
+    peerEvaluationHistory.forEach(evaluation => {
+      const content = evaluation.evaluation_type === 'given' 
+        ? `${evaluation.target_name}에게 평가 작성: ${evaluation.evaluation_text.substring(0, 50)}...`
+        : `${evaluation.evaluator_name}으로부터 평가 받음: ${evaluation.evaluation_text.substring(0, 50)}...`;
+      
+      unified.push({
+        id: `peer_eval_${evaluation.id}`,
+        timestamp: evaluation.submitted_at,
+        student_id: evaluation.student_id,
+        type: 'peer_evaluation',
+        content: content,
+        activity_id: evaluation.activity_id,
+        activity_title: evaluation.activity_title,
+        evaluator_name: evaluation.evaluator_name,
+        evaluation_type: evaluation.evaluation_type
+      });
+    });
+
     // 시간순으로 정렬 (최신순)
     unified.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
     setUnifiedLogs(unified);
@@ -213,13 +311,16 @@ const StudentRecords = () => {
       student_id: log.student_id,
       student_name: getStudentInfo(log.student_id).split(' (')[0],
       student_class: getStudentClass(log.student_id),
-      type: log.type === 'chat' ? (log.sender === 'student' ? '학생 메시지' : 'AI 응답') : '체크리스트 완료',
+      type: log.type === 'chat' ? (log.sender === 'student' ? '학생 메시지' : 'AI 응답') : 
+            log.type === 'checklist' ? '체크리스트 완료' : 
+            log.evaluation_type === 'given' ? '동료평가 작성' : '동료평가 받음',
       activity: log.activity_title || '-',
       content: log.content,
+      evaluator_name: log.evaluator_name || '',
       is_reset: log.is_reset ? '초기화됨' : ''
     }));
 
-    const csvContent = generateCSV(csvData, ['timestamp', 'student_id', 'student_name', 'student_class', 'type', 'activity', 'content', 'is_reset']);
+    const csvContent = generateCSV(csvData, ['timestamp', 'student_id', 'student_name', 'student_class', 'type', 'activity', 'content', 'evaluator_name', 'is_reset']);
     downloadCSV(csvContent, `unified_logs_${new Date().toISOString().split('T')[0]}.csv`);
     
     toast({
@@ -262,7 +363,7 @@ const StudentRecords = () => {
     return unifiedLogs.filter(log => log.student_id === studentId);
   };
 
-  // 학생별 통계 수정 - 히스토리 기반으로 완료된 체크리스트 수 계산
+  // 학생별 통계 수정 - 동료평가 포함
   const getStudentStats = () => {
     let stats = students.map(student => {
       const studentLogs = chatLogs.filter(log => log.student_id === student.student_id);
@@ -270,6 +371,8 @@ const StudentRecords = () => {
       const studentMessages = studentLogs.filter(log => log.sender === 'student').length;
       const botMessages = studentLogs.filter(log => log.sender === 'bot').length;
       const completedChecklists = checklistHistory.filter(h => h.student_id === student.student_id).length;
+      const givenEvaluations = peerEvaluationHistory.filter(p => p.student_id === student.student_id && p.evaluation_type === 'given').length;
+      const receivedEvaluations = peerEvaluationHistory.filter(p => p.student_id === student.student_id && p.evaluation_type === 'received').length;
       const lastActivity = studentLogs.length > 0 ? 
         new Date(studentLogs[0].timestamp).toLocaleDateString('ko-KR') : '-';
 
@@ -279,6 +382,8 @@ const StudentRecords = () => {
         studentMessages,
         botMessages,
         completedChecklists,
+        givenEvaluations,
+        receivedEvaluations,
         lastActivity
       };
     });
@@ -337,6 +442,7 @@ const StudentRecords = () => {
                   <TableHead>유형</TableHead>
                   <TableHead>활동</TableHead>
                   <TableHead>내용</TableHead>
+                  <TableHead>평가자</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -351,13 +457,18 @@ const StudentRecords = () => {
                           <MessageCircle className="h-3 w-3 mr-1" />
                           {log.sender === 'student' ? '학생' : 'AI'}
                         </Badge>
-                      ) : (
+                      ) : log.type === 'checklist' ? (
                         <Badge 
                           variant="outline" 
                           className={log.is_reset ? "text-orange-600 border-orange-600" : "text-green-600 border-green-600"}
                         >
                           <CheckCircle className="h-3 w-3 mr-1" />
                           체크리스트
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-blue-600 border-blue-600">
+                          <User className="h-3 w-3 mr-1" />
+                          {log.evaluation_type === 'given' ? '평가작성' : '평가받음'}
                         </Badge>
                       )}
                     </TableCell>
@@ -369,11 +480,14 @@ const StudentRecords = () => {
                         {log.content}
                       </div>
                     </TableCell>
+                    <TableCell className="text-sm">
+                      {log.evaluator_name || '-'}
+                    </TableCell>
                   </TableRow>
                 ))}
                 {studentDetailLogs.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-center py-8 text-gray-500">
+                    <TableCell colSpan={5} className="text-center py-8 text-gray-500">
                       기록이 없습니다.
                     </TableCell>
                   </TableRow>
@@ -476,6 +590,8 @@ const StudentRecords = () => {
                 <TableHead>학생 메시지</TableHead>
                 <TableHead>AI 응답</TableHead>
                 <TableHead>완료한 체크리스트</TableHead>
+                <TableHead>작성한 평가</TableHead>
+                <TableHead>받은 평가</TableHead>
                 <TableHead>마지막 활동</TableHead>
                 <TableHead>액션</TableHead>
               </TableRow>
@@ -491,6 +607,8 @@ const StudentRecords = () => {
                   <TableCell>{student.studentMessages}</TableCell>
                   <TableCell>{student.botMessages}</TableCell>
                   <TableCell>{student.completedChecklists}</TableCell>
+                  <TableCell>{student.givenEvaluations}</TableCell>
+                  <TableCell>{student.receivedEvaluations}</TableCell>
                   <TableCell>{student.lastActivity}</TableCell>
                   <TableCell>
                     <Button 
@@ -523,6 +641,7 @@ const StudentRecords = () => {
                 <TableHead>유형</TableHead>
                 <TableHead>활동</TableHead>
                 <TableHead>내용</TableHead>
+                <TableHead>평가자</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -546,13 +665,18 @@ const StudentRecords = () => {
                         <MessageCircle className="h-3 w-3 mr-1" />
                         {log.sender === 'student' ? '학생' : 'AI'}
                       </Badge>
-                    ) : (
+                    ) : log.type === 'checklist' ? (
                       <Badge 
                         variant="outline" 
                         className={log.is_reset ? "text-orange-600 border-orange-600" : "text-green-600 border-green-600"}
                       >
                         <CheckCircle className="h-3 w-3 mr-1" />
                         체크리스트
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-blue-600 border-blue-600">
+                        <User className="h-3 w-3 mr-1" />
+                        {log.evaluation_type === 'given' ? '평가작성' : '평가받음'}
                       </Badge>
                     )}
                   </TableCell>
@@ -564,11 +688,14 @@ const StudentRecords = () => {
                       {log.content}
                     </div>
                   </TableCell>
+                  <TableCell className="text-sm">
+                    {log.evaluator_name || '-'}
+                  </TableCell>
                 </TableRow>
               ))}
               {getFilteredUnifiedLogs().length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-gray-500">
+                  <TableCell colSpan={7} className="text-center py-8 text-gray-500">
                     {searchTerm || selectedStudent !== 'all' || selectedActivity !== 'all' || selectedClass !== 'all' ? 
                       '필터 조건에 맞는 기록이 없습니다.' : '기록이 없습니다.'}
                   </TableCell>
@@ -576,7 +703,7 @@ const StudentRecords = () => {
               )}
               {getFilteredUnifiedLogs().length > 100 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-4 text-gray-500">
+                  <TableCell colSpan={7} className="text-center py-4 text-gray-500">
                     최근 100개 항목만 표시됩니다. 더 많은 기록을 보려면 필터를 사용하거나 학생별 상세보기를 이용하세요.
                   </TableCell>
                 </TableRow>

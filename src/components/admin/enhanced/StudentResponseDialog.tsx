@@ -24,6 +24,7 @@ interface StudentData {
   reflections: any[];
   chatLogs: any[];
   checklistProgress: any[];
+  receivedEvaluations: any[];
 }
 
 const StudentResponseDialog = ({ studentId, activityId, studentName, open, onOpenChange }: StudentResponseDialogProps) => {
@@ -32,7 +33,8 @@ const StudentResponseDialog = ({ studentId, activityId, studentName, open, onOpe
     evaluations: [],
     reflections: [],
     chatLogs: [],
-    checklistProgress: []
+    checklistProgress: [],
+    receivedEvaluations: []
   });
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
@@ -65,6 +67,21 @@ const StudentResponseDialog = ({ studentId, activityId, studentName, open, onOpe
         `)
         .eq('evaluator_id', studentId)
         .eq('activity_id', activityId);
+
+      // 받은 동료평가 가져오기 (평가자 정보 포함 - 관리자용)
+      const { data: receivedEvaluations } = await supabase
+        .from('peer_evaluations')
+        .select(`
+          *,
+          argumentation_responses!target_response_id(
+            student_id,
+            response_text
+          ),
+          students!evaluator_id(name, student_id)
+        `)
+        .eq('argumentation_responses.student_id', studentId)
+        .eq('activity_id', activityId)
+        .eq('is_completed', true);
 
       // 평가 성찰 가져오기
       const { data: reflections } = await supabase
@@ -99,7 +116,8 @@ const StudentResponseDialog = ({ studentId, activityId, studentName, open, onOpe
         evaluations: evaluations || [],
         reflections: reflections || [],
         chatLogs: chatLogs || [],
-        checklistProgress: checklistProgress || []
+        checklistProgress: checklistProgress || [],
+        receivedEvaluations: receivedEvaluations || []
       });
     } catch (error) {
       toast({
@@ -122,18 +140,35 @@ const StudentResponseDialog = ({ studentId, activityId, studentName, open, onOpe
         '내용': response.response_text,
         '제출일시': response.submitted_at,
         '최종수정논증': response.final_revised_argument || '',
-        '최종수정일시': response.final_revision_submitted_at || ''
+        '최종수정일시': response.final_revision_submitted_at || '',
+        '평가자': '',
+        '유용성점수': ''
       });
     });
 
-    // 동료평가 데이터
+    // 동료평가 데이터 (평가한 것들)
     studentData.evaluations.forEach(evaluation => {
       csvData.push({
-        '유형': '동료 평가',
+        '유형': '동료 평가 (작성)',
         '내용': evaluation.evaluation_text || '',
         '제출일시': evaluation.submitted_at || '',
         '대상': evaluation.argumentation_responses?.students?.name || '알 수 없음',
-        '완료여부': evaluation.is_completed ? '완료' : '미완료'
+        '완료여부': evaluation.is_completed ? '완료' : '미완료',
+        '평가자': '',
+        '유용성점수': ''
+      });
+    });
+
+    // 받은 동료평가 데이터 (평가자 정보 포함)
+    studentData.receivedEvaluations.forEach(evaluation => {
+      csvData.push({
+        '유형': '동료 평가 (받음)',
+        '내용': evaluation.evaluation_text || '',
+        '제출일시': evaluation.submitted_at || '',
+        '평가자': evaluation.students?.name || '알 수 없음',
+        '평가자학번': evaluation.students?.student_id || '',
+        '완료여부': evaluation.is_completed ? '완료' : '미완료',
+        '유용성점수': ''
       });
     });
 
@@ -143,11 +178,13 @@ const StudentResponseDialog = ({ studentId, activityId, studentName, open, onOpe
         '유형': '평가 성찰',
         '내용': reflection.reflection_text,
         '유익함점수': reflection.usefulness_rating,
-        '제출일시': reflection.submitted_at
+        '제출일시': reflection.submitted_at,
+        '평가자': '',
+        '유용성점수': reflection.usefulness_rating
       });
     });
 
-    const csv = generateCSV(csvData, ['유형', '내용', '제출일시', '최종수정논증', '최종수정일시', '대상', '완료여부', '유익함점수']);
+    const csv = generateCSV(csvData, ['유형', '내용', '제출일시', '최종수정논증', '최종수정일시', '대상', '완료여부', '유익함점수', '평가자', '평가자학번', '유용성점수']);
     downloadCSV(csv, `${studentName}_${studentId}_학습데이터.csv`);
     
     toast({
@@ -178,14 +215,18 @@ const StudentResponseDialog = ({ studentId, activityId, studentName, open, onOpe
         </DialogHeader>
 
         <Tabs defaultValue="responses" className="h-full">
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="responses" className="flex items-center space-x-1">
               <MessageSquare className="h-4 w-4" />
               <span>응답</span>
             </TabsTrigger>
             <TabsTrigger value="evaluations" className="flex items-center space-x-1">
               <Users className="h-4 w-4" />
-              <span>평가</span>
+              <span>평가함</span>
+            </TabsTrigger>
+            <TabsTrigger value="received" className="flex items-center space-x-1">
+              <Users className="h-4 w-4" />
+              <span>평가받음</span>
             </TabsTrigger>
             <TabsTrigger value="reflections" className="flex items-center space-x-1">
               <CheckCircle className="h-4 w-4" />
@@ -279,6 +320,38 @@ const StudentResponseDialog = ({ studentId, activityId, studentName, open, onOpe
               ) : (
                 <div className="text-center py-8 text-gray-500">
                   배정된 동료평가가 없습니다.
+                </div>
+              )}
+            </TabsContent>
+
+            <TabsContent value="received" className="space-y-4">
+              {studentData.receivedEvaluations.length > 0 ? (
+                studentData.receivedEvaluations.map((evaluation, index) => (
+                  <Card key={evaluation.id}>
+                    <CardHeader>
+                      <CardTitle className="text-lg">받은 평가 {index + 1}</CardTitle>
+                      <p className="text-sm text-gray-600">
+                        평가자: {evaluation.students?.name || '알 수 없음'} ({evaluation.students?.student_id || ''})
+                      </p>
+                      <p className="text-sm text-gray-600">
+                        {evaluation.submitted_at ? new Date(evaluation.submitted_at).toLocaleString('ko-KR') : '미제출'}
+                      </p>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-4">
+                        <div>
+                          <h4 className="font-medium mb-2">받은 평가 내용:</h4>
+                          <div className="bg-green-50 p-3 rounded">
+                            <p className="whitespace-pre-wrap">{evaluation.evaluation_text || '평가 미작성'}</p>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  받은 평가가 없습니다.
                 </div>
               )}
             </TabsContent>
