@@ -1,44 +1,148 @@
-
 import { useState, useEffect } from 'react';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { ArrowLeft, Send, Save, RefreshCw, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Save, Send, BookOpen } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Activity } from '@/types/activity';
-import ChatInterface from './ChatInterface';
 import ModuleProgress from './ModuleProgress';
-import { useSessionRecovery } from '@/hooks/useSessionRecovery';
-import { Badge } from '@/components/ui/badge';
+import ChatInterface from './ChatInterface';
 
 interface ArgumentationActivityProps {
   activity: Activity;
   studentId: string;
   onBack: () => void;
-  saveDraft?: (studentId: string, activityId: string, workType: string, content: any) => Promise<void>;
-  loadDraft?: (studentId: string, activityId: string, workType: string) => Promise<any>;
+  saveDraft: (studentId: string, activityId: string, workType: string, content: any) => Promise<void>;
+  loadDraft: (studentId: string, activityId: string, workType: string) => Promise<any>;
 }
 
 const ArgumentationActivity = ({ 
   activity, 
   studentId, 
-  onBack, 
-  saveDraft, 
-  loadDraft 
+  onBack,
+  saveDraft,
+  loadDraft
 }: ArgumentationActivityProps) => {
   const [argument, setArgument] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
-  const [isDraftSaving, setIsDraftSaving] = useState(false);
-  const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [showChat, setShowChat] = useState(false);
   const { toast } = useToast();
-  const { updateSession } = useSessionRecovery();
 
   useEffect(() => {
-    loadExistingResponse();
+    checkSubmissionStatus();
     loadSavedDraft();
   }, [activity.id, studentId]);
+
+  const checkSubmissionStatus = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('argumentation_responses')
+        .select('*')
+        .eq('activity_id', activity.id)
+        .eq('student_id', studentId)
+        .single();
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('Error checking submission status:', error);
+        return;
+      }
+
+      if (data) {
+        setArgument(data.response_text || '');
+        setIsSubmitted(data.is_submitted || false);
+      }
+    } catch (error) {
+      console.error('Error checking submission status:', error);
+    }
+  };
+
+  const loadSavedDraft = async () => {
+    try {
+      const draft = await loadDraft(studentId, activity.id, 'argumentation');
+      if (draft && draft.argument) {
+        setArgument(draft.argument);
+      }
+    } catch (error) {
+      console.error('Error loading draft:', error);
+    }
+  };
+
+  const handleSaveDraft = async () => {
+    if (!argument.trim()) return;
+    
+    setIsSaving(true);
+    try {
+      await saveDraft(studentId, activity.id, 'argumentation', { argument });
+      toast({
+        title: "임시 저장 완료",
+        description: "작업 내용이 임시 저장되었습니다."
+      });
+    } catch (error) {
+      console.error('Error saving draft:', error);
+      toast({
+        title: "저장 실패",
+        description: "임시 저장 중 오류가 발생했습니다.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (!argument.trim()) {
+      toast({
+        title: "입력 오류",
+        description: "논증을 작성해주세요.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('argumentation_responses')
+        .upsert({
+          activity_id: activity.id,
+          student_id: studentId,
+          response_text: argument,
+          is_submitted: true,
+          submitted_at: new Date().toISOString()
+        }, {
+          onConflict: 'activity_id,student_id'
+        });
+
+      if (error) throw error;
+
+      setIsSubmitted(true);
+      
+      // 임시 저장 데이터 삭제
+      try {
+        await supabase
+          .from('student_work_drafts')
+          .delete()
+          .eq('student_id', studentId)
+          .eq('activity_id', activity.id)
+          .eq('work_type', 'argumentation');
+      } catch (draftError) {
+        console.error('Error deleting draft:', draftError);
+      }
+
+      toast({
+        title: "제출 완료",
+        description: "논증이 성공적으로 제출되었습니다."
+      });
+    } catch (error) {
+      console.error('Error submitting argument:', error);
+      toast({
+        title: "제출 실패",
+        description: "논증 제출 중 오류가 발생했습니다.",
+        variant: "destructive"
+      });
+    }
+  };
 
   // 자동 저장 (30초마다)
   useEffect(() => {
@@ -51,125 +155,32 @@ const ArgumentationActivity = ({
     return () => clearInterval(autoSaveInterval);
   }, [argument, isSubmitted]);
 
-  const loadExistingResponse = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('argumentation_responses')
-        .select('*')
-        .eq('student_id', studentId)
-        .eq('activity_id', activity.id)
-        .single();
-
-      if (data && !error) {
-        setArgument(data.response_text);
-        setIsSubmitted(data.is_submitted || false);
-      }
-    } catch (error) {
-      console.error('Failed to load existing response:', error);
-    }
-  };
-
-  const loadSavedDraft = async () => {
-    if (!loadDraft) return;
-
-    try {
-      const draft = await loadDraft(studentId, activity.id, 'argumentation');
-      if (draft && draft.argument && !isSubmitted) {
-        setArgument(draft.argument);
-        setLastSaved(new Date(draft.savedAt));
-        toast({
-          title: "임시 저장된 내용 복원",
-          description: "이전에 작성하던 내용을 불러왔습니다."
-        });
-      }
-    } catch (error) {
-      console.error('Failed to load draft:', error);
-    }
-  };
-
-  const handleSaveDraft = async () => {
-    if (!saveDraft || !argument.trim() || isSubmitted) return;
-
-    setIsDraftSaving(true);
-    try {
-      await saveDraft(studentId, activity.id, 'argumentation', {
-        argument,
-        savedAt: new Date().toISOString()
-      });
-      setLastSaved(new Date());
-    } catch (error) {
-      console.error('Failed to save draft:', error);
-    } finally {
-      setIsDraftSaving(false);
-    }
-  };
-
-  const handleSubmit = async () => {
-    if (!argument.trim()) {
-      toast({
-        title: "오류",
-        description: "논증을 작성해주세요.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    setIsSubmitting(true);
-    
-    try {
-      // 세션 업데이트
-      await updateSession(studentId);
-
-      const { error } = await supabase
-        .from('argumentation_responses')
-        .upsert({
-          student_id: studentId,
-          activity_id: activity.id,
-          response_text: argument,
-          is_submitted: true,
-          submitted_at: new Date().toISOString()
-        }, {
-          onConflict: 'student_id,activity_id'
-        });
-
-      if (error) {
-        throw error;
-      }
-
-      setIsSubmitted(true);
-      toast({
-        title: "제출 완료",
-        description: "논증이 성공적으로 제출되었습니다."
-      });
-
-      // 임시 저장 내용 삭제 (제출 완료 후)
-      if (saveDraft) {
-        await saveDraft(studentId, activity.id, 'argumentation', {});
-      }
-      
-    } catch (error: any) {
-      console.error('Submission failed:', error);
-      
-      if (error.message?.includes('not found') || error.message?.includes('student')) {
-        toast({
-          title: "등록되지 않은 사용자입니다",
-          description: "관리자에게 문의하거나 다시 로그인해주세요.",
-          variant: "destructive"
-        });
-      } else {
-        toast({
-          title: "제출 실패",
-          description: "네트워크 연결을 확인하고 다시 시도해주세요.",
-          variant: "destructive"
-        });
-      }
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+  if (showChat) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <Button 
+            onClick={() => setShowChat(false)}
+            variant="outline"
+            className="flex items-center space-x-2"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            <span>활동으로 돌아가기</span>
+          </Button>
+          <h1 className="text-2xl font-bold text-[rgb(15,15,112)]">AI 도우미</h1>
+        </div>
+        
+        <ChatInterface 
+          activity={activity}
+          studentId={studentId}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <Button 
           onClick={onBack}
@@ -177,121 +188,82 @@ const ArgumentationActivity = ({
           className="flex items-center space-x-2"
         >
           <ArrowLeft className="h-4 w-4" />
-          <span>활동 목록으로</span>
+          <span>목록으로</span>
         </Button>
-        
-        {lastSaved && (
-          <div className="flex items-center space-x-2 text-sm text-gray-500">
-            <Save className="h-4 w-4" />
-            <span>마지막 저장: {lastSaved.toLocaleTimeString()}</span>
-            {isDraftSaving && <RefreshCw className="h-3 w-3 animate-spin" />}
+        <h1 className="text-2xl font-bold text-[rgb(15,15,112)]">{activity.title}</h1>
+        <Button 
+          onClick={() => setShowChat(true)}
+          className="bg-[rgb(15,15,112)] hover:bg-[rgb(15,15,112)]/90 flex items-center space-x-2"
+        >
+          <BookOpen className="h-4 w-4" />
+          <span>AI 도우미</span>
+        </Button>
+      </div>
+
+      {/* Progress indicator */}
+      {activity.modules_count && activity.modules_count > 1 && (
+        <ModuleProgress 
+          activity={activity}
+          studentId={studentId}
+          totalModules={activity.modules_count}
+        />
+      )}
+
+      {/* Activity content */}
+      <Card>
+        <CardHeader>
+          <CardTitle>논증 활동</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {activity.content && (
+            <div className="p-4 bg-gray-50 rounded-lg">
+              <h3 className="font-medium mb-2">활동 안내</h3>
+              <div dangerouslySetInnerHTML={{ __html: String(activity.content) }} />
+            </div>
+          )}
+
+          <div className="space-y-4">
+            <label className="text-sm font-medium">당신의 논증을 작성해주세요:</label>
+            <Textarea
+              value={argument}
+              onChange={(e) => setArgument(e.target.value)}
+              placeholder="논증을 입력하세요..."
+              className="min-h-[200px]"
+              disabled={isSubmitted}
+            />
+            
+            {!isSubmitted && (
+              <div className="flex justify-between">
+                <Button
+                  onClick={handleSaveDraft}
+                  variant="outline"
+                  disabled={isSaving || !argument.trim()}
+                  className="flex items-center space-x-2"
+                >
+                  <Save className="h-4 w-4" />
+                  <span>{isSaving ? '저장 중...' : '임시 저장'}</span>
+                </Button>
+                
+                <Button
+                  onClick={handleSubmit}
+                  disabled={!argument.trim()}
+                  className="bg-[rgb(15,15,112)] hover:bg-[rgb(15,15,112)]/90 flex items-center space-x-2"
+                >
+                  <Send className="h-4 w-4" />
+                  <span>제출하기</span>
+                </Button>
+              </div>
+            )}
+            
+            {isSubmitted && (
+              <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+                <p className="text-green-800 font-medium">✅ 논증이 제출되었습니다.</p>
+                <p className="text-green-600 text-sm">제출된 논증은 수정할 수 없습니다.</p>
+              </div>
+            )}
           </div>
-        )}
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center justify-between">
-                <span>{activity.title}</span>
-                {isSubmitted && (
-                  <Badge variant="default" className="bg-green-600">
-                    제출 완료
-                  </Badge>
-                )}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div>
-                  <h3 className="font-semibold mb-2">활동 내용</h3>
-                  <div className="prose prose-sm max-w-none">
-                    {typeof activity.content === 'string' 
-                      ? activity.content 
-                      : JSON.stringify(activity.content)
-                    }
-                  </div>
-                </div>
-                
-                {activity.final_question && (
-                  <div>
-                    <h3 className="font-semibold mb-2">논증 질문</h3>
-                    <p className="text-gray-700 bg-blue-50 p-3 rounded-lg">
-                      {activity.final_question}
-                    </p>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          <ModuleProgress 
-            activityId={activity.id}
-            studentId={studentId}
-            totalModules={activity.modules_count || 1}
-          />
-        </div>
-
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>논증 작성</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <Textarea
-                  value={argument}
-                  onChange={(e) => setArgument(e.target.value)}
-                  placeholder="여기에 논증을 작성해주세요..."
-                  className="min-h-[300px]"
-                  disabled={isSubmitted}
-                />
-                
-                <div className="flex justify-between items-center">
-                  <div className="flex space-x-2">
-                    {!isSubmitted && (
-                      <Button
-                        onClick={handleSaveDraft}
-                        variant="outline"
-                        disabled={isDraftSaving || !argument.trim()}
-                        className="flex items-center space-x-2"
-                      >
-                        {isDraftSaving ? (
-                          <RefreshCw className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Save className="h-4 w-4" />
-                        )}
-                        <span>임시 저장</span>
-                      </Button>
-                    )}
-                  </div>
-                  
-                  {!isSubmitted && (
-                    <Button
-                      onClick={handleSubmit}
-                      disabled={isSubmitting || !argument.trim()}
-                      className="flex items-center space-x-2"
-                    >
-                      {isSubmitting ? (
-                        <RefreshCw className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Send className="h-4 w-4" />
-                      )}
-                      <span>제출하기</span>
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <ChatInterface 
-            activityId={activity.id}
-            studentId={studentId}
-          />
-        </div>
-      </div>
+        </CardContent>
+      </Card>
     </div>
   );
 };
