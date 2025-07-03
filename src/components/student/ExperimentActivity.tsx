@@ -1,10 +1,8 @@
 
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { CheckCircle, Clock, Circle } from 'lucide-react';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { useChecklistProgress } from '@/hooks/useChecklistProgress';
 import ChatInterface from './ChatInterface';
 import ModuleProgress from './ModuleProgress';
@@ -109,9 +107,21 @@ const ExperimentActivity = ({ activity, studentId, onBack }: ExperimentActivityP
     <div className="h-screen flex bg-gray-50 overflow-hidden p-4">
       {/* Left Panel: Module Progress and Checklist */}
       <div className="w-80 bg-white shadow-lg flex flex-col flex-shrink-0 rounded-lg">
-        {/* Header with module progress */}
+        {/* Header with Activity Info and Module Progress */}
         <div className="p-4 border-b">
-          <h2 className="text-lg font-bold mb-4">{activity.title}</h2>
+          <h2 className="text-lg font-bold mb-2">{activity.title}</h2>
+          {activity.content && typeof activity.content === 'string' && (
+            <div className="p-3 bg-gray-50 rounded-lg mb-4">
+              <h3 className="font-medium mb-2 text-sm">활동 안내</h3>
+              <p className="text-sm text-gray-700">{activity.content}</p>
+            </div>
+          )}
+          {activity.content && typeof activity.content === 'object' && activity.content.description && (
+            <div className="p-3 bg-gray-50 rounded-lg mb-4">
+              <h3 className="font-medium mb-2 text-sm">활동 안내</h3>
+              <p className="text-sm text-gray-700">{activity.content.description}</p>
+            </div>
+          )}
           <ModuleProgress 
             currentModule={currentModule}
             totalModules={modules.length}

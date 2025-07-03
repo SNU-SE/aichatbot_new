@@ -85,16 +85,14 @@ const StudentDashboard = () => {
     const commonProps = {
       activity: selectedActivity,
       studentId: studentId,
-      onBack: handleBack,
-      saveDraft,
-      loadDraft
+      onBack: handleBack
     };
 
     switch (selectedActivity.type) {
       case 'experiment':
         return <ExperimentActivity {...commonProps} />;
       case 'argumentation':
-        return <ArgumentationActivity {...commonProps} />;
+        return <ArgumentationActivity {...commonProps} saveDraft={saveDraft} loadDraft={loadDraft} />;
       case 'discussion':
         return <DiscussionActivity {...commonProps} />;
       default:

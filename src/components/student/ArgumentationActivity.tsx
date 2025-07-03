@@ -3,19 +3,18 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { ArrowLeft, Save, Send, BookOpen } from 'lucide-react';
+import { Save, Send, CheckCircle, Clock, Circle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Activity } from '@/types/activity';
-import ModuleProgress from './ModuleProgress';
 import ChatInterface from './ChatInterface';
 
 interface ArgumentationActivityProps {
   activity: Activity;
   studentId: string;
   onBack: () => void;
-  saveDraft: (studentId: string, activityId: string, workType: string, content: any) => Promise<void>;
-  loadDraft: (studentId: string, activityId: string, workType: string) => Promise<any>;
+  saveDraft?: (studentId: string, activityId: string, workType: string, content: any) => Promise<void>;
+  loadDraft?: (studentId: string, activityId: string, workType: string) => Promise<any>;
 }
 
 const ArgumentationActivity = ({ 
@@ -28,12 +27,24 @@ const ArgumentationActivity = ({
   const [argument, setArgument] = useState('');
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [showChat, setShowChat] = useState(false);
+  const [activeTask, setActiveTask] = useState<'none' | 'argument' | 'peer-evaluation' | 'evaluation-check'>('none');
+  const [evaluationText, setEvaluationText] = useState('');
+  const [reflectionText, setReflectionText] = useState('');
+  const [finalRevisedArgument, setFinalRevisedArgument] = useState('');
+  const [usefulnessRating, setUsefulnessRating] = useState(1);
+  const [peerResponse, setPeerResponse] = useState<any>(null);
+  const [peerEvaluations, setPeerEvaluations] = useState<any[]>([]);
   const { toast } = useToast();
 
   useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
+
+  useEffect(() => {
     checkSubmissionStatus();
-    loadSavedDraft();
+    if (loadDraft) {
+      loadSavedDraft();
+    }
   }, [activity.id, studentId]);
 
   const checkSubmissionStatus = async () => {
@@ -53,6 +64,7 @@ const ArgumentationActivity = ({
       if (data) {
         setArgument(data.response_text || '');
         setIsSubmitted(data.is_submitted || false);
+        setFinalRevisedArgument(data.final_revised_argument || '');
       }
     } catch (error) {
       console.error('Error checking submission status:', error);
@@ -60,6 +72,7 @@ const ArgumentationActivity = ({
   };
 
   const loadSavedDraft = async () => {
+    if (!loadDraft) return;
     try {
       const draft = await loadDraft(studentId, activity.id, 'argumentation');
       if (draft && draft.argument) {
@@ -71,7 +84,7 @@ const ArgumentationActivity = ({
   };
 
   const handleSaveDraft = async () => {
-    if (!argument.trim()) return;
+    if (!argument.trim() || !saveDraft) return;
     
     setIsSaving(true);
     try {
@@ -92,7 +105,7 @@ const ArgumentationActivity = ({
     }
   };
 
-  const handleSubmit = async () => {
+  const submitArgument = async () => {
     if (!argument.trim()) {
       toast({
         title: "입력 오류",
@@ -118,17 +131,20 @@ const ArgumentationActivity = ({
       if (error) throw error;
 
       setIsSubmitted(true);
+      setActiveTask('none');
       
       // 임시 저장 데이터 삭제
-      try {
-        await supabase
-          .from('student_work_drafts')
-          .delete()
-          .eq('student_id', studentId)
-          .eq('activity_id', activity.id)
-          .eq('work_type', 'argumentation');
-      } catch (draftError) {
-        console.error('Error deleting draft:', draftError);
+      if (saveDraft) {
+        try {
+          await supabase
+            .from('student_work_drafts')
+            .delete()
+            .eq('student_id', studentId)
+            .eq('activity_id', activity.id)
+            .eq('work_type', 'argumentation');
+        } catch (draftError) {
+          console.error('Error deleting draft:', draftError);
+        }
       }
 
       toast({
@@ -145,9 +161,22 @@ const ArgumentationActivity = ({
     }
   };
 
+  const submitPeerEvaluation = () => {
+    // This will be handled by ChatInterface
+    setActiveTask('none');
+  };
+
+  const submitReflection = () => {
+    setActiveTask('none');
+    toast({
+      title: "성공",
+      description: "평가 반영이 완료되었습니다."
+    });
+  };
+
   // 자동 저장 (30초마다)
   useEffect(() => {
-    if (!argument.trim() || isSubmitted) return;
+    if (!argument.trim() || isSubmitted || !saveDraft) return;
 
     const autoSaveInterval = setInterval(() => {
       handleSaveDraft();
@@ -156,116 +185,159 @@ const ArgumentationActivity = ({
     return () => clearInterval(autoSaveInterval);
   }, [argument, isSubmitted]);
 
-  if (showChat) {
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <Button 
-            onClick={() => setShowChat(false)}
-            variant="outline"
-            className="flex items-center space-x-2"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            <span>활동으로 돌아가기</span>
-          </Button>
-          <h1 className="text-2xl font-bold text-[rgb(15,15,112)]">AI 도우미</h1>
-        </div>
-        
-        <ChatInterface 
-          activity={activity}
-          studentId={studentId}
-          onBack={() => setShowChat(false)}
-        />
-      </div>
-    );
-  }
+  const getActivitySteps = () => {
+    const steps = [
+      { id: 'argument', description: '논증 작성하기', completed: isSubmitted },
+      { id: 'peer-eval', description: '동료 평가하기', completed: false },
+      { id: 'evaluation-check', description: '평가 확인 및 반영', completed: false }
+    ];
+
+    const completed = steps.filter(step => step.completed);
+    const current = steps.find(step => !step.completed);
+    const upcoming = steps.filter(step => !step.completed && step.id !== current?.id);
+
+    return { completed, current: current ? [current] : [], upcoming };
+  };
+
+  const { completed, current, upcoming } = getActivitySteps();
+
+  const argumentationContext = {
+    activeTask,
+    setActiveTask,
+    argumentText: argument,
+    setArgumentText: setArgument,
+    evaluationText,
+    setEvaluationText,
+    reflectionText,
+    setReflectionText,
+    finalRevisedArgument,
+    setFinalRevisedArgument,
+    usefulnessRating,
+    setUsefulnessRating,
+    peerResponse,
+    peerEvaluations,
+    isSubmitted,
+    submitArgument,
+    submitPeerEvaluation,
+    submitReflection
+  };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <Button 
-          onClick={onBack}
-          variant="outline"
-          className="flex items-center space-x-2"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          <span>목록으로</span>
-        </Button>
-        <h1 className="text-2xl font-bold text-[rgb(15,15,112)]">{activity.title}</h1>
-        <Button 
-          onClick={() => setShowChat(true)}
-          className="bg-[rgb(15,15,112)] hover:bg-[rgb(15,15,112)]/90 flex items-center space-x-2"
-        >
-          <BookOpen className="h-4 w-4" />
-          <span>AI 도우미</span>
-        </Button>
-      </div>
-
-      {/* Progress indicator */}
-      {activity.modules_count && activity.modules_count > 1 && (
-        <ModuleProgress 
-          totalModules={activity.modules_count}
-          currentModule={1}
-          completedModules={0}
-        />
-      )}
-
-      {/* Activity content */}
-      <Card>
-        <CardHeader>
-          <CardTitle>논증 활동</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {activity.content && (
-            <div className="p-4 bg-gray-50 rounded-lg">
-              <h3 className="font-medium mb-2">활동 안내</h3>
-              <div dangerouslySetInnerHTML={{ __html: String(activity.content) }} />
+    <div className="h-screen flex bg-gray-50 overflow-hidden p-4">
+      {/* Left Panel: Activity Progress and Tasks */}
+      <div className="w-80 bg-white shadow-lg flex flex-col flex-shrink-0 rounded-lg">
+        {/* Header */}
+        <div className="p-4 border-b">
+          <h2 className="text-lg font-bold mb-2">{activity.title}</h2>
+          {activity.content && typeof activity.content === 'string' && (
+            <div className="p-3 bg-gray-50 rounded-lg">
+              <h3 className="font-medium mb-2 text-sm">활동 안내</h3>
+              <p className="text-sm text-gray-700">{activity.content}</p>
             </div>
           )}
+          {activity.final_question && (
+            <div className="mt-3 p-3 bg-blue-50 rounded-lg border-l-4 border-blue-400">
+              <h3 className="font-medium mb-1 text-sm text-blue-800">핵심 질문</h3>
+              <p className="text-sm text-blue-700">{activity.final_question}</p>
+            </div>
+          )}
+        </div>
 
-          <div className="space-y-4">
-            <label className="text-sm font-medium">당신의 논증을 작성해주세요:</label>
-            <Textarea
-              value={argument}
-              onChange={(e) => setArgument(e.target.value)}
-              placeholder="논증을 입력하세요..."
-              className="min-h-[200px]"
-              disabled={isSubmitted}
-            />
-            
-            {!isSubmitted && (
-              <div className="flex justify-between">
-                <Button
-                  onClick={handleSaveDraft}
-                  variant="outline"
-                  disabled={isSaving || !argument.trim()}
-                  className="flex items-center space-x-2"
-                >
-                  <Save className="h-4 w-4" />
-                  <span>{isSaving ? '저장 중...' : '임시 저장'}</span>
-                </Button>
-                
-                <Button
-                  onClick={handleSubmit}
-                  disabled={!argument.trim()}
-                  className="bg-[rgb(15,15,112)] hover:bg-[rgb(15,15,112)]/90 flex items-center space-x-2"
-                >
-                  <Send className="h-4 w-4" />
-                  <span>제출하기</span>
-                </Button>
+        {/* Activity Steps */}
+        <div className="flex-1 p-4 overflow-hidden">
+          <h3 className="text-md font-semibold mb-4">활동 단계</h3>
+          <div className="space-y-4" style={{ height: '384px', overflowY: 'auto' }}>
+            {/* Completed */}
+            <div className="space-y-2">
+              <h4 className="font-semibold text-green-600 flex items-center">
+                <CheckCircle className="h-4 w-4 mr-2" />
+                완료됨
+              </h4>
+              <div className="space-y-1">
+                {completed.map((step) => (
+                  <div key={step.id} className="flex items-start space-x-2 p-2 bg-green-50 rounded-lg">
+                    <CheckCircle className="h-4 w-4 mt-1 text-green-600" />
+                    <span className="text-sm text-green-700">{step.description}</span>
+                  </div>
+                ))}
               </div>
-            )}
-            
-            {isSubmitted && (
-              <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
-                <p className="text-green-800 font-medium">✅ 논증이 제출되었습니다.</p>
-                <p className="text-green-600 text-sm">제출된 논증은 수정할 수 없습니다.</p>
+            </div>
+
+            {/* Current */}
+            <div className="space-y-2">
+              <h4 className="font-semibold text-blue-600 flex items-center">
+                <Clock className="h-4 w-4 mr-2" />
+                진행중
+              </h4>
+              <div className="space-y-1">
+                {current.map((step) => (
+                  <div key={step.id} className="flex items-start space-x-2 p-2 bg-blue-50 rounded-lg border-2 border-blue-200">
+                    <Clock className="h-4 w-4 mt-1 text-blue-600" />
+                    <div className="flex-1">
+                      <span className="text-sm text-blue-700 font-medium">{step.description}</span>
+                      {step.id === 'argument' && !isSubmitted && (
+                        <Button
+                          onClick={() => setActiveTask('argument')}
+                          size="sm"
+                          className="mt-2 bg-blue-600 hover:bg-blue-700 text-xs"
+                        >
+                          시작하기
+                        </Button>
+                      )}
+                      {step.id === 'peer-eval' && isSubmitted && (
+                        <Button
+                          onClick={() => setActiveTask('peer-evaluation')}
+                          size="sm"
+                          className="mt-2 bg-blue-600 hover:bg-blue-700 text-xs"
+                        >
+                          평가하기
+                        </Button>
+                      )}
+                      {step.id === 'evaluation-check' && (
+                        <Button
+                          onClick={() => setActiveTask('evaluation-check')}
+                          size="sm"
+                          className="mt-2 bg-blue-600 hover:bg-blue-700 text-xs"
+                        >
+                          확인하기
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
-            )}
+            </div>
+
+            {/* Upcoming */}
+            <div className="space-y-2">
+              <h4 className="font-semibold text-gray-600 flex items-center">
+                <Circle className="h-4 w-4 mr-2" />
+                예정
+              </h4>
+              <div className="space-y-1">
+                {upcoming.map((step) => (
+                  <div key={step.id} className="flex items-start space-x-2 p-2 bg-gray-50 rounded-lg">
+                    <Circle className="h-4 w-4 mt-1 text-gray-500" />
+                    <span className="text-sm text-gray-600">{step.description}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
+
+      {/* Right Panel: Chat Interface */}
+      <div className="flex-1 min-w-0 p-4">
+        <div className="h-full rounded-lg overflow-hidden">
+          <ChatInterface 
+            activity={activity}
+            studentId={studentId}
+            onBack={onBack}
+            argumentationContext={argumentationContext}
+          />
+        </div>
+      </div>
     </div>
   );
 };

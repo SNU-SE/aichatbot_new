@@ -2,7 +2,6 @@
 import { useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { useChecklistProgress } from '@/hooks/useChecklistProgress';
 import ChatInterface from './ChatInterface';
 import DiscussionNotes from './DiscussionNotes';
@@ -35,6 +34,23 @@ const DiscussionActivity = ({ activity, studentId, onBack }: DiscussionActivityP
     <div className="h-screen flex bg-gray-50 overflow-hidden p-4">
       {/* Left Panel: Checklist and Notes */}
       <div className="w-80 bg-white shadow-lg flex flex-col flex-shrink-0 rounded-lg">
+        {/* Header with Activity Info */}
+        <div className="p-4 border-b">
+          <h2 className="text-lg font-bold mb-2">{activity.title}</h2>
+          {activity.content && typeof activity.content === 'string' && (
+            <div className="p-3 bg-gray-50 rounded-lg mb-3">
+              <h3 className="font-medium mb-2 text-sm">활동 안내</h3>
+              <p className="text-sm text-gray-700">{activity.content}</p>
+            </div>
+          )}
+          {activity.content && typeof activity.content === 'object' && activity.content.description && (
+            <div className="p-3 bg-gray-50 rounded-lg mb-3">
+              <h3 className="font-medium mb-2 text-sm">활동 안내</h3>
+              <p className="text-sm text-gray-700">{activity.content.description}</p>
+            </div>
+          )}
+        </div>
+
         {/* Checklist */}
         <div className="p-4">
           <Card className="border-0 shadow-none rounded-lg">
