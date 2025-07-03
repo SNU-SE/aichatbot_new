@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -223,7 +224,7 @@ const ArgumentationActivity = ({
     <div className="h-screen flex bg-gray-50 overflow-hidden p-4">
       {/* Left Panel: Activity Info, Checklist, and Action Buttons */}
       <div className="w-80 bg-white shadow-lg flex flex-col flex-shrink-0 rounded-lg">
-        {/* Header */}
+        {/* Activity Header */}
         <div className="p-4 border-b">
           <h2 className="text-lg font-bold mb-2">{activity.title}</h2>
           {activity.content && typeof activity.content === 'string' && (
@@ -253,8 +254,8 @@ const ArgumentationActivity = ({
               <CardTitle className="text-lg">체크리스트</CardTitle>
             </CardHeader>
             <CardContent className="pt-0">
-              <div className="space-y-2" style={{ height: '192px', overflowY: 'auto' }}>
-                {items.slice(0, 5).map((item) => (
+              <div className="space-y-2" style={{ height: '200px', overflowY: 'auto' }}>
+                {items.map((item) => (
                   <div key={item.id} className="flex items-start space-x-2 p-2 rounded-lg hover:bg-gray-50">
                     <Checkbox 
                       checked={item.is_completed}
