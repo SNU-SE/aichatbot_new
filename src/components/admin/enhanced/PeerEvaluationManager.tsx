@@ -175,11 +175,12 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
 
     setAssigning(true);
     try {
-      // 명확하게 매개변수를 전달하여 함수 오버로딩 문제 해결
+      // 클래스별 배정을 위해 클래스 정보를 함수에 전달
       const { data, error } = await supabase
-        .rpc('assign_peer_evaluations', { 
+        .rpc('assign_peer_evaluations_by_class', { 
           activity_id_param: selectedActivity,
-          evaluations_per_student: evaluationsPerStudent 
+          evaluations_per_student: evaluationsPerStudent,
+          target_class: selectedClass === 'all' ? null : selectedClass
         });
 
       if (error) throw error;
@@ -221,10 +222,11 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
     setAssigning(true);
     try {
       const { data, error } = await supabase
-        .rpc('assign_peer_evaluations_specific', { 
+        .rpc('assign_peer_evaluations_specific_by_class', { 
           activity_id_param: selectedActivity,
           evaluations_per_student: evaluationsPerStudent,
-          group_offset: groupOffset
+          group_offset: groupOffset,
+          target_class: selectedClass === 'all' ? null : selectedClass
         });
 
       if (error) throw error;
@@ -265,16 +267,30 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
 
     setDeleting(true);
     try {
-      const { error } = await supabase
+      let deleteQuery = supabase
         .from('peer_evaluations')
         .delete()
         .eq('activity_id', selectedActivity);
 
+      // 특정 클래스만 선택된 경우, 해당 클래스의 학생들만 필터링
+      if (selectedClass !== 'all') {
+        const { data: classStudents } = await supabase
+          .from('students')
+          .select('student_id')
+          .eq('class_name', selectedClass);
+        
+        if (classStudents && classStudents.length > 0) {
+          const studentIds = classStudents.map(s => s.student_id);
+          deleteQuery = deleteQuery.in('evaluator_id', studentIds);
+        }
+      }
+
+      const { error } = await deleteQuery;
       if (error) throw error;
 
       toast({
         title: "성공",
-        description: "모든 동료평가가 삭제되었습니다."
+        description: selectedClass === 'all' ? "모든 동료평가가 삭제되었습니다." : `${selectedClass} 클래스의 동료평가가 삭제되었습니다.`
       });
 
       await fetchEvaluationData();

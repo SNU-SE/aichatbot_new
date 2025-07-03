@@ -205,7 +205,6 @@ const ArgumentationActivity = ({
       {/* Progress indicator */}
       {activity.modules_count && activity.modules_count > 1 && (
         <ModuleProgress 
-          studentId={studentId}
           totalModules={activity.modules_count}
         />
       )}
