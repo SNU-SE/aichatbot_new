@@ -2,14 +2,14 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { LogOut, Settings, Users, Activity, MessageCircle, BarChart3, Monitor } from 'lucide-react';
+import { LogOut, Settings, Users, Activity, MessageCircle, BarChart3, GraduationCap } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import StudentManagement from '@/components/admin/StudentManagement';
 import ActivityManagement from '@/components/admin/ActivityManagement';
 import AISettings from '@/components/admin/AISettings';
 import RealTimeMonitoring from '@/components/admin/RealTimeMonitoring';
 import StudentRecords from '@/components/admin/StudentRecords';
-import SessionMonitoring from '@/components/admin/enhanced/SessionMonitoring';
+import ClassManagement from '@/components/admin/ClassManagement';
 import { useToast } from '@/hooks/use-toast';
 
 const AdminDashboard = () => {
@@ -74,9 +74,9 @@ const AdminDashboard = () => {
               <MessageCircle className="h-4 w-4" />
               <span>실시간모니터</span>
             </TabsTrigger>
-            <TabsTrigger value="sessions" className="flex items-center space-x-2">
-              <Monitor className="h-4 w-4" />
-              <span>세션모니터</span>
+            <TabsTrigger value="class-management" className="flex items-center space-x-2">
+              <GraduationCap className="h-4 w-4" />
+              <span>수업관리</span>
             </TabsTrigger>
             <TabsTrigger value="records" className="flex items-center space-x-2">
               <BarChart3 className="h-4 w-4" />
@@ -100,8 +100,8 @@ const AdminDashboard = () => {
             <RealTimeMonitoring />
           </TabsContent>
 
-          <TabsContent value="sessions">
-            <SessionMonitoring />
+          <TabsContent value="class-management">
+            <ClassManagement />
           </TabsContent>
 
           <TabsContent value="records">

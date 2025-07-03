@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -173,6 +174,7 @@ const ArgumentationActivity = ({
         <ChatInterface 
           activity={activity}
           studentId={studentId}
+          onBack={() => setShowChat(false)}
         />
       </div>
     );
@@ -203,7 +205,6 @@ const ArgumentationActivity = ({
       {/* Progress indicator */}
       {activity.modules_count && activity.modules_count > 1 && (
         <ModuleProgress 
-          activity={activity}
           studentId={studentId}
           totalModules={activity.modules_count}
         />
