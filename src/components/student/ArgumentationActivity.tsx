@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -191,20 +190,6 @@ const ArgumentationActivity = ({
     return () => clearInterval(autoSaveInterval);
   }, [argument, isSubmitted]);
 
-  const getItemsByStatus = () => {
-    const completed = items.filter(item => item.is_completed);
-    const current = items.find(item => !item.is_completed);
-    const upcoming = items.filter(item => !item.is_completed && item.id !== current?.id);
-
-    return {
-      completed,
-      current: current ? [current] : [],
-      upcoming
-    };
-  };
-
-  const { completed, current, upcoming } = getItemsByStatus();
-
   const argumentationContext = {
     activeTask,
     setActiveTask,
@@ -236,7 +221,7 @@ const ArgumentationActivity = ({
 
   return (
     <div className="h-screen flex bg-gray-50 overflow-hidden p-4">
-      {/* Left Panel: Activity Progress and Checklist */}
+      {/* Left Panel: Activity Info, Checklist, and Action Buttons */}
       <div className="w-80 bg-white shadow-lg flex flex-col flex-shrink-0 rounded-lg">
         {/* Header */}
         <div className="p-4 border-b">
@@ -262,103 +247,56 @@ const ArgumentationActivity = ({
         </div>
 
         {/* Checklist */}
-        <div className="flex-1 p-4 overflow-hidden">
-          <h3 className="text-md font-semibold mb-4">논증 단계</h3>
-          <div className="space-y-4" style={{ height: '384px', overflowY: 'auto' }}>
-            {/* Completed */}
-            <div className="space-y-2">
-              <h4 className="font-semibold text-green-600 flex items-center">
-                <CheckCircle className="h-4 w-4 mr-2" />
-                완료됨
-              </h4>
-              <div className="max-h-40 overflow-y-auto">
-                <div className="space-y-1">
-                  {completed.slice(0, 3).map((item) => (
-                    <div key={item.id} className="flex items-start space-x-2 p-2 bg-green-50 rounded-lg">
-                      <Checkbox 
-                        checked={true}
-                        onCheckedChange={() => toggleItem(item.id)}
-                        className="mt-1"
-                      />
-                      <span className="text-sm text-green-700">{item.description}</span>
-                    </div>
-                  ))}
-                </div>
+        <div className="p-4 border-b">
+          <Card className="border-0 shadow-none rounded-lg">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg">체크리스트</CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="space-y-2" style={{ height: '192px', overflowY: 'auto' }}>
+                {items.slice(0, 5).map((item) => (
+                  <div key={item.id} className="flex items-start space-x-2 p-2 rounded-lg hover:bg-gray-50">
+                    <Checkbox 
+                      checked={item.is_completed}
+                      onCheckedChange={() => toggleItem(item.id)}
+                      className="mt-1"
+                    />
+                    <span className={`text-sm ${item.is_completed ? 'text-gray-500 line-through' : 'text-gray-900'}`}>
+                      {item.description}
+                    </span>
+                  </div>
+                ))}
               </div>
-            </div>
+            </CardContent>
+          </Card>
+        </div>
 
-            {/* Current */}
-            <div className="space-y-2">
-              <h4 className="font-semibold text-blue-600 flex items-center">
-                <Clock className="h-4 w-4 mr-2" />
-                진행중
-              </h4>
-              <div className="max-h-40 overflow-y-auto">
-                <div className="space-y-1">
-                  {current.slice(0, 3).map((item) => (
-                    <div key={item.id} className="flex items-start space-x-2 p-2 bg-blue-50 rounded-lg border-2 border-blue-200">
-                      <Checkbox 
-                        checked={false}
-                        onCheckedChange={() => toggleItem(item.id)}
-                        className="mt-1"
-                      />
-                      <div className="flex-1">
-                        <span className="text-sm text-blue-700 font-medium">{item.description}</span>
-                        {item.description.includes('논증 작성') && !isSubmitted && (
-                          <Button
-                            onClick={() => setActiveTask('argument')}
-                            size="sm"
-                            className="mt-2 bg-blue-600 hover:bg-blue-700 text-xs w-full"
-                          >
-                            시작하기
-                          </Button>
-                        )}
-                        {item.description.includes('동료 평가') && isSubmitted && (
-                          <Button
-                            onClick={() => setActiveTask('peer-evaluation')}
-                            size="sm"
-                            className="mt-2 bg-blue-600 hover:bg-blue-700 text-xs w-full"
-                          >
-                            평가하기
-                          </Button>
-                        )}
-                        {item.description.includes('평가 확인') && (
-                          <Button
-                            onClick={() => setActiveTask('evaluation-check')}
-                            size="sm"
-                            className="mt-2 bg-blue-600 hover:bg-blue-700 text-xs w-full"
-                          >
-                            확인하기
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Upcoming */}
-            <div className="space-y-2">
-              <h4 className="font-semibold text-gray-600 flex items-center">
-                <Circle className="h-4 w-4 mr-2" />
-                예정
-              </h4>
-              <div className="max-h-40 overflow-y-auto">
-                <div className="space-y-1">
-                  {upcoming.slice(0, 3).map((item) => (
-                    <div key={item.id} className="flex items-start space-x-2 p-2 bg-gray-50 rounded-lg">
-                      <Checkbox 
-                        checked={false}
-                        disabled={true}
-                        className="mt-1"
-                      />
-                      <span className="text-sm text-gray-600">{item.description}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
+        {/* Argumentation Action Buttons */}
+        <div className="flex-1 p-4">
+          <div className="space-y-3">
+            <Button
+              onClick={() => setActiveTask('argument')}
+              className="w-full bg-blue-600 hover:bg-blue-700"
+              disabled={isSubmitted}
+            >
+              논증 입력
+            </Button>
+            
+            <Button
+              onClick={() => setActiveTask('peer-evaluation')}
+              className="w-full bg-green-600 hover:bg-green-700"
+              disabled={!isSubmitted}
+            >
+              동료 평가
+            </Button>
+            
+            <Button
+              onClick={() => setActiveTask('evaluation-check')}
+              className="w-full bg-purple-600 hover:bg-purple-700"
+              disabled={!isSubmitted}
+            >
+              결과 확인
+            </Button>
           </div>
         </div>
       </div>
@@ -372,7 +310,7 @@ const ArgumentationActivity = ({
             onBack={onBack}
             argumentationContext={argumentationContext}
             checklistContext={{
-              currentStep: current[0]?.description || "모든 단계가 완료되었습니다.",
+              currentStep: items.find(item => !item.is_completed)?.description || "모든 단계가 완료되었습니다.",
               allSteps: items
             }}
           />
