@@ -54,6 +54,8 @@ const StudentResponseDialog = ({ studentId, activityId, studentName, open, onOpe
         .eq('student_id', studentId)
         .eq('activity_id', activityId);
 
+      console.log('Student responses for', studentId, ':', responses);
+
       // 동료평가 가져오기 (평가한 것들)
       const { data: evaluations } = await supabase
         .from('peer_evaluations')
@@ -66,6 +68,8 @@ const StudentResponseDialog = ({ studentId, activityId, studentName, open, onOpe
         `)
         .eq('evaluator_id', studentId)
         .eq('activity_id', activityId);
+
+      console.log('Student evaluations (given) for', studentId, ':', evaluations);
 
       // 받은 동료평가 가져오기 (개선된 방법 - 두 단계로 처리)
       let receivedEvaluations = [];
@@ -85,12 +89,16 @@ const StudentResponseDialog = ({ studentId, activityId, studentName, open, onOpe
         receivedEvaluations = receivedEvals || [];
       }
 
+      console.log('Student evaluations (received) for', studentId, ':', receivedEvaluations);
+
       // 평가 성찰 가져오기
       const { data: reflections } = await supabase
         .from('evaluation_reflections')
         .select('*')
         .eq('student_id', studentId)
         .eq('activity_id', activityId);
+
+      console.log('Student reflections for', studentId, ':', reflections);
 
       // 채팅 로그 가져오기
       const { data: chatLogs } = await supabase
@@ -123,6 +131,7 @@ const StudentResponseDialog = ({ studentId, activityId, studentName, open, onOpe
       });
 
       console.log('Received evaluations for student:', studentId, receivedEvaluations);
+      console.log('Total reflection count for student', studentId, ':', reflections?.length || 0);
     } catch (error) {
       console.error('Error fetching student data:', error);
       toast({
@@ -235,7 +244,7 @@ const StudentResponseDialog = ({ studentId, activityId, studentName, open, onOpe
             </TabsTrigger>
             <TabsTrigger value="reflections" className="flex items-center space-x-1">
               <CheckCircle className="h-4 w-4" />
-              <span>성찰</span>
+              <span>성찰 ({studentData.reflections.length})</span>
             </TabsTrigger>
             <TabsTrigger value="chats" className="flex items-center space-x-1">
               <MessageSquare className="h-4 w-4" />
