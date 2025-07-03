@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -68,20 +67,23 @@ const StudentResponseDialog = ({ studentId, activityId, studentName, open, onOpe
         .eq('evaluator_id', studentId)
         .eq('activity_id', activityId);
 
-      // 받은 동료평가 가져오기 (평가자 정보 포함 - 관리자용)
-      const { data: receivedEvaluations } = await supabase
-        .from('peer_evaluations')
-        .select(`
-          *,
-          argumentation_responses!target_response_id(
-            student_id,
-            response_text
-          ),
-          students!evaluator_id(name, student_id)
-        `)
-        .eq('argumentation_responses.student_id', studentId)
-        .eq('activity_id', activityId)
-        .eq('is_completed', true);
+      // 받은 동료평가 가져오기 (개선된 방법 - 두 단계로 처리)
+      let receivedEvaluations = [];
+      if (responses && responses.length > 0) {
+        const responseIds = responses.map(r => r.id);
+        
+        const { data: receivedEvals } = await supabase
+          .from('peer_evaluations')
+          .select(`
+            *,
+            students!evaluator_id(name, student_id)
+          `)
+          .in('target_response_id', responseIds)
+          .eq('activity_id', activityId)
+          .eq('is_completed', true);
+
+        receivedEvaluations = receivedEvals || [];
+      }
 
       // 평가 성찰 가져오기
       const { data: reflections } = await supabase
@@ -117,9 +119,12 @@ const StudentResponseDialog = ({ studentId, activityId, studentName, open, onOpe
         reflections: reflections || [],
         chatLogs: chatLogs || [],
         checklistProgress: checklistProgress || [],
-        receivedEvaluations: receivedEvaluations || []
+        receivedEvaluations: receivedEvaluations
       });
+
+      console.log('Received evaluations for student:', studentId, receivedEvaluations);
     } catch (error) {
+      console.error('Error fetching student data:', error);
       toast({
         title: "오류",
         description: "학생 데이터를 불러오는데 실패했습니다.",
