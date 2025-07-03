@@ -206,6 +206,8 @@ const ArgumentationActivity = ({
       {activity.modules_count && activity.modules_count > 1 && (
         <ModuleProgress 
           totalModules={activity.modules_count}
+          currentModule={1}
+          completedModules={0}
         />
       )}
 

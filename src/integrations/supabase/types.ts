@@ -762,11 +762,28 @@ export type Database = {
           | { activity_id_param: string; evaluations_per_student?: number }
         Returns: number
       }
+      assign_peer_evaluations_by_class: {
+        Args: {
+          activity_id_param: string
+          evaluations_per_student?: number
+          target_class?: string
+        }
+        Returns: number
+      }
       assign_peer_evaluations_specific: {
         Args: {
           activity_id_param: string
           evaluations_per_student?: number
           group_offset?: number
+        }
+        Returns: number
+      }
+      assign_peer_evaluations_specific_by_class: {
+        Args: {
+          activity_id_param: string
+          evaluations_per_student?: number
+          group_offset?: number
+          target_class?: string
         }
         Returns: number
       }

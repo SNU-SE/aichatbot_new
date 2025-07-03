@@ -2,12 +2,12 @@
 import { Star } from 'lucide-react';
 
 interface ModuleProgressProps {
-  currentModule: number;
   totalModules: number;
-  completedModules: number;
+  currentModule?: number;
+  completedModules?: number;
 }
 
-const ModuleProgress = ({ currentModule, totalModules, completedModules }: ModuleProgressProps) => {
+const ModuleProgress = ({ totalModules, currentModule = 1, completedModules = 0 }: ModuleProgressProps) => {
   return (
     <div className="flex justify-between items-center mb-4">
       <div className="flex items-center space-x-4">
