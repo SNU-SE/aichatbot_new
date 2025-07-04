@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -66,7 +67,7 @@ const ChatInterface = ({
       setMessages(data.map(msg => ({
         id: msg.id,
         message: msg.message,
-        sender: msg.sender,
+        sender: msg.sender as 'student' | 'bot', // 타입 캐스팅 추가
         timestamp: msg.timestamp,
         file_url: msg.file_url,
         file_name: msg.file_name,
@@ -106,7 +107,7 @@ const ChatInterface = ({
           throw uploadError;
         }
 
-        file_url = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/${data?.Key}`;
+        file_url = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/chat_files/${data.path}`;
         file_name = selectedFile.name;
         file_type = selectedFile.type;
       }
@@ -130,7 +131,7 @@ const ChatInterface = ({
       setMessages(prevMessages => [...prevMessages, {
         id: log.id,
         message: log.message,
-        sender: log.sender,
+        sender: log.sender as 'student' | 'bot', // 타입 캐스팅 추가
         timestamp: log.timestamp,
         file_url: log.file_url,
         file_name: log.file_name,
@@ -147,40 +148,6 @@ const ChatInterface = ({
       toast({
         title: "메시지 전송 실패",
         description: "메시지를 보내는 동안 오류가 발생했습니다.",
-        variant: "destructive"
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleRetry = async (messageId: string) => {
-    const messageToRetry = messages.find(msg => msg.id === messageId);
-    if (!messageToRetry) return;
-
-    setIsLoading(true);
-    try {
-      // Implement your retry logic here, e.g., resend the message to the AI
-      // and update the message in the chat_logs table.
-      // For simplicity, let's assume a successful retry:
-      const updatedMessage = { ...messageToRetry, message: `${messageToRetry.message} (Retried)` };
-
-      // Update the message in the chat_logs table (replace with your actual update logic)
-      const { error } = await supabase
-        .from('chat_logs')
-        .update({ message: updatedMessage.message })
-        .eq('id', messageId);
-
-      if (error) throw error;
-
-      setMessages(prevMessages =>
-        prevMessages.map(msg => (msg.id === messageId ? updatedMessage : msg))
-      );
-    } catch (error) {
-      console.error('Error retrying message:', error);
-      toast({
-        title: "메시지 재전송 실패",
-        description: "메시지를 재전송하는 동안 오류가 발생했습니다.",
         variant: "destructive"
       });
     } finally {
@@ -254,7 +221,7 @@ const ChatInterface = ({
 
       // 같은 클래스의 평가만 필터링
       const classFilteredEvaluations = evaluations?.filter(
-        eval => eval.students?.class_name === studentData.class_name
+        evaluation => evaluation.students?.class_name === studentData.class_name
       ) || [];
 
       argumentationContext.setPeerEvaluations(classFilteredEvaluations);
@@ -485,7 +452,6 @@ const ChatInterface = ({
       <div className="flex-1 min-h-0">
         <VirtualizedMessageList 
           messages={messages} 
-          onRetry={handleRetry}
           isLoading={isLoading}
         />
       </div>
@@ -494,7 +460,16 @@ const ChatInterface = ({
       {selectedFile && (
         <div className="p-4 border-t bg-gray-50">
           <div className="flex items-center justify-between">
-            <FilePreview file={selectedFile} />
+            <FilePreview 
+              file={selectedFile} 
+              onRemove={() => {
+                setSelectedFile(null);
+                setPreviewUrl(null);
+                if (fileInputRef.current) {
+                  fileInputRef.current.value = '';
+                }
+              }}
+            />
             <Button
               onClick={() => {
                 setSelectedFile(null);
