@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -36,6 +35,7 @@ const ArgumentationActivity = ({
   const [usefulnessRating, setUsefulnessRating] = useState(1);
   const [peerResponse, setPeerResponse] = useState<any>(null);
   const [peerEvaluations, setPeerEvaluations] = useState<any[]>([]);
+  const [evaluationCheckEnabled, setEvaluationCheckEnabled] = useState(false);
   const { toast } = useToast();
   const { items, loading, toggleItem } = useChecklistProgress({ 
     studentId, 
@@ -51,6 +51,12 @@ const ArgumentationActivity = ({
     if (loadDraft) {
       loadSavedDraft();
     }
+    // 평가 가능 여부 확인
+    checkEvaluationAvailability();
+    
+    // 30초마다 평가 가능 여부 재확인
+    const interval = setInterval(checkEvaluationAvailability, 30000);
+    return () => clearInterval(interval);
   }, [activity.id, studentId]);
 
   const checkSubmissionStatus = async () => {
@@ -86,6 +92,33 @@ const ArgumentationActivity = ({
       }
     } catch (error) {
       console.error('Error loading draft:', error);
+    }
+  };
+
+  const checkEvaluationAvailability = async () => {
+    try {
+      // 현재 학생의 클래스 정보 가져오기
+      const { data: studentData, error: studentError } = await supabase
+        .from('students')
+        .select('class_name')
+        .eq('student_id', studentId)
+        .single();
+
+      if (studentError) throw studentError;
+
+      // 교사가 해당 활동/클래스에 대해 평가완료를 했는지 확인
+      const { data: isCompleted, error: phaseError } = await supabase
+        .rpc('is_peer_evaluation_completed', {
+          activity_id_param: activity.id,
+          class_name_param: studentData.class_name
+        });
+
+      if (phaseError) throw phaseError;
+
+      setEvaluationCheckEnabled(isCompleted || false);
+    } catch (error) {
+      console.error('평가 가능 여부 확인 오류:', error);
+      setEvaluationCheckEnabled(false);
     }
   };
 
@@ -294,9 +327,12 @@ const ArgumentationActivity = ({
             <Button
               onClick={() => setActiveTask('evaluation-check')}
               className="w-full bg-purple-600 hover:bg-purple-700"
-              disabled={!isSubmitted}
+              disabled={!isSubmitted || !evaluationCheckEnabled}
             >
               결과 확인
+              {!evaluationCheckEnabled && isSubmitted && (
+                <span className="ml-2 text-xs">(대기중)</span>
+              )}
             </Button>
           </div>
         </div>

@@ -1,417 +1,82 @@
-
-import { useState, useEffect, useRef } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
-import { Send, Bot, User, ArrowLeft, BookOpen, Paperclip, Microscope, Users } from 'lucide-react';
+import { Send, ArrowLeft, Paperclip, X, Save, Check, User, Bot, FileText, Image as ImageIcon, File } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { uploadFile } from '@/utils/fileUpload';
+import { Activity } from '@/types/activity';
+import VirtualizedMessageList from './VirtualizedMessageList';
 import FilePreview from './FilePreview';
-import MessageFile from './MessageFile';
+import { Badge } from '@/components/ui/badge';
 
 interface Message {
   id: string;
-  sender: 'student' | 'bot';
   message: string;
+  sender: 'student' | 'bot';
   timestamp: string;
-  file_url?: string | null;
-  file_name?: string | null;
-  file_type?: string | null;
-}
-
-interface Activity {
-  id: string;
-  title: string;
-  type: string;
-  content: any;
-}
-
-interface ArgumentationContext {
-  activeTask: 'none' | 'argument' | 'peer-evaluation' | 'evaluation-check';
-  setActiveTask: (task: 'none' | 'argument' | 'peer-evaluation' | 'evaluation-check') => void;
-  argumentText: string;
-  setArgumentText: (text: string) => void;
-  evaluationText: string;
-  setEvaluationText: (text: string) => void;
-  reflectionText: string;
-  setReflectionText: (text: string) => void;
-  finalRevisedArgument: string;
-  setFinalRevisedArgument: (text: string) => void;
-  usefulnessRating: number;
-  setUsefulnessRating: (rating: number) => void;
-  peerResponse: any;
-  peerEvaluations: any[];
-  isSubmitted: boolean;
-  submitArgument: () => void;
-  submitPeerEvaluation: () => void;
-  submitReflection: () => void;
+  file_url?: string;
+  file_name?: string;
+  file_type?: string;
 }
 
 interface ChatInterfaceProps {
-  activity: any;
+  activity: Activity;
   studentId: string;
   onBack: () => void;
+  argumentationContext?: any;
   checklistContext?: {
     currentStep: string;
     allSteps: any[];
   };
-  argumentationContext?: ArgumentationContext;
 }
 
-const ChatInterface = ({ activity, studentId, onBack, checklistContext, argumentationContext }: ChatInterfaceProps) => {
+const ChatInterface = ({ 
+  activity, 
+  studentId, 
+  onBack, 
+  argumentationContext,
+  checklistContext 
+}: ChatInterfaceProps) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState('');
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [loadingHistory, setLoadingHistory] = useState(true);
-  const [motherTongue, setMotherTongue] = useState<string>('Korean');
-  const [peerResponse, setPeerResponse] = useState<any>(null);
-  const [peerEvaluations, setPeerEvaluations] = useState<any[]>([]);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [initialArgument, setInitialArgument] = useState<string>('');
-  const [individualEvaluationReflections, setIndividualEvaluationReflections] = useState<{[key: string]: {reflection: string, rating: number}}>({});
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
-  // 모든 평가 완료 여부 확인 함수
-  const allPeerEvaluationsCompleted = () => {
-    return peerResponse?.assignments?.every(assignment => assignment.is_completed) || false;
-  };
-
-  // 모든 평가가 입력되었는지 확인하는 함수
-  const allEvaluationsInputted = () => {
-    return peerResponse?.assignments?.every(assignment => 
-      assignment.evaluation_text && assignment.evaluation_text.trim().length > 0
-    ) || false;
-  };
-
-  // 전체 동료평가 제출 함수
-  const submitAllPeerEvaluations = async () => {
-    if (!peerResponse?.assignments || !allEvaluationsInputted()) {
-      toast({
-        title: "오류",
-        description: "모든 평가 내용을 입력해주세요.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    try {
-      // 모든 평가를 한 번에 제출
-      const updatePromises = peerResponse.assignments.map(assignment => 
-        supabase
-          .from('peer_evaluations')
-          .update({
-            evaluation_text: assignment.evaluation_text,
-            is_completed: true,
-            submitted_at: new Date().toISOString()
-          })
-          .eq('id', assignment.id)
-      );
-
-      const results = await Promise.all(updatePromises);
-      
-      // 에러 확인
-      const errors = results.filter(result => result.error);
-      if (errors.length > 0) {
-        throw new Error('일부 평가 제출에 실패했습니다.');
-      }
-
-      // 상태 업데이트
-      setPeerResponse(prev => ({
-        ...prev,
-        assignments: prev.assignments.map(a => ({ ...a, is_completed: true }))
-      }));
-
-      // argumentationContext의 submitPeerEvaluation 호출
-      if (argumentationContext) {
-        argumentationContext.submitPeerEvaluation();
-      }
-
-      toast({
-        title: "성공",
-        description: "모든 동료평가가 제출되었습니다."
-      });
-    } catch (error: any) {
-      toast({
-        title: "오류",
-        description: "동료평가 제출에 실패했습니다.",
-        variant: "destructive"
-      });
-    }
-  };
-
   useEffect(() => {
-    fetchStudentInfo();
-    fetchChatHistory();
-    checkPeerEvaluationStatus();
+    fetchMessages();
   }, [activity.id, studentId]);
 
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
-
-  const fetchStudentInfo = async () => {
-    try {
-      const { data: studentData, error } = await supabase
-        .from('students')
-        .select('mother_tongue')
-        .eq('student_id', studentId)
-        .single();
-
-      if (error) {
-        console.error('Student info error:', error);
-      } else {
-        setMotherTongue(studentData.mother_tongue || 'Korean');
-      }
-    } catch (error) {
-      console.error('Error fetching student info:', error);
-    }
-  };
-
-  const fetchChatHistory = async () => {
+  const fetchMessages = async () => {
+    setIsLoading(true);
     try {
       const { data, error } = await supabase
         .from('chat_logs')
         .select('*')
-        .eq('student_id', studentId)
         .eq('activity_id', activity.id)
         .order('timestamp', { ascending: true });
 
-      if (error) {
-        console.error('Chat history error:', error);
-        throw error;
-      }
-      
-      const typedMessages: Message[] = (data || []).map(item => ({
-        id: item.id,
-        sender: item.sender as 'student' | 'bot',
-        message: item.message,
-        timestamp: item.timestamp,
-        file_url: item.file_url,
-        file_name: item.file_name,
-        file_type: item.file_type
-      }));
-      
-      setMessages(typedMessages);
-    } catch (error: any) {
-      console.error('Error fetching chat history:', error);
-      toast({
-        title: "오류",
-        description: "대화 기록을 불러오는데 실패했습니다.",
-        variant: "destructive"
-      });
-    } finally {
-      setLoadingHistory(false);
-    }
-  };
+      if (error) throw error;
 
-  const checkPeerEvaluationStatus = async () => {
-    try {
-      console.log('Checking peer evaluation status for student:', studentId, 'activity:', activity.id);
-      
-      // Check for assigned peer evaluations - 여러 평가 대상 가져오기
-      const { data: assignments, error: assignmentError } = await supabase
-        .from('peer_evaluations')
-        .select(`
-          *,
-          argumentation_responses!target_response_id(
-            response_text,
-            students!argumentation_responses_student_id_fkey(name, student_id)
-          )
-        `)
-        .eq('evaluator_id', studentId)
-        .eq('activity_id', activity.id);
-
-      console.log('Peer evaluation assignments:', assignments);
-
-      if (assignmentError) {
-        console.error('Assignment fetch error:', assignmentError);
-      }
-
-      if (assignments && assignments.length > 0) {
-        // 여러 평가 대상을 모두 설정
-        setPeerResponse({ assignments });
-        console.log('Set peer response with assignments:', assignments);
-        
-        // 첫 번째 평가의 텍스트를 기본값으로 설정 (기존 호환성)
-        if (assignments[0].evaluation_text && argumentationContext) {
-          argumentationContext.setEvaluationText(assignments[0].evaluation_text);
-        }
-      } else {
-        console.log('No peer evaluation assignments found');
-        setPeerResponse(null);
-      }
-
-      // Check if peer evaluations are available for this student's response
-      const { data: studentResponse } = await supabase
-        .from('argumentation_responses')
-        .select('id, response_text, final_revised_argument')
-        .eq('student_id', studentId)
-        .eq('activity_id', activity.id)
-        .single();
-
-      if (studentResponse) {
-        // 초기 논증 설정
-        setInitialArgument(studentResponse.response_text);
-        
-        // 최종 수정 논증이 있으면 설정
-        if (studentResponse.final_revised_argument && argumentationContext) {
-          argumentationContext.setFinalRevisedArgument(studentResponse.final_revised_argument);
-        }
-        
-        const { data: evaluations } = await supabase
-          .from('peer_evaluations')
-          .select('*')
-          .eq('target_response_id', studentResponse.id)
-          .eq('is_completed', true);
-
-        if (evaluations && evaluations.length > 0) {
-          setPeerEvaluations(evaluations);
-          if (argumentationContext) {
-            argumentationContext.peerEvaluations = evaluations;
-          }
-
-          // 기존 개별 평가 반영 데이터 불러오기
-          const { data: existingReflections } = await supabase
-            .from('evaluation_reflections')
-            .select('*')
-            .eq('student_id', studentId)
-            .eq('activity_id', activity.id);
-
-          if (existingReflections && existingReflections.length > 0) {
-            const reflectionsMap = {};
-            existingReflections.forEach((reflection, index) => {
-              reflectionsMap[`evaluation_${index}`] = {
-                reflection: reflection.reflection_text,
-                rating: reflection.usefulness_rating || 1
-              };
-            });
-            setIndividualEvaluationReflections(reflectionsMap);
-          }
-        }
-      }
+      setMessages(data.map(msg => ({
+        id: msg.id,
+        message: msg.message,
+        sender: msg.sender,
+        timestamp: msg.timestamp,
+        file_url: msg.file_url,
+        file_name: msg.file_name,
+        file_type: msg.file_type
+      })));
     } catch (error) {
-      console.error('동료평가 상태 확인 실패:', error);
-    }
-  };
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
-  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      if (file.size > 10 * 1024 * 1024) {
-        toast({
-          title: "파일 크기 초과",
-          description: "파일 크기는 10MB를 초과할 수 없습니다.",
-          variant: "destructive"
-        });
-        return;
-      }
-      setSelectedFile(file);
-    }
-  };
-
-  const removeSelectedFile = () => {
-    setSelectedFile(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-  };
-
-  const handleSendMessage = async (messageText: string, file?: File) => {
-    if (!messageText.trim() && !file) return;
-
-    const isHelpRequest = messageText.trim() === '?' || messageText.trim() === '도와줘';
-    let finalMessage = messageText;
-
-    if (isHelpRequest && checklistContext) {
-      finalMessage = `현재 단계에 대해 도움이 필요합니다. 현재 단계: ${checklistContext.currentStep}`;
-    }
-
-    if (messageText.trim()) {
-      const userMessage: Message = {
-        id: Date.now().toString(),
-        sender: 'student',
-        message: messageText,
-        timestamp: new Date().toISOString(),
-        file_url: null,
-        file_name: null,
-        file_type: null
-      };
-      setMessages(prev => [...prev, userMessage]);
-    }
-
-    setInputMessage('');
-    setIsLoading(true);
-    setSelectedFile(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-
-    try {
-      let fileUrl = null;
-      let fileName = null;
-      let fileType = null;
-
-      if (file) {
-        fileUrl = await uploadFile(file, studentId);
-        fileName = file.name;
-        fileType = file.type;
-      }
-
-      console.log('Sending message to AI chat function:', {
-        message: finalMessage || '파일을 업로드했습니다.',
-        studentId,
-        activityId: activity.id,
-        fileUrl,
-        fileName,
-        fileType,
-        motherTongue
-      });
-
-      const { data, error } = await supabase.functions.invoke('ai-chat', {
-        body: {
-          message: finalMessage || '파일을 업로드했습니다.',
-          studentId: studentId,
-          activityId: activity.id,
-          fileUrl: fileUrl,
-          fileName: fileName,
-          fileType: fileType,
-          motherTongue: motherTongue
-        }
-      });
-
-      console.log('AI chat response:', data);
-
-      if (error) {
-        console.error('Supabase function error:', error);
-        throw new Error(`Function error: ${error.message}`);
-      }
-
-      if (data?.error) {
-        console.error('AI chat error:', data.error);
-        throw new Error(data.error);
-      }
-
-      await fetchChatHistory();
-
-    } catch (error: any) {
-      console.error('Error in handleSendMessage:', error);
-      
-      if (messageText.trim()) {
-        setMessages(prev => prev.slice(0, -1));
-      }
-      
+      console.error('Error fetching messages:', error);
       toast({
-        title: "오류",
-        description: error.message || "메시지 전송에 실패했습니다.",
+        title: "메시지 불러오기 실패",
+        description: "메시지를 불러오는 동안 오류가 발생했습니다.",
         variant: "destructive"
       });
     } finally {
@@ -419,442 +84,469 @@ const ChatInterface = ({ activity, studentId, onBack, checklistContext, argument
     }
   };
 
-  const sendMessage = async () => {
-    await handleSendMessage(inputMessage.trim(), selectedFile || undefined);
-  };
+  const handleSendMessage = async () => {
+    if (!inputMessage.trim() && !selectedFile) return;
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage();
+    setIsLoading(true);
+    try {
+      let file_url = null;
+      let file_name = null;
+      let file_type = null;
+
+      if (selectedFile) {
+        const filePath = `chat_files/${studentId}/${activity.id}/${selectedFile.name}`;
+        const { data, error: uploadError } = await supabase.storage
+          .from('chat_files')
+          .upload(filePath, selectedFile, {
+            cacheControl: '3600',
+            upsert: false
+          });
+
+        if (uploadError) {
+          throw uploadError;
+        }
+
+        file_url = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/${data?.Key}`;
+        file_name = selectedFile.name;
+        file_type = selectedFile.type;
+      }
+
+      const { data: log, error } = await supabase
+        .from('chat_logs')
+        .insert([{
+          activity_id: activity.id,
+          student_id: studentId,
+          message: inputMessage.trim(),
+          sender: 'student',
+          file_url: file_url,
+          file_name: file_name,
+          file_type: file_type
+        }])
+        .select('*')
+        .single();
+
+      if (error) throw error;
+
+      setMessages(prevMessages => [...prevMessages, {
+        id: log.id,
+        message: log.message,
+        sender: log.sender,
+        timestamp: log.timestamp,
+        file_url: log.file_url,
+        file_name: log.file_name,
+        file_type: log.file_type
+      }]);
+      setInputMessage('');
+      setSelectedFile(null);
+      setPreviewUrl(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    } catch (error) {
+      console.error('Error sending message:', error);
+      toast({
+        title: "메시지 전송 실패",
+        description: "메시지를 보내는 동안 오류가 발생했습니다.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const getActivityDescription = () => {
-    if (activity.content && typeof activity.content === 'object') {
-      return activity.content.description || '';
+  const handleRetry = async (messageId: string) => {
+    const messageToRetry = messages.find(msg => msg.id === messageId);
+    if (!messageToRetry) return;
+
+    setIsLoading(true);
+    try {
+      // Implement your retry logic here, e.g., resend the message to the AI
+      // and update the message in the chat_logs table.
+      // For simplicity, let's assume a successful retry:
+      const updatedMessage = { ...messageToRetry, message: `${messageToRetry.message} (Retried)` };
+
+      // Update the message in the chat_logs table (replace with your actual update logic)
+      const { error } = await supabase
+        .from('chat_logs')
+        .update({ message: updatedMessage.message })
+        .eq('id', messageId);
+
+      if (error) throw error;
+
+      setMessages(prevMessages =>
+        prevMessages.map(msg => (msg.id === messageId ? updatedMessage : msg))
+      );
+    } catch (error) {
+      console.error('Error retrying message:', error);
+      toast({
+        title: "메시지 재전송 실패",
+        description: "메시지를 재전송하는 동안 오류가 발생했습니다.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
     }
-    return '';
   };
 
-  const getActivityIcon = () => {
-    switch (activity.type) {
-      case 'experiment':
-        return <Microscope className="h-6 w-6" />;
-      case 'argumentation':
-        return <Users className="h-6 w-6" />;
-      case 'discussion':
-        return <BookOpen className="h-6 w-6" />;
-      default:
-        return <BookOpen className="h-6 w-6" />;
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files && event.target.files[0];
+    if (file) {
+      setSelectedFile(file);
+      setPreviewUrl(URL.createObjectURL(file));
     }
   };
 
-  if (loadingHistory) {
-    return (
-      <div className="flex justify-center items-center py-12">
-        <div className="text-gray-500">대화 기록을 불러오는 중...</div>
-      </div>
-    );
-  }
+  const scrollToBottom = useCallback(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+  }, [])
 
-  return (
-    <div className="max-w-4xl mx-auto space-y-6 h-full flex flex-col">
-      {/* 활동 정보 헤더 */}
-      <Card className="border-0 shadow-md rounded-lg flex-shrink-0">
-        <CardHeader className="pb-4">
-          <div className="flex items-center space-x-3">
-            <div className="p-2 bg-[rgb(15,15,112)] rounded-lg text-white">
-              {getActivityIcon()}
-            </div>
-            <div className="flex-1">
-              <CardTitle className="text-xl font-bold text-gray-900">
-                {activity.title}
-              </CardTitle>
-              {getActivityDescription() && (
-                <p className="text-gray-600 mt-1">{getActivityDescription()}</p>
-              )}
-            </div>
-            <Button 
-              variant="outline" 
-              onClick={onBack}
-              className="border-[rgb(15,15,112)] text-[rgb(15,15,112)] hover:bg-[rgb(15,15,112)] hover:text-white rounded-lg"
-            >
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              뒤로가기
-            </Button>
-          </div>
-        </CardHeader>
-      </Card>
+  useEffect(() => {
+    scrollToBottom()
+  }, [messages, scrollToBottom])
 
-      {/* 논증 활동 작업 영역 */}
-      {argumentationContext && argumentationContext.activeTask !== 'none' && (
-        <div className="bg-white border shadow-sm p-4 max-h-96 overflow-y-auto rounded-lg">
-          {argumentationContext.activeTask === 'argument' && (
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold">논증 입력</h3>
-              <div>
-                <h4 className="font-medium mb-2">질문:</h4>
-                <p className="text-gray-700 bg-gray-50 p-3 rounded">
-                  {activity.final_question || "질문이 설정되지 않았습니다."}
-                </p>
-              </div>
-              <div>
-                <h4 className="font-medium mb-2">답변:</h4>
-                <Textarea
-                  value={argumentationContext.argumentText}
-                  onChange={(e) => argumentationContext.setArgumentText(e.target.value)}
-                  placeholder="논증을 작성해주세요..."
-                  className="min-h-32"
-                />
-              </div>
+  const checkPeerEvaluationStatus = async () => {
+    if (!argumentationContext) return false;
+
+    try {
+      // 현재 학생의 클래스 정보 가져오기
+      const { data: studentData, error: studentError } = await supabase
+        .from('students')
+        .select('class_name')
+        .eq('student_id', studentId)
+        .single();
+
+      if (studentError) throw studentError;
+
+      // 교사가 해당 활동/클래스에 대해 평가완료를 했는지 확인
+      const { data: isCompleted, error: phaseError } = await supabase
+        .rpc('is_peer_evaluation_completed', {
+          activity_id_param: activity.id,
+          class_name_param: studentData.class_name
+        });
+
+      if (phaseError) throw phaseError;
+
+      if (!isCompleted) {
+        return false;
+      }
+
+      // 학생이 받은 평가들 가져오기 (같은 클래스만)
+      const { data: evaluations, error: evalError } = await supabase
+        .from('peer_evaluations')
+        .select(`
+          evaluation_text,
+          submitted_at,
+          students!evaluator_id(name, class_name)
+        `)
+        .eq('activity_id', activity.id)
+        .eq('is_completed', true)
+        .in('target_response_id', [
+          // 현재 학생의 응답 ID 찾기
+          ...(await supabase
+            .from('argumentation_responses')
+            .select('id')
+            .eq('activity_id', activity.id)
+            .eq('student_id', studentId)
+            .then(({ data }) => data?.map(r => r.id) || []))
+        ]);
+
+      if (evalError) throw evalError;
+
+      // 같은 클래스의 평가만 필터링
+      const classFilteredEvaluations = evaluations?.filter(
+        eval => eval.students?.class_name === studentData.class_name
+      ) || [];
+
+      argumentationContext.setPeerEvaluations(classFilteredEvaluations);
+      return classFilteredEvaluations.length > 0;
+    } catch (error) {
+      console.error('동료평가 상태 확인 오류:', error);
+      return false;
+    }
+  };
+
+  const handleArgumentSubmit = async () => {
+    if (argumentationContext) {
+      await argumentationContext.submitArgument();
+    }
+  };
+
+  const handlePeerEvaluationSubmit = async () => {
+    if (argumentationContext) {
+      await argumentationContext.submitPeerEvaluation();
+    }
+  };
+
+  const handleEvaluationCheck = async () => {
+    if (argumentationContext) {
+      const hasEvaluations = await checkPeerEvaluationStatus();
+      if (hasEvaluations) {
+        argumentationContext.setActiveTask('evaluation-check');
+      } else {
+        toast({
+          title: "알림",
+          description: "아직 받은 동료평가가 없습니다.",
+          variant: "destructive"
+        });
+      }
+    }
+  };
+
+  const renderArgumentationInterface = () => {
+    if (!argumentationContext) return null;
+
+    const { 
+      activeTask, 
+      argumentText, 
+      setArgumentText,
+      evaluationText,
+      setEvaluationText,
+      reflectionText,
+      setReflectionText,
+      finalRevisedArgument,
+      setFinalRevisedArgument,
+      usefulnessRating,
+      setUsefulnessRating,
+      peerResponse,
+      peerEvaluations,
+      isSubmitted 
+    } = argumentationContext;
+
+    if (activeTask === 'argument') {
+      return (
+        <Card className="mb-4">
+          <CardHeader>
+            <CardTitle className="text-lg">논증 작성</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Textarea
+              placeholder="여기에 논증을 작성하세요..."
+              value={argumentText}
+              onChange={(e) => setArgumentText(e.target.value)}
+              className="min-h-[200px]"
+              disabled={isSubmitted}
+            />
+            {!isSubmitted && (
               <div className="flex space-x-2">
-                <Button onClick={argumentationContext.submitArgument}>제출</Button>
-                <Button variant="outline" onClick={() => argumentationContext.setActiveTask('none')}>
-                  취소
+                <Button onClick={handleArgumentSubmit} disabled={!argumentText.trim()}>
+                  <Send className="h-4 w-4 mr-2" />
+                  논증 제출
                 </Button>
               </div>
-            </div>
-          )}
+            )}
+            {isSubmitted && (
+              <div className="flex items-center space-x-2 text-green-600">
+                <Check className="h-4 w-4" />
+                <span>논증이 제출되었습니다.</span>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      );
+    }
 
-          {argumentationContext.activeTask === 'peer-evaluation' && (
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold">동료 평가</h3>
-              
-              {/* 여러 평가 대상 표시 - 평가 대상 정보 숨김 */}
-              {peerResponse?.assignments && peerResponse.assignments.length > 0 ? (
-                <>
-                  {peerResponse.assignments.map((assignment, index) => (
-                    <div key={assignment.id} className="border rounded-lg p-4 mb-4">
-                      <div className="flex items-center justify-between mb-2">
-                        <h4 className="font-medium">
-                          평가 대상 {index + 1}
-                        </h4>
-                        {assignment.is_completed && (
-                          <span className="text-green-600 text-sm">✓ 완료</span>
-                        )}
-                      </div>
-                      
-                      <div className="mb-3">
-                        <h5 className="font-medium mb-2">평가할 응답:</h5>
-                        <div className="bg-gray-50 p-3 rounded">
-                          <p className="text-gray-700">
-                            {assignment.argumentation_responses?.response_text || '응답 텍스트가 없습니다.'}
-                          </p>
-                        </div>
-                      </div>
-                      
-                      <div className="mb-3">
-                        <h5 className="font-medium mb-2">평가 내용:</h5>
-                        <Textarea
-                          value={assignment.evaluation_text || ''}
-                          onChange={(e) => {
-                            const newText = e.target.value;
-                            // 해당 평가의 텍스트 업데이트
-                            setPeerResponse(prev => ({
-                              ...prev,
-                              assignments: prev.assignments.map(a => 
-                                a.id === assignment.id ? { ...a, evaluation_text: newText } : a
-                              )
-                            }));
-                          }}
-                          placeholder="동료의 응답에 대한 평가를 작성해주세요..."
-                          className="min-h-24"
-                          disabled={assignment.is_completed}
-                        />
-                      </div>
-                    </div>
-                  ))}
-                  
-                  {/* 전체 제출 버튼 */}
-                  <div className="flex space-x-2 pt-4 border-t">
-                    <Button 
-                      onClick={submitAllPeerEvaluations}
-                      disabled={!allEvaluationsInputted() || allPeerEvaluationsCompleted()}
-                      className="bg-blue-600 hover:bg-blue-700"
-                    >
-                      {allPeerEvaluationsCompleted() ? '평가 제출완료' : '평가 제출'}
-                    </Button>
-                    <Button variant="outline" onClick={() => argumentationContext.setActiveTask('none')}>
-                      취소
-                    </Button>
-                  </div>
-                </>
-              ) : (
-                <div className="text-center py-8 text-gray-500">
-                  <p>배정된 동료평가가 없습니다.</p>
-                  <p className="text-sm mt-1">관리자가 동료평가를 배정할 때까지 기다려주세요.</p>
-                </div>
-              )}
+    if (activeTask === 'peer-evaluation') {
+      return (
+        <Card className="mb-4">
+          <CardHeader>
+            <CardTitle className="text-lg">동료 평가</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-gray-600">
+              AI가 동료의 논증을 분석하고 평가할 수 있도록 도와드립니다.
+            </p>
+            <div className="p-3 bg-blue-50 rounded-lg">
+              <p className="text-sm">
+                "동료평가를 시작해줘" 또는 "평가할 논증을 보여줘"라고 메시지를 보내보세요.
+              </p>
             </div>
-          )}
+          </CardContent>
+        </Card>
+      );
+    }
 
-          {argumentationContext.activeTask === 'evaluation-check' && (
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold">평가 확인</h3>
-              
-              {/* 초기 논증 표시 */}
-              {initialArgument && (
-                <div className="mb-4">
-                  <h4 className="font-medium mb-2">초기 논증:</h4>
-                  <div className="bg-blue-50 p-3 rounded border-l-4 border-blue-400">
-                    <p className="text-gray-800 whitespace-pre-wrap">{initialArgument}</p>
-                  </div>
-                </div>
-              )}
-              
-              {/* 개별 평가별 반영 */}
-              {argumentationContext.peerEvaluations.length > 0 ? (
-                <div className="space-y-6">
-                  {argumentationContext.peerEvaluations.map((evaluation, index) => (
-                    <div key={evaluation.id} className="border rounded-lg p-4 bg-gray-50">
-                      <h4 className="font-medium mb-3">평가자 {index + 1}의 평가</h4>
-                      
-                      <div className="mb-4">
-                        <div className="bg-white p-3 rounded border">
-                          <p className="text-gray-700 whitespace-pre-wrap">{evaluation.evaluation_text}</p>
-                        </div>
-                      </div>
-                      
-                      <div className="mb-4">
-                        <h5 className="font-medium mb-2">이 평가가 얼마나 유익했나요?</h5>
-                        <Textarea
-                          value={individualEvaluationReflections[`evaluation_${index}`]?.reflection || ''}
-                          onChange={(e) => {
-                            setIndividualEvaluationReflections(prev => ({
-                              ...prev,
-                              [`evaluation_${index}`]: {
-                                ...prev[`evaluation_${index}`],
-                                reflection: e.target.value
-                              }
-                            }));
-                          }}
-                          placeholder="이 평가에 대한 생각을 작성해주세요..."
-                          className="min-h-20"
-                        />
-                      </div>
-                      
-                      <div className="mb-4">
-                        <h5 className="font-medium mb-2">유익함 정도 (1-5점):</h5>
-                        <div className="flex space-x-2">
-                          {[1, 2, 3, 4, 5].map((rating) => (
-                            <Button
-                              key={rating}
-                              variant={individualEvaluationReflections[`evaluation_${index}`]?.rating === rating ? "default" : "outline"}
-                              size="sm"
-                              onClick={() => {
-                                setIndividualEvaluationReflections(prev => ({
-                                  ...prev,
-                                  [`evaluation_${index}`]: {
-                                    ...prev[`evaluation_${index}`],
-                                    rating: rating
-                                  }
-                                }));
-                              }}
-                            >
-                              {rating}
-                            </Button>
-                          ))}
-                        </div>
-                      </div>
+    if (activeTask === 'evaluation-check') {
+      return (
+        <Card className="mb-4">
+          <CardHeader>
+            <CardTitle className="text-lg">동료평가 결과 확인</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {peerEvaluations && peerEvaluations.length > 0 ? (
+              <div className="space-y-4">
+                <p className="font-medium">받은 동료평가:</p>
+                {peerEvaluations.map((evaluation: any, index: number) => (
+                  <div key={index} className="p-4 bg-gray-50 rounded-lg">
+                    <div className="flex items-center space-x-2 mb-2">
+                      <User className="h-4 w-4" />
+                      <span className="font-medium">
+                        {evaluation.students?.name || '익명'} 
+                      </span>
+                      <Badge variant="outline" className="text-xs">
+                        {new Date(evaluation.submitted_at).toLocaleDateString('ko-KR')}
+                      </Badge>
                     </div>
-                  ))}
-                  
-                  <div className="border-t pt-4">
-                    <h4 className="font-medium mb-2">최종 검토 반영:</h4>
-                    <p className="text-sm text-gray-600 mb-2">받은 평가들을 바탕으로 자신의 주장을 최종적으로 수정해서 작성해주세요.</p>
+                    <p className="text-sm">{evaluation.evaluation_text}</p>
+                  </div>
+                ))}
+                
+                {/* 성찰 및 수정 작성 영역 */}
+                <div className="space-y-4 mt-6 p-4 border-t">
+                  <div>
+                    <label className="block text-sm font-medium mb-2">
+                      받은 평가에 대한 성찰:
+                    </label>
                     <Textarea
-                      value={argumentationContext.finalRevisedArgument}
-                      onChange={(e) => argumentationContext.setFinalRevisedArgument(e.target.value)}
-                      placeholder="평가를 바탕으로 수정된 최종 주장을 작성해주세요..."
-                      className="min-h-32"
+                      placeholder="동료들의 평가를 바탕으로 어떤 점을 개선할 수 있을지 성찰해보세요..."
+                      value={reflectionText}
+                      onChange={(e) => setReflectionText(e.target.value)}
+                      className="min-h-[100px]"
                     />
                   </div>
                   
-                  <div className="flex space-x-2">
-                    <Button onClick={async () => {
-                      // 개별 평가 반영들을 저장
-                      const savePromises = argumentationContext.peerEvaluations.map(async (evaluation, index) => {
-                        const reflectionData = individualEvaluationReflections[`evaluation_${index}`];
-                        if (reflectionData?.reflection && reflectionData?.rating) {
-                          return supabase
-                            .from('evaluation_reflections')
-                            .upsert({
-                              student_id: studentId,
-                              activity_id: activity.id,
-                              reflection_text: reflectionData.reflection,
-                              usefulness_rating: reflectionData.rating,
-                              submitted_at: new Date().toISOString()
-                            });
-                        }
-                      });
-
-                      try {
-                        await Promise.all(savePromises.filter(Boolean));
-                        
-                        // 최종 수정 논증 저장
-                        if (argumentationContext.finalRevisedArgument) {
-                          await supabase
-                            .from('argumentation_responses')
-                            .update({
-                              final_revised_argument: argumentationContext.finalRevisedArgument,
-                              final_revision_submitted_at: new Date().toISOString()
-                            })
-                            .eq('student_id', studentId)
-                            .eq('activity_id', activity.id);
-                        }
-
-                        argumentationContext.submitReflection();
-                        toast({
-                          title: "성공",
-                          description: "평가 반영이 저장되었습니다."
-                        });
-                      } catch (error) {
-                        toast({
-                          title: "오류",
-                          description: "저장에 실패했습니다.",
-                          variant: "destructive"
-                        });
-                      }
-                    }}>저장</Button>
-                    <Button variant="outline" onClick={() => argumentationContext.setActiveTask('none')}>
-                      취소
-                    </Button>
+                  <div>
+                    <label className="block text-sm font-medium mb-2">
+                      수정된 논증 (선택사항):
+                    </label>
+                    <Textarea
+                      placeholder="동료평가를 바탕으로 논증을 수정하고 싶다면 여기에 작성하세요..."
+                      value={finalRevisedArgument}
+                      onChange={(e) => setFinalRevisedArgument(e.target.value)}
+                      className="min-h-[150px]"
+                    />
                   </div>
+
+                  <div>
+                    <label className="block text-sm font-medium mb-2">
+                      동료평가의 유용성 평가 (1-5점):
+                    </label>
+                    <div className="flex space-x-2">
+                      {[1, 2, 3, 4, 5].map((rating) => (
+                        <Button
+                          key={rating}
+                          variant={usefulnessRating === rating ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setUsefulnessRating(rating)}
+                        >
+                          {rating}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <Button 
+                    onClick={() => argumentationContext.submitReflection()}
+                    disabled={!reflectionText.trim()}
+                  >
+                    성찰 제출
+                  </Button>
                 </div>
-              ) : (
-                <div className="text-center py-8 text-gray-500">
-                  받은 평가가 없습니다.
-                </div>
-              )}
-            </div>
-          )}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                <p>아직 받은 동료평가가 없습니다.</p>
+                <p className="text-sm mt-2">교사가 동료평가를 완료하면 여기에서 확인할 수 있습니다.</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      );
+    }
+
+    return null;
+  };
+
+  return (
+    <div className="flex flex-col h-full bg-white rounded-lg shadow-sm">
+      {/* Header */}
+      <div className="flex items-center justify-between p-4 border-b bg-gray-50 rounded-t-lg">
+        <div className="flex items-center space-x-3">
+          <Button onClick={onBack} variant="ghost" size="sm">
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <div>
+            <h3 className="font-semibold">{activity.title}</h3>
+            <p className="text-sm text-gray-600">AI 학습 도우미</p>
+          </div>
+        </div>
+        {checklistContext && (
+          <div className="text-xs text-gray-500 max-w-xs text-right">
+            <span className="font-medium">현재 단계:</span>
+            <br />
+            {checklistContext.currentStep}
+          </div>
+        )}
+      </div>
+
+      {/* Argumentation Interface */}
+      {renderArgumentationInterface()}
+
+      {/* Messages */}
+      <div className="flex-1 min-h-0">
+        <VirtualizedMessageList 
+          messages={messages} 
+          onRetry={handleRetry}
+          isLoading={isLoading}
+        />
+      </div>
+
+      {/* File Preview */}
+      {selectedFile && (
+        <div className="p-4 border-t bg-gray-50">
+          <div className="flex items-center justify-between">
+            <FilePreview file={selectedFile} />
+            <Button
+              onClick={() => {
+                setSelectedFile(null);
+                setPreviewUrl(null);
+                if (fileInputRef.current) {
+                  fileInputRef.current.value = '';
+                }
+              }}
+              variant="ghost"
+              size="sm"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       )}
 
-      {/* 채팅 영역 */}
-      <Card className="border-0 shadow-md rounded-lg flex-1 min-h-0 flex flex-col">
-        <CardContent className="p-0 flex-1 min-h-0 flex flex-col">
-          {/* 메시지 목록 */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            {messages.length === 0 ? (
-              <div className="text-center py-8">
-                <Bot className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-600">AI와 대화를 시작해보세요!</p>
-                <p className="text-sm text-gray-500 mt-1">질문이나 의견을 자유롭게 말씀해주세요.</p>
-              </div>
-            ) : (
-              messages.map((msg) => (
-                <div
-                  key={msg.id}
-                  className={`flex items-start space-x-3 ${
-                    msg.sender === 'student' ? 'flex-row-reverse space-x-reverse' : ''
-                  }`}
-                >
-                  <div className={`p-2 rounded-full ${
-                    msg.sender === 'student' 
-                      ? 'bg-[rgb(15,15,112)] text-white' 
-                      : 'bg-gray-200 text-gray-700'
-                  }`}>
-                    {msg.sender === 'student' ? (
-                      <User className="h-4 w-4" />
-                    ) : (
-                      <Bot className="h-4 w-4" />
-                    )}
-                  </div>
-                  <div className={`flex-1 max-w-md ${
-                    msg.sender === 'student' ? 'text-right' : 'text-left'
-                  }`}>
-                    <div className={`p-3 rounded-lg ${
-                      msg.sender === 'student'
-                        ? 'bg-[rgb(15,15,112)] text-white ml-auto'
-                        : 'bg-gray-100 text-gray-900'
-                    }`}>
-                      <p className="whitespace-pre-wrap">{msg.message}</p>
-                      {(msg.file_url || msg.file_name) && (
-                        <MessageFile 
-                          fileUrl={msg.file_url || ''}
-                          fileName={msg.file_name}
-                          fileType={msg.file_type}
-                        />
-                      )}
-                    </div>
-                    <p className="text-xs text-gray-500 mt-1">
-                      {new Date(msg.timestamp).toLocaleTimeString('ko-KR')}
-                    </p>
-                  </div>
-                </div>
-              ))
-            )}
-            {isLoading && (
-              <div className="flex items-start space-x-3">
-                <div className="p-2 rounded-full bg-gray-200 text-gray-700">
-                  <Bot className="h-4 w-4" />
-                </div>
-                <div className="flex-1 max-w-md">
-                  <div className="p-3 rounded-lg bg-gray-100">
-                    <div className="flex space-x-1">
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-            <div ref={messagesEndRef} />
-          </div>
-
-          {/* 파일 미리보기 */}
-          {selectedFile && (
-            <div className="border-t border-b p-3 bg-gray-50">
-              <div className="flex items-center space-x-2">
-                <span className="text-sm font-medium">첨부된 파일:</span>
-                <FilePreview file={selectedFile} onRemove={removeSelectedFile} />
-              </div>
-            </div>
-          )}
-
-          {/* 메시지 입력 영역 */}
-          <div className="border-t p-4 flex-shrink-0">
-            <div className="flex space-x-2">
-              <div className="flex space-x-1">
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  onChange={handleFileSelect}
-                  className="hidden"
-                  accept="image/*,.pdf,.txt,.doc,.docx"
-                />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={isLoading}
-                  className="p-2 rounded-lg"
-                >
-                  <Paperclip className="h-4 w-4" />
-                </Button>
-              </div>
-              <Input
-                value={inputMessage}
-                onChange={(e) => setInputMessage(e.target.value)}
-                onKeyPress={handleKeyPress}
-                placeholder="메시지를 입력하세요..."
-                disabled={isLoading}
-                className="flex-1 rounded-lg"
-              />
-              <Button 
-                onClick={sendMessage}
-                disabled={(!inputMessage.trim() && !selectedFile) || isLoading}
-                className="bg-[rgb(15,15,112)] hover:bg-[rgb(15,15,112)]/90 rounded-lg"
-              >
-                <Send className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Input */}
+      <div className="p-4 border-t">
+        <div className="flex space-x-2">
+          <Button
+            onClick={() => fileInputRef.current?.click()}
+            variant="outline"
+            size="sm"
+            className="flex-shrink-0"
+          >
+            <Paperclip className="h-4 w-4" />
+          </Button>
+          <Input
+            value={inputMessage}
+            onChange={(e) => setInputMessage(e.target.value)}
+            placeholder="메시지를 입력하세요..."
+            onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
+            disabled={isLoading}
+            className="flex-1"
+          />
+          <Button 
+            onClick={handleSendMessage} 
+            disabled={isLoading || (!inputMessage.trim() && !selectedFile)}
+            size="sm"
+          >
+            <Send className="h-4 w-4" />
+          </Button>
+        </div>
+        <input
+          ref={fileInputRef}
+          type="file"
+          onChange={handleFileSelect}
+          className="hidden"
+          accept="image/*,.pdf,.doc,.docx,.txt"
+        />
+      </div>
     </div>
   );
 };

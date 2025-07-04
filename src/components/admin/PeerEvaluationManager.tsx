@@ -37,32 +37,72 @@ const PeerEvaluationManager = ({ activityId, activityTitle }: PeerEvaluationMana
   const [assigning, setAssigning] = useState(false);
   const [completing, setCompleting] = useState(false);
   const [showStats, setShowStats] = useState(false);
+  const [selectedClass, setSelectedClass] = useState<string>('');
+  const [availableClasses, setAvailableClasses] = useState<string[]>([]);
   const { toast } = useToast();
 
   useEffect(() => {
-    fetchEvaluationData();
+    fetchAvailableClasses();
   }, [activityId]);
 
-  const fetchEvaluationData = async () => {
+  useEffect(() => {
+    if (selectedClass) {
+      fetchEvaluationData();
+    }
+  }, [activityId, selectedClass]);
+
+  const fetchAvailableClasses = async () => {
     try {
-      // 전체 통계 가져오기
+      const { data: classData, error } = await supabase
+        .from('argumentation_responses')
+        .select(`
+          students!inner(class_name)
+        `)
+        .eq('activity_id', activityId)
+        .eq('is_submitted', true);
+
+      if (error) throw error;
+
+      const classes = [...new Set(classData?.map(item => item.students.class_name) || [])];
+      setAvailableClasses(classes);
+      if (classes.length > 0 && !selectedClass) {
+        setSelectedClass(classes[0]);
+      }
+    } catch (error) {
+      console.error('클래스 목록 로딩 오류:', error);
+    }
+  };
+
+  const fetchEvaluationData = async () => {
+    if (!selectedClass) return;
+
+    try {
+      // 선택된 클래스의 통계 가져오기
       const { data: statsData, error: statsError } = await supabase
-        .rpc('get_peer_evaluation_stats', { activity_id_param: activityId });
+        .rpc('get_peer_evaluation_stats_by_class', { activity_id_param: activityId });
 
       if (statsError) throw statsError;
 
-      if (statsData && statsData.length > 0) {
-        setStats(statsData[0]);
+      const classStats = statsData?.find(stat => stat.class_name === selectedClass);
+      if (classStats) {
+        setStats({
+          total_responses: classStats.total_responses,
+          submitted_responses: classStats.submitted_responses,
+          total_evaluations: classStats.total_evaluations,
+          completed_evaluations: classStats.completed_evaluations,
+          completion_rate: classStats.completion_rate
+        });
       }
 
-      // 활동에 참여한 학생들 목록 가져오기
+      // 선택된 클래스의 학생들 목록 가져오기
       const { data: studentsData, error: studentsError } = await supabase
         .from('argumentation_responses')
         .select(`
           student_id,
-          students!inner(name)
+          students!inner(name, class_name)
         `)
-        .eq('activity_id', activityId);
+        .eq('activity_id', activityId)
+        .eq('students.class_name', selectedClass);
 
       if (studentsError) throw studentsError;
 
@@ -99,6 +139,15 @@ const PeerEvaluationManager = ({ activityId, activityTitle }: PeerEvaluationMana
   };
 
   const handleAssignEvaluations = async () => {
+    if (!selectedClass) {
+      toast({
+        title: "알림",
+        description: "클래스를 선택해주세요.",
+        variant: "destructive"
+      });
+      return;
+    }
+
     if (!stats?.submitted_responses || stats.submitted_responses < 2) {
       toast({
         title: "알림",
@@ -111,13 +160,23 @@ const PeerEvaluationManager = ({ activityId, activityTitle }: PeerEvaluationMana
     setAssigning(true);
     try {
       const { data, error } = await supabase
-        .rpc('assign_peer_evaluations', { activity_id_param: activityId });
+        .rpc('assign_peer_evaluations_by_class', { 
+          activity_id_param: activityId,
+          target_class: selectedClass
+        });
 
       if (error) throw error;
 
+      // 평가 배정 후 단계를 peer-evaluation으로 업데이트
+      await supabase.rpc('update_peer_evaluation_phase', {
+        activity_id_param: activityId,
+        class_name_param: selectedClass,
+        new_phase: 'peer-evaluation'
+      });
+
       toast({
         title: "성공",
-        description: `${data}개의 동료평가가 배정되었습니다.`
+        description: `${selectedClass}반에 ${data}개의 동료평가가 배정되었습니다.`
       });
 
       // 데이터 새로고침
@@ -135,6 +194,15 @@ const PeerEvaluationManager = ({ activityId, activityTitle }: PeerEvaluationMana
   };
 
   const handleCompleteEvaluations = async () => {
+    if (!selectedClass) {
+      toast({
+        title: "알림",
+        description: "클래스를 선택해주세요.",
+        variant: "destructive"
+      });
+      return;
+    }
+
     if (!stats?.completed_evaluations || stats.completed_evaluations === 0) {
       toast({
         title: "알림",
@@ -146,12 +214,22 @@ const PeerEvaluationManager = ({ activityId, activityTitle }: PeerEvaluationMana
 
     setCompleting(true);
     try {
-      // 모든 완료된 평가에 대해 학생들에게 알림
-      // 실제로는 학생들이 "평가 확인" 버튼을 사용할 수 있게 활성화
+      // 평가 완료 단계로 업데이트 (학생들이 결과를 확인할 수 있게 됨)
+      const { error } = await supabase.rpc('update_peer_evaluation_phase', {
+        activity_id_param: activityId,
+        class_name_param: selectedClass,
+        new_phase: 'evaluation-check'
+      });
+
+      if (error) throw error;
+
       toast({
         title: "성공",
-        description: "학생들이 동료평가 결과를 확인할 수 있습니다."
+        description: `${selectedClass}반 학생들이 동료평가 결과를 확인할 수 있습니다.`
       });
+
+      // 데이터 새로고침
+      await fetchEvaluationData();
     } catch (error) {
       console.error('동료평가 완료 처리 오류:', error);
       toast({
@@ -164,7 +242,7 @@ const PeerEvaluationManager = ({ activityId, activityTitle }: PeerEvaluationMana
     }
   };
 
-  if (loading) {
+  if (loading && availableClasses.length === 0) {
     return <div className="flex justify-center py-8">로딩 중...</div>;
   }
 
@@ -177,16 +255,28 @@ const PeerEvaluationManager = ({ activityId, activityTitle }: PeerEvaluationMana
               <FileText className="h-5 w-5" />
               <span>{activityTitle} - 동료평가 관리</span>
             </div>
-            <Button
-              variant="outline"
-              onClick={() => setShowStats(!showStats)}
-            >
-              {showStats ? '기본 보기' : '상세 통계'}
-            </Button>
+            <div className="flex items-center space-x-2">
+              <select 
+                value={selectedClass} 
+                onChange={(e) => setSelectedClass(e.target.value)}
+                className="px-3 py-1 border rounded-md"
+              >
+                <option value="">클래스 선택</option>
+                {availableClasses.map(className => (
+                  <option key={className} value={className}>{className}</option>
+                ))}
+              </select>
+              <Button
+                variant="outline"
+                onClick={() => setShowStats(!showStats)}
+              >
+                {showStats ? '기본 보기' : '상세 통계'}
+              </Button>
+            </div>
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {stats && (
+          {selectedClass && stats && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
               <div className="text-center">
                 <div className="text-2xl font-bold text-blue-600">{stats.submitted_responses}</div>
@@ -207,28 +297,30 @@ const PeerEvaluationManager = ({ activityId, activityTitle }: PeerEvaluationMana
             </div>
           )}
 
-          <div className="flex space-x-2 mb-6">
-            <Button
-              onClick={handleAssignEvaluations}
-              disabled={assigning || !stats?.submitted_responses || stats.submitted_responses < 2}
-              className="flex items-center space-x-2"
-            >
-              <Shuffle className="h-4 w-4" />
-              <span>{assigning ? '배정 중...' : '동료평가 배정'}</span>
-            </Button>
-            
-            <Button
-              onClick={handleCompleteEvaluations}
-              disabled={completing || !stats?.completed_evaluations}
-              variant="secondary"
-              className="flex items-center space-x-2"
-            >
-              <CheckCircle className="h-4 w-4" />
-              <span>{completing ? '처리 중...' : '동료평가완료'}</span>
-            </Button>
-          </div>
+          {selectedClass && (
+            <div className="flex space-x-2 mb-6">
+              <Button
+                onClick={handleAssignEvaluations}
+                disabled={assigning || !stats?.submitted_responses || stats.submitted_responses < 2}
+                className="flex items-center space-x-2"
+              >
+                <Shuffle className="h-4 w-4" />
+                <span>{assigning ? '배정 중...' : '동료평가 배정'}</span>
+              </Button>
+              
+              <Button
+                onClick={handleCompleteEvaluations}
+                disabled={completing || !stats?.completed_evaluations}
+                variant="secondary"
+                className="flex items-center space-x-2"
+              >
+                <CheckCircle className="h-4 w-4" />
+                <span>{completing ? '처리 중...' : '동료평가완료'}</span>
+              </Button>
+            </div>
+          )}
 
-          {stats && stats.submitted_responses < 2 && (
+          {selectedClass && stats && stats.submitted_responses < 2 && (
             <div className="flex items-center space-x-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg mb-4">
               <AlertCircle className="h-4 w-4 text-yellow-600" />
               <span className="text-sm text-yellow-700">
@@ -236,17 +328,23 @@ const PeerEvaluationManager = ({ activityId, activityTitle }: PeerEvaluationMana
               </span>
             </div>
           )}
+
+          {!selectedClass && (
+            <div className="text-center py-8 text-gray-500">
+              클래스를 선택해주세요.
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      {showStats ? (
+      {showStats && selectedClass ? (
         <PeerEvaluationStats activityId={activityId} activityTitle={activityTitle} />
-      ) : (
+      ) : selectedClass ? (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center space-x-2">
               <Users className="h-5 w-5" />
-              <span>학생별 동료평가 현황</span>
+              <span>{selectedClass}반 학생별 동료평가 현황</span>
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -287,7 +385,7 @@ const PeerEvaluationManager = ({ activityId, activityTitle }: PeerEvaluationMana
             </div>
           </CardContent>
         </Card>
-      )}
+      ) : null}
     </div>
   );
 };

@@ -426,6 +426,36 @@ export type Database = {
           },
         ]
       }
+      peer_evaluation_phases: {
+        Row: {
+          activity_id: string
+          class_name: string
+          created_at: string
+          id: string
+          phase: string
+          teacher_completed_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          activity_id: string
+          class_name: string
+          created_at?: string
+          id?: string
+          phase?: string
+          teacher_completed_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          activity_id?: string
+          class_name?: string
+          created_at?: string
+          id?: string
+          phase?: string
+          teacher_completed_at?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       peer_evaluations: {
         Row: {
           activity_id: string
@@ -876,6 +906,10 @@ export type Database = {
         Args: { "": unknown }
         Returns: unknown
       }
+      is_peer_evaluation_completed: {
+        Args: { activity_id_param: string; class_name_param: string }
+        Returns: boolean
+      }
       ivfflat_bit_support: {
         Args: { "": unknown }
         Returns: unknown
@@ -920,6 +954,14 @@ export type Database = {
       sparsevec_typmod_in: {
         Args: { "": unknown[] }
         Returns: number
+      }
+      update_peer_evaluation_phase: {
+        Args: {
+          activity_id_param: string
+          class_name_param: string
+          new_phase: string
+        }
+        Returns: undefined
       }
       update_student_session: {
         Args: { student_id_param: string }
