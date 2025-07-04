@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -357,10 +358,29 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
 
     setCompleting(true);
     try {
+      // 각 클래스별로 평가완료 단계 업데이트
+      const classesToUpdate = selectedClass === 'all' 
+        ? filteredStats.map(stat => stat.class_name)
+        : [selectedClass];
+
+      for (const className of classesToUpdate) {
+        const { error } = await supabase.rpc('update_peer_evaluation_phase', {
+          activity_id_param: selectedActivity,
+          class_name_param: className,
+          new_phase: 'evaluation-check'
+        });
+
+        if (error) throw error;
+      }
+
       toast({
         title: "성공",
-        description: "학생들이 동료평가 결과를 확인할 수 있습니다."
+        description: selectedClass === 'all' 
+          ? "모든 클래스 학생들이 동료평가 결과를 확인할 수 있습니다."
+          : `${selectedClass}반 학생들이 동료평가 결과를 확인할 수 있습니다.`
       });
+
+      await fetchEvaluationData();
     } catch (error) {
       console.error('동료평가 완료 처리 오류:', error);
       toast({

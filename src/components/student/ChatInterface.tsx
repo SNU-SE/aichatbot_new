@@ -60,6 +60,7 @@ const ChatInterface = ({
         .from('chat_logs')
         .select('*')
         .eq('activity_id', activity.id)
+        .eq('student_id', studentId) // 중요: 현재 학생의 메시지만 필터링
         .order('timestamp', { ascending: true });
 
       if (error) throw error;
@@ -67,7 +68,7 @@ const ChatInterface = ({
       setMessages(data.map(msg => ({
         id: msg.id,
         message: msg.message,
-        sender: msg.sender as 'student' | 'bot', // 타입 캐스팅 추가
+        sender: msg.sender as 'student' | 'bot',
         timestamp: msg.timestamp,
         file_url: msg.file_url,
         file_name: msg.file_name,
@@ -107,7 +108,7 @@ const ChatInterface = ({
           throw uploadError;
         }
 
-        file_url = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/chat_files/${data.path}`;
+        file_url = `https://rbaqyzdixamkrssfpxdv.supabase.co/storage/v1/object/public/chat_files/${data.path}`;
         file_name = selectedFile.name;
         file_type = selectedFile.type;
       }
@@ -131,7 +132,7 @@ const ChatInterface = ({
       setMessages(prevMessages => [...prevMessages, {
         id: log.id,
         message: log.message,
-        sender: log.sender as 'student' | 'bot', // 타입 캐스팅 추가
+        sender: log.sender as 'student' | 'bot',
         timestamp: log.timestamp,
         file_url: log.file_url,
         file_name: log.file_name,
