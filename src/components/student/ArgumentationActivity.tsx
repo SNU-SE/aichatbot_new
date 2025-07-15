@@ -205,12 +205,49 @@ const ArgumentationActivity = ({
     setActiveTask('none');
   };
 
-  const submitReflection = () => {
-    setActiveTask('none');
-    toast({
-      title: "성공",
-      description: "평가 반영이 완료되었습니다."
-    });
+  const submitReflection = async () => {
+    try {
+      // evaluation_reflections 테이블에 성찰 및 유용성 평가 저장
+      if (reflectionText.trim()) {
+        const { error: reflectionError } = await supabase
+          .from('evaluation_reflections')
+          .insert({
+            activity_id: activity.id,
+            student_id: studentId,
+            reflection_text: reflectionText,
+            usefulness_rating: usefulnessRating
+          });
+
+        if (reflectionError) throw reflectionError;
+      }
+
+      // argumentation_responses 테이블에 수정된 논증 업데이트
+      if (finalRevisedArgument.trim()) {
+        const { error: updateError } = await supabase
+          .from('argumentation_responses')
+          .update({
+            final_revised_argument: finalRevisedArgument,
+            final_revision_submitted_at: new Date().toISOString()
+          })
+          .eq('activity_id', activity.id)
+          .eq('student_id', studentId);
+
+        if (updateError) throw updateError;
+      }
+
+      setActiveTask('none');
+      toast({
+        title: "성공",
+        description: "평가 반영이 완료되었습니다."
+      });
+    } catch (error) {
+      console.error('Error submitting reflection:', error);
+      toast({
+        title: "제출 실패",
+        description: "평가 반영 중 오류가 발생했습니다.",
+        variant: "destructive"
+      });
+    }
   };
 
   // 자동 저장 (30초마다)
