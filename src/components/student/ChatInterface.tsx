@@ -108,7 +108,7 @@ const ChatInterface = ({
           throw uploadError;
         }
 
-        file_url = `https://rbaqyzdixamkrssfpxdv.supabase.co/storage/v1/object/public/chat_files/${data.path}`;
+        file_url = `${supabase.storage.from('chat_files').getPublicUrl('').data.publicUrl}/${data.path}`;
         file_name = selectedFile.name;
         file_type = selectedFile.type;
       }
