@@ -25,6 +25,27 @@ const ActivitySelection = ({ onActivitySelect }: ActivitySelectionProps) => {
 
   useEffect(() => {
     fetchActivities();
+
+    // 실시간 활동 상태 변경 감지
+    const channel = supabase
+      .channel('activities-visibility-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'activities'
+        },
+        (payload) => {
+          console.log('Activity visibility changed:', payload);
+          fetchActivities();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const fetchActivities = async () => {
@@ -32,6 +53,7 @@ const ActivitySelection = ({ onActivitySelect }: ActivitySelectionProps) => {
       const { data, error } = await supabase
         .from('activities')
         .select('*')
+        .eq('is_hidden', false)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
