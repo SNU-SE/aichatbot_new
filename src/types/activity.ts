@@ -8,6 +8,7 @@ export interface Activity {
   final_question: string | null;
   modules_count: number | null;
   created_at: string;
+  is_hidden?: boolean;
 }
 
 export interface Module {

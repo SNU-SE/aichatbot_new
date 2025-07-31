@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Edit, Trash2, FileText } from 'lucide-react';
+import { Edit, Trash2, FileText, EyeOff, Eye } from 'lucide-react';
 import { Activity } from '@/types/activity';
 import { supabase } from '@/integrations/supabase/client';
 import ActivityDeleteDialog from './ActivityDeleteDialog';
@@ -70,6 +70,20 @@ const ActivityList = ({ activities, onEdit, onDeleteSuccess }: ActivityListProps
     });
   };
 
+  const handleToggleVisibility = async (activity: Activity) => {
+    try {
+      const { error } = await supabase
+        .from('activities')
+        .update({ is_hidden: !activity.is_hidden })
+        .eq('id', activity.id);
+      
+      if (error) throw error;
+      onDeleteSuccess(); // 목록 새로고침
+    } catch (error) {
+      console.error('활동 표시/숨김 변경 실패:', error);
+    }
+  };
+
   const getTypeLabel = (type: string) => {
     switch (type) {
       case 'experiment': return '실험';
@@ -124,6 +138,14 @@ const ActivityList = ({ activities, onEdit, onDeleteSuccess }: ActivityListProps
                         onClick={() => onEdit(activity)}
                       >
                         <Edit className="h-3 w-3" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleToggleVisibility(activity)}
+                        className={activity.is_hidden ? "text-gray-500" : "text-blue-600"}
+                      >
+                        {activity.is_hidden ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
                       </Button>
                       <Button
                         size="sm"
