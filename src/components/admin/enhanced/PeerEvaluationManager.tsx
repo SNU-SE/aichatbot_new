@@ -71,6 +71,35 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
     fetchEvaluationData();
   }, [selectedActivity, selectedClass]);
 
+  // 실시간 동료평가 상태 동기화
+  useEffect(() => {
+    if (selectedActivity === 'all') return;
+
+    const channel = supabase
+      .channel('admin_peer_evaluations_realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'peer_evaluations',
+          filter: `activity_id=eq.${selectedActivity}`
+        },
+        (payload) => {
+          console.log('관리자 동료평가 실시간 업데이트:', payload);
+          // 평가 상태가 변경되면 데이터 새로고침
+          if (payload.new?.is_completed !== payload.old?.is_completed) {
+            fetchEvaluationData();
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [selectedActivity, selectedClass]);
+
   const fetchEvaluationData = async () => {
     if (selectedActivity === 'all') return;
     

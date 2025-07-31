@@ -59,6 +59,39 @@ const ArgumentationActivity = ({
     return () => clearInterval(interval);
   }, [activity.id, studentId]);
 
+  // 실시간 동료평가 상태 동기화
+  useEffect(() => {
+    if (activity.type !== 'argumentation') return;
+
+    const channel = supabase
+      .channel('peer_evaluations_realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'peer_evaluations',
+          filter: `activity_id=eq.${activity.id}`
+        },
+        (payload) => {
+          console.log('동료평가 실시간 업데이트:', payload);
+          
+          // 현재 학생의 평가가 업데이트된 경우 또는 받은 평가가 업데이트된 경우
+          if (payload.new?.evaluator_id === studentId) {
+            // 평가를 완료한 경우 화면 새로고침
+            if (payload.new?.is_completed) {
+              setActiveTask('none');
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [activity.id, studentId]);
+
   const checkSubmissionStatus = async () => {
     try {
       const { data, error } = await supabase
@@ -200,9 +233,95 @@ const ArgumentationActivity = ({
     }
   };
 
-  const submitPeerEvaluation = () => {
-    // This will be handled by ChatInterface
-    setActiveTask('none');
+  const [isSubmittingEvaluation, setIsSubmittingEvaluation] = useState(false);
+
+  const submitPeerEvaluation = async () => {
+    if (!evaluationText.trim()) {
+      toast({
+        title: "오류",
+        description: "평가 내용을 작성해주세요.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (isSubmittingEvaluation) return; // 중복 제출 방지
+
+    try {
+      setIsSubmittingEvaluation(true);
+      
+      // 현재 학생이 평가해야 할 대상 찾기
+      const { data: evaluationTarget, error: targetError } = await supabase
+        .from('peer_evaluations')
+        .select('*')
+        .eq('activity_id', activity.id)
+        .eq('evaluator_id', studentId)
+        .eq('is_completed', false)
+        .limit(1)
+        .single();
+
+      if (targetError) throw targetError;
+
+      if (!evaluationTarget) {
+        toast({
+          title: "알림",
+          description: "평가할 대상이 없거나 이미 모든 평가를 완료했습니다.",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      const { data: peerEvaluationData, error: peerEvaluationError } = await supabase
+        .from('peer_evaluations')
+        .update({
+          evaluation_text: evaluationText,
+          is_completed: true,
+          submitted_at: new Date().toISOString()
+        })
+        .eq('id', evaluationTarget.id)
+        .eq('is_completed', false) // 아직 완료되지 않은 것만 업데이트
+        .select()
+        .single();
+
+      if (peerEvaluationError) {
+        if (peerEvaluationError.code === '23505') { // 유니크 제약조건 위반
+          toast({
+            title: "알림",
+            description: "이미 제출된 평가입니다.",
+            variant: "destructive"
+          });
+          return;
+        }
+        throw peerEvaluationError;
+      }
+
+      if (!peerEvaluationData) {
+        toast({
+          title: "알림", 
+          description: "이미 제출된 평가입니다.",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      setEvaluationText('');
+      setActiveTask('none');
+
+      toast({
+        title: "성공",
+        description: "동료평가가 제출되었습니다."
+      });
+
+    } catch (error) {
+      console.error('동료평가 제출 오류:', error);
+      toast({
+        title: "오류",
+        description: "동료평가 제출에 실패했습니다.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsSubmittingEvaluation(false);
+    }
   };
 
   const submitReflection = async () => {
