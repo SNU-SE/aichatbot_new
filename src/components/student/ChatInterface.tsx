@@ -144,6 +144,65 @@ const ChatInterface = ({
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
+
+      // AI 챗봇 응답 생성
+      try {
+        const { data: studentData, error: studentError } = await supabase
+          .from('students')
+          .select('mother_tongue')
+          .eq('student_id', studentId)
+          .single();
+
+        if (studentError) throw studentError;
+
+        const { data: aiResponse, error: aiError } = await supabase.functions.invoke('ai-chat', {
+          body: {
+            message: inputMessage.trim(),
+            studentId: studentId,
+            activityId: activity.id,
+            motherTongue: studentData?.mother_tongue || 'Korean',
+            fileUrl: file_url,
+            fileName: file_name,
+            fileType: file_type
+          }
+        });
+
+        if (aiError) throw aiError;
+
+        if (aiResponse?.response) {
+          // AI 응답을 chat_logs에 저장
+          const { data: aiLog, error: aiLogError } = await supabase
+            .from('chat_logs')
+            .insert([{
+              activity_id: activity.id,
+              student_id: studentId,
+              message: aiResponse.response,
+              sender: 'bot'
+            }])
+            .select('*')
+            .single();
+
+          if (aiLogError) throw aiLogError;
+
+          // 메시지 목록에 AI 응답 추가
+          setMessages(prevMessages => [...prevMessages, {
+            id: aiLog.id,
+            message: aiLog.message,
+            sender: aiLog.sender as 'student' | 'bot',
+            timestamp: aiLog.timestamp,
+            file_url: aiLog.file_url,
+            file_name: aiLog.file_name,
+            file_type: aiLog.file_type
+          }]);
+        }
+      } catch (aiError) {
+        console.error('AI 응답 생성 실패:', aiError);
+        toast({
+          title: "AI 응답 실패",
+          description: "AI가 응답을 생성하지 못했습니다.",
+          variant: "destructive"
+        });
+      }
     } catch (error) {
       console.error('Error sending message:', error);
       toast({
