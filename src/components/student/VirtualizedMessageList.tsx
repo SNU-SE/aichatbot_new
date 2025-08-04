@@ -37,7 +37,7 @@ const MessageItem = ({ index, style, data }: MessageItemProps) => {
   
   return (
     <div style={style}>
-      <div className="flex items-start p-4 gap-3">
+      <div className="flex items-start p-2 gap-3">
         {msg.sender === 'student' ? (
           // 학생 메시지 (오른쪽 정렬)
           <>
@@ -130,8 +130,8 @@ const VirtualizedMessageList = ({ messages, isLoading, height = 400 }: Virtualiz
       height += 80; // 파일 컴포넌트 높이
     }
     
-    // 메시지 간 여백
-    height += 16;
+    // 메시지 간 여백 (축소)
+    height += 8;
     
     // 최소 높이 보장 및 안전 마진
     return Math.max(height, 120) + 10;
@@ -176,7 +176,7 @@ const VirtualizedMessageList = ({ messages, isLoading, height = 400 }: Virtualiz
           if (index === messages.length && isLoading) {
             return (
               <div style={style}>
-                <div className="flex items-start space-x-3 p-4">
+                <div className="flex items-start space-x-3 p-2">
                   <div className="p-2 rounded-full bg-gray-200 text-gray-700">
                     <Bot className="h-4 w-4" />
                   </div>

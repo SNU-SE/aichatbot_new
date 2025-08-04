@@ -173,19 +173,34 @@ const ChatInterface = ({
   const handleSendMessage = useCallback(async () => {
     if (!inputMessage.trim() && !selectedFile) return;
     
-    // 중복 전송 방지
+    // 강화된 중복 전송 방지
     if (isSending) {
       console.log('⚠️ 메시지 전송 중복 방지:', inputMessage.substring(0, 20));
       return;
     }
 
-    console.log('📤 메시지 전송 시작:', inputMessage.substring(0, 50));
+    const currentMessage = inputMessage.trim();
+    
+    // 최근 5초 내 동일한 메시지가 있는지 사전 확인
+    const fiveSecondsAgo = new Date(Date.now() - 5000).toISOString();
+    const { data: recentMessages } = await supabase
+      .from('chat_logs')
+      .select('*')
+      .eq('student_id', studentId)
+      .eq('activity_id', activity.id)
+      .eq('message', currentMessage)
+      .gte('timestamp', fiveSecondsAgo);
+    
+    if (recentMessages && recentMessages.length > 0) {
+      console.log('⚠️ 최근 5초 내 동일한 메시지 존재, 전송 취소:', currentMessage.substring(0, 30));
+      setIsSending(false);
+      return;
+    }
+
+    console.log('📤 메시지 전송 시작:', currentMessage.substring(0, 50));
     setIsSending(true);
     
-    const currentMessage = inputMessage.trim();
-    const timestamp = new Date().toISOString();
-    
-    // UI 즉시 업데이트 (낙관적 업데이트 제거 - 실시간 구독으로 처리)
+    // UI 즉시 업데이트
     setInputMessage('');
     setIsLoading(true);
 
