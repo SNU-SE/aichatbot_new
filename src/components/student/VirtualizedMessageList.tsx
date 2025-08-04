@@ -1,6 +1,6 @@
 
 import { useMemo, useRef, useEffect } from 'react';
-import { FixedSizeList as List } from 'react-window';
+import { VariableSizeList as List } from 'react-window';
 import { Bot, User } from 'lucide-react';
 import MessageFile from './MessageFile';
 
@@ -75,6 +75,31 @@ const VirtualizedMessageList = ({ messages, isLoading }: VirtualizedMessageListP
   
   const itemData = useMemo(() => messages, [messages]);
   
+  // 동적 높이 계산 함수
+  const getItemSize = (index: number) => {
+    if (index === messages.length && isLoading) {
+      return 80; // 로딩 인디케이터 높이
+    }
+    
+    const msg = messages[index];
+    if (!msg) return 120;
+    
+    // 기본 높이 (아바타 + 패딩)
+    let height = 80;
+    
+    // 메시지 길이에 따른 높이 추가 (대략 20px per line)
+    const lines = Math.ceil(msg.message.length / 50);
+    height += lines * 20;
+    
+    // 파일이 있는 경우 추가 높이
+    if (msg.file_url) {
+      height += 60;
+    }
+    
+    // 최소 높이 보장
+    return Math.max(height, 100);
+  };
+  
   useEffect(() => {
     if (listRef.current && messages.length > 0) {
       listRef.current.scrollToItem(messages.length - 1, 'end');
@@ -100,7 +125,7 @@ const VirtualizedMessageList = ({ messages, isLoading }: VirtualizedMessageListP
         height={384}
         width="100%"
         itemCount={messages.length + (isLoading ? 1 : 0)}
-        itemSize={120}
+        itemSize={getItemSize}
         itemData={itemData}
         overscanCount={5}
       >
