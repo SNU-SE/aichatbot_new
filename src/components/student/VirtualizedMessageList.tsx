@@ -43,8 +43,8 @@ const MessageItem = ({ index, style, data }: MessageItemProps) => {
           <>
             <div className="flex-1 min-w-0" />
             <div className="flex flex-col items-end w-full max-w-[70%]">
-              <div className="p-3 rounded-lg bg-[rgb(15,15,112)] text-white w-full break-words">
-                <p className="whitespace-pre-wrap word-break">{removeMarkdown(msg.message)}</p>
+              <div className="p-3 rounded-lg bg-[rgb(15,15,112)] text-white w-full">
+                <p className="whitespace-pre-wrap break-words leading-6 text-sm">{removeMarkdown(msg.message)}</p>
                 <MessageFile 
                   fileUrl={msg.file_url || ''}
                   fileName={msg.file_name}
@@ -66,8 +66,8 @@ const MessageItem = ({ index, style, data }: MessageItemProps) => {
               <Bot className="h-4 w-4" />
             </div>
             <div className="flex flex-col w-full max-w-[70%]">
-              <div className="p-3 rounded-lg bg-gray-100 text-gray-900 w-full break-words">
-                <p className="whitespace-pre-wrap word-break">{removeMarkdown(msg.message)}</p>
+              <div className="p-3 rounded-lg bg-gray-100 text-gray-900 w-full">
+                <p className="whitespace-pre-wrap break-words leading-6 text-sm">{removeMarkdown(msg.message)}</p>
                 <MessageFile 
                   fileUrl={msg.file_url || ''}
                   fileName={msg.file_name}
@@ -97,7 +97,7 @@ const VirtualizedMessageList = ({ messages, isLoading, height = 400 }: Virtualiz
   
   const itemData = useMemo(() => messages, [messages]);
   
-  // 동적 높이 계산 함수
+  // 정밀한 높이 계산 함수
   const getItemSize = (index: number) => {
     if (index === messages.length && isLoading) {
       return 80; // 로딩 인디케이터 높이
@@ -106,25 +106,46 @@ const VirtualizedMessageList = ({ messages, isLoading, height = 400 }: Virtualiz
     const msg = messages[index];
     if (!msg) return 120;
     
-    // 기본 높이 (아바타 + 패딩)
-    let height = 80;
+    // 기본 높이 (아바타 + 패딩 + 타임스탬프)
+    let height = 100;
     
-    // 메시지 길이에 따른 높이 추가 (대략 20px per line)
-    const lines = Math.ceil(msg.message.length / 50);
-    height += lines * 20;
+    // 텍스트 영역의 실제 크기 계산
+    const cleanText = removeMarkdown(msg.message);
+    const avgCharWidth = 12; // 평균 문자 너비 (한글 포함)
+    const maxCharsPerLine = Math.floor(350 / avgCharWidth); // 최대 350px 컨테이너 기준
+    const actualLines = Math.ceil(cleanText.length / maxCharsPerLine);
+    
+    // 줄바꿈 문자를 고려한 추가 줄 계산
+    const newlineCount = (cleanText.match(/\n/g) || []).length;
+    const totalLines = Math.max(actualLines, newlineCount + 1);
+    
+    // 라인 높이: 24px (line-height 1.5 * 16px font-size)
+    height += totalLines * 24;
+    
+    // 패딩 고려 (메시지 박스 내부 패딩)
+    height += 24; // p-3 = 12px * 2
     
     // 파일이 있는 경우 추가 높이
     if (msg.file_url) {
-      height += 60;
+      height += 80; // 파일 컴포넌트 높이
     }
     
-    // 최소 높이 보장
-    return Math.max(height, 100);
+    // 메시지 간 여백
+    height += 16;
+    
+    // 최소 높이 보장 및 안전 마진
+    return Math.max(height, 120) + 10;
   };
   
   useEffect(() => {
     if (listRef.current && messages.length > 0) {
-      listRef.current.scrollToItem(messages.length - 1, 'end');
+      // 높이 재계산 강제 실행
+      listRef.current.resetAfterIndex(0);
+      
+      // 약간의 지연 후 스크롤 (렌더링 완료 대기)
+      setTimeout(() => {
+        listRef.current?.scrollToItem(messages.length - 1, 'end');
+      }, 50);
     }
   }, [messages.length]);
 
@@ -149,7 +170,7 @@ const VirtualizedMessageList = ({ messages, isLoading, height = 400 }: Virtualiz
         itemCount={messages.length + (isLoading ? 1 : 0)}
         itemSize={getItemSize}
         itemData={itemData}
-        overscanCount={5}
+        overscanCount={3}
       >
         {({ index, style }) => {
           if (index === messages.length && isLoading) {
