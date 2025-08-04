@@ -157,6 +157,12 @@ const ChatInterface = ({
 
         if (studentError) throw studentError;
 
+        // 최근 5개 메시지를 대화 히스토리로 전송
+        const recentMessages = messages.slice(-5).map(msg => ({
+          role: msg.sender === 'student' ? 'user' : 'assistant',
+          content: msg.message
+        }));
+
         const { data: aiResponse, error: aiError } = await supabase.functions.invoke('ai-chat', {
           body: {
             message: inputMessage.trim(),
@@ -165,7 +171,8 @@ const ChatInterface = ({
             motherTongue: studentData?.mother_tongue || 'Korean',
             fileUrl: file_url,
             fileName: file_name,
-            fileType: file_type
+            fileType: file_type,
+            conversationHistory: recentMessages
           }
         });
 

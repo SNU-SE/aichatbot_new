@@ -20,6 +20,18 @@ interface MessageItemProps {
   data: Message[];
 }
 
+// 마크다운 제거 함수
+const removeMarkdown = (text: string): string => {
+  return text
+    .replace(/\*\*(.*?)\*\*/g, '$1')  // **굵은 글씨** 제거
+    .replace(/\*(.*?)\*/g, '$1')      // *기울임* 제거
+    .replace(/~~(.*?)~~/g, '$1')      // ~~취소선~~ 제거
+    .replace(/`(.*?)`/g, '$1')        // `코드` 제거
+    .replace(/#{1,6}\s+/g, '')        // # 제목 제거
+    .replace(/^\s*[\*\-\+]\s+/gm, '') // 리스트 마커 제거
+    .replace(/^\s*\d+\.\s+/gm, '')    // 번호 리스트 마커 제거
+};
+
 const MessageItem = ({ index, style, data }: MessageItemProps) => {
   const msg = data[index];
   
@@ -30,9 +42,9 @@ const MessageItem = ({ index, style, data }: MessageItemProps) => {
           // 학생 메시지 (오른쪽 정렬)
           <>
             <div className="flex-1 min-w-0" />
-            <div className="flex flex-col items-end max-w-[70%]">
-              <div className="p-3 rounded-lg bg-[rgb(15,15,112)] text-white">
-                <p className="whitespace-pre-wrap">{msg.message}</p>
+            <div className="flex flex-col items-end w-full max-w-[70%]">
+              <div className="p-3 rounded-lg bg-[rgb(15,15,112)] text-white w-full break-words">
+                <p className="whitespace-pre-wrap word-break">{removeMarkdown(msg.message)}</p>
                 <MessageFile 
                   fileUrl={msg.file_url || ''}
                   fileName={msg.file_name}
@@ -43,19 +55,19 @@ const MessageItem = ({ index, style, data }: MessageItemProps) => {
                 {new Date(msg.timestamp).toLocaleTimeString('ko-KR')}
               </p>
             </div>
-            <div className="p-2 rounded-full bg-[rgb(15,15,112)] text-white">
+            <div className="p-2 rounded-full bg-[rgb(15,15,112)] text-white flex-shrink-0">
               <User className="h-4 w-4" />
             </div>
           </>
         ) : (
           // AI 메시지 (왼쪽 정렬)
           <>
-            <div className="p-2 rounded-full bg-gray-200 text-gray-700">
+            <div className="p-2 rounded-full bg-gray-200 text-gray-700 flex-shrink-0">
               <Bot className="h-4 w-4" />
             </div>
-            <div className="flex flex-col max-w-[70%]">
-              <div className="p-3 rounded-lg bg-gray-100 text-gray-900">
-                <p className="whitespace-pre-wrap">{msg.message}</p>
+            <div className="flex flex-col w-full max-w-[70%]">
+              <div className="p-3 rounded-lg bg-gray-100 text-gray-900 w-full break-words">
+                <p className="whitespace-pre-wrap word-break">{removeMarkdown(msg.message)}</p>
                 <MessageFile 
                   fileUrl={msg.file_url || ''}
                   fileName={msg.file_name}

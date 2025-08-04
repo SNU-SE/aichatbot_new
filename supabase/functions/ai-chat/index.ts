@@ -18,6 +18,7 @@ interface ChatRequest {
   motherTongue?: string;
   isTranslationRequest?: boolean;
   translationModel?: string;
+  conversationHistory?: Array<{role: string; content: string}>;
 }
 
 // UTF-8 안전한 해시 생성 함수
@@ -43,7 +44,7 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    const { message, studentId, activityId, fileUrl, fileName, fileType, motherTongue, isTranslationRequest, translationModel } = await req.json() as ChatRequest;
+    const { message, studentId, activityId, fileUrl, fileName, fileType, motherTongue, isTranslationRequest, translationModel, conversationHistory } = await req.json() as ChatRequest;
 
     console.log('AI Chat Request:', { 
       message: message?.substring(0, 100) + '...', 
@@ -175,6 +176,7 @@ Student question: ${message}`;
           model: selectedModel,
           messages: [
             { role: 'system', content: systemPrompt },
+            ...(conversationHistory || []),
             { role: 'user', content: enhancedMessage }
           ],
           temperature: 0.7,
@@ -209,7 +211,7 @@ Student question: ${message}`;
           messages: [
             { 
               role: 'user', 
-              content: `${systemPrompt}\n\nUser: ${enhancedMessage}` 
+              content: `${systemPrompt}\n\nConversation History:\n${conversationHistory?.map(msg => `${msg.role}: ${msg.content}`).join('\n') || 'No previous conversation'}\n\nUser: ${enhancedMessage}` 
             }
           ],
         }),
