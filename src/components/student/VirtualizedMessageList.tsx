@@ -25,41 +25,50 @@ const MessageItem = ({ index, style, data }: MessageItemProps) => {
   
   return (
     <div style={style}>
-      <div
-        className={`flex items-start space-x-3 p-4 ${
-          msg.sender === 'student' ? 'flex-row-reverse space-x-reverse' : ''
-        }`}
-      >
-        <div className={`p-2 rounded-full ${
-          msg.sender === 'student' 
-            ? 'bg-[rgb(15,15,112)] text-white' 
-            : 'bg-gray-200 text-gray-700'
-        }`}>
-          {msg.sender === 'student' ? (
-            <User className="h-4 w-4" />
-          ) : (
-            <Bot className="h-4 w-4" />
-          )}
-        </div>
-        <div className={`flex-1 max-w-md ${
-          msg.sender === 'student' ? 'text-right' : 'text-left'
-        }`}>
-          <div className={`p-3 rounded-lg ${
-            msg.sender === 'student'
-              ? 'bg-[rgb(15,15,112)] text-white ml-auto'
-              : 'bg-gray-100 text-gray-900'
-          }`}>
-            <p className="whitespace-pre-wrap">{msg.message}</p>
-            <MessageFile 
-              fileUrl={msg.file_url || ''}
-              fileName={msg.file_name}
-              fileType={msg.file_type}
-            />
-          </div>
-          <p className="text-xs text-gray-500 mt-1">
-            {new Date(msg.timestamp).toLocaleTimeString('ko-KR')}
-          </p>
-        </div>
+      <div className="flex items-start p-4 gap-3">
+        {msg.sender === 'student' ? (
+          // 학생 메시지 (오른쪽 정렬)
+          <>
+            <div className="flex-1 min-w-0" />
+            <div className="flex flex-col items-end max-w-[70%]">
+              <div className="p-3 rounded-lg bg-[rgb(15,15,112)] text-white">
+                <p className="whitespace-pre-wrap">{msg.message}</p>
+                <MessageFile 
+                  fileUrl={msg.file_url || ''}
+                  fileName={msg.file_name}
+                  fileType={msg.file_type}
+                />
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                {new Date(msg.timestamp).toLocaleTimeString('ko-KR')}
+              </p>
+            </div>
+            <div className="p-2 rounded-full bg-[rgb(15,15,112)] text-white">
+              <User className="h-4 w-4" />
+            </div>
+          </>
+        ) : (
+          // AI 메시지 (왼쪽 정렬)
+          <>
+            <div className="p-2 rounded-full bg-gray-200 text-gray-700">
+              <Bot className="h-4 w-4" />
+            </div>
+            <div className="flex flex-col max-w-[70%]">
+              <div className="p-3 rounded-lg bg-gray-100 text-gray-900">
+                <p className="whitespace-pre-wrap">{msg.message}</p>
+                <MessageFile 
+                  fileUrl={msg.file_url || ''}
+                  fileName={msg.file_name}
+                  fileType={msg.file_type}
+                />
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                {new Date(msg.timestamp).toLocaleTimeString('ko-KR')}
+              </p>
+            </div>
+            <div className="flex-1 min-w-0" />
+          </>
+        )}
       </div>
     </div>
   );
