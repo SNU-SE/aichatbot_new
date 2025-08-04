@@ -18,20 +18,39 @@ export const useSessionRecovery = (): SessionRecoveryHook => {
   const recoverSession = useCallback(async (studentId: string): Promise<boolean> => {
     setIsRecovering(true);
     try {
-      // 학생 등록 상태 확인
-      const { data: student, error } = await supabase
-        .from('students')
-        .select('*')
-        .eq('student_id', studentId)
-        .single();
-
-      if (error || !student) {
-        console.error('Student verification failed:', error);
+      // 학생 ID 정규화
+      const normalizedStudentId = String(studentId).trim();
+      
+      if (!normalizedStudentId) {
+        console.error('Invalid student ID for recovery:', studentId);
         return false;
       }
 
+      console.log('Attempting session recovery for normalized ID:', normalizedStudentId);
+
+      // 학생 등록 상태 확인 (정확한 문자열 매칭)
+      const { data: student, error } = await supabase
+        .from('students')
+        .select('*')
+        .eq('student_id', normalizedStudentId)
+        .single();
+
+      if (error || !student) {
+        console.error('Student verification failed:', error, 'for ID:', normalizedStudentId);
+        // 유효하지 않은 세션 데이터 정리
+        localStorage.removeItem('userType');
+        localStorage.removeItem('studentId');
+        return false;
+      }
+
+      console.log('Session recovery - Student found:', student.student_id);
+
+      // localStorage 데이터 정규화
+      localStorage.setItem('studentId', student.student_id);
+      localStorage.setItem('userType', 'student');
+
       // 세션 업데이트
-      await updateSession(studentId);
+      await updateSession(student.student_id);
       
       toast({
         title: "세션 복구 완료",
@@ -41,6 +60,9 @@ export const useSessionRecovery = (): SessionRecoveryHook => {
       return true;
     } catch (error) {
       console.error('Session recovery failed:', error);
+      // 오류 시 세션 데이터 정리
+      localStorage.removeItem('userType');
+      localStorage.removeItem('studentId');
       toast({
         title: "세션 복구 실패",
         description: "네트워크 연결을 확인하고 다시 시도해주세요.",
@@ -54,12 +76,24 @@ export const useSessionRecovery = (): SessionRecoveryHook => {
 
   const updateSession = useCallback(async (studentId: string): Promise<void> => {
     try {
+      // 학생 ID 정규화
+      const normalizedStudentId = String(studentId).trim();
+      
+      if (!normalizedStudentId) {
+        console.error('Invalid student ID for session update:', studentId);
+        return;
+      }
+
+      console.log('Updating session for normalized ID:', normalizedStudentId);
+
       const { error } = await supabase.rpc('update_student_session', {
-        student_id_param: studentId
+        student_id_param: normalizedStudentId
       });
       
       if (error) {
         console.error('Session update failed:', error);
+      } else {
+        console.log('Session updated successfully for:', normalizedStudentId);
       }
     } catch (error) {
       console.error('Session update error:', error);
@@ -118,17 +152,58 @@ export const useSessionRecovery = (): SessionRecoveryHook => {
     }
   }, []);
 
-  // 주기적으로 세션 업데이트 (5분마다)
+  // 주기적으로 세션 업데이트 (5분마다) 및 만료된 세션 정리 (30분마다)
   useEffect(() => {
-    const studentId = localStorage.getItem('studentId');
-    if (!studentId) return;
+    const rawStudentId = localStorage.getItem('studentId');
+    const normalizedStudentId = rawStudentId ? String(rawStudentId).trim() : null;
+    
+    if (!normalizedStudentId) return;
 
-    const interval = setInterval(() => {
-      updateSession(studentId);
+    // 학생 ID 정규화 저장 (불일치 방지)
+    if (rawStudentId !== normalizedStudentId) {
+      localStorage.setItem('studentId', normalizedStudentId);
+    }
+
+    // 세션 업데이트 인터벌
+    const sessionInterval = setInterval(() => {
+      updateSession(normalizedStudentId);
     }, 5 * 60 * 1000); // 5분
 
-    return () => clearInterval(interval);
-  }, [updateSession]);
+    // 만료된 세션 정리 인터벌
+    const cleanupInterval = setInterval(async () => {
+      try {
+        const { data } = await supabase.rpc('cleanup_expired_sessions_with_logging');
+        if (data && data.length > 0) {
+          const result = data[0];
+          if (result.cleaned_count > 0) {
+            console.log('Cleaned up expired sessions:', result.cleaned_count, 'Session IDs:', result.session_ids);
+            
+            // 현재 사용자가 정리된 세션에 포함되어 있으면 로그아웃 처리
+            if (result.session_ids.includes(normalizedStudentId)) {
+              console.log('Current user session expired, cleaning up localStorage');
+              localStorage.removeItem('userType');
+              localStorage.removeItem('studentId');
+              toast({
+                title: "세션 만료",
+                description: "2시간 동안 활동이 없어 자동 로그아웃되었습니다.",
+                variant: "destructive"
+              });
+              setTimeout(() => {
+                window.location.href = '/auth';
+              }, 2000);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Session cleanup failed:', error);
+      }
+    }, 30 * 60 * 1000); // 30분
+
+    return () => {
+      clearInterval(sessionInterval);
+      clearInterval(cleanupInterval);
+    };
+  }, [updateSession, toast]);
 
   return {
     isRecovering,

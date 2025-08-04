@@ -47,6 +47,8 @@ const AuthPage = () => {
       
       setTimeout(() => {
         if (isValidPassword) {
+          // 기존 학생 세션 정리
+          localStorage.removeItem('studentId');
           localStorage.setItem('userType', 'admin');
           toast({
             title: "관리자 로그인 성공",
@@ -65,13 +67,34 @@ const AuthPage = () => {
     } else {
       // 학생 로그인 - 등록된 학번 확인
       try {
+        // 학생 ID 정규화 (공백 제거 및 문자열 변환)
+        const normalizedId = String(loginId).trim();
+        
+        if (!normalizedId) {
+          toast({
+            title: "로그인 실패",
+            description: "학번을 입력해주세요.",
+            variant: "destructive"
+          });
+          setIsLoading(false);
+          return;
+        }
+
+        console.log('Attempting login for normalized student ID:', normalizedId);
+
+        // 기존 세션 정리
+        localStorage.removeItem('userType');
+        localStorage.removeItem('studentId');
+
+        // 학생 정보 조회 (정확한 문자열 매칭)
         const { data: student, error } = await supabase
           .from('students')
-          .select('student_id, class_name, name')
-          .eq('student_id', loginId)
+          .select('student_id, class_name, name, mother_tongue')
+          .eq('student_id', normalizedId)
           .single();
 
         if (error || !student) {
+          console.error('Student lookup failed:', error, 'for ID:', normalizedId);
           toast({
             title: "로그인 실패",
             description: "등록되지 않은 학번입니다.",
@@ -81,16 +104,29 @@ const AuthPage = () => {
           return;
         }
 
-        // 등록된 학생인 경우 로그인 성공
+        console.log('Student login successful:', student.student_id, 'Language:', student.mother_tongue);
+        
+        // 세션 데이터 저장
         localStorage.setItem('userType', 'student');
-        localStorage.setItem('studentId', loginId);
+        localStorage.setItem('studentId', student.student_id);
+        
+        // 세션 활성화
+        try {
+          await supabase.rpc('update_student_session', {
+            student_id_param: student.student_id
+          });
+        } catch (sessionError) {
+          console.error('Session activation failed:', sessionError);
+        }
+        
         toast({
           title: "로그인 성공",
-          description: `학번 ${loginId}로 로그인되었습니다.`
+          description: `학번 ${student.student_id}로 로그인되었습니다.`
         });
         navigate('/student');
         setIsLoading(false);
       } catch (error) {
+        console.error('Login error:', error);
         toast({
           title: "로그인 실패",
           description: "로그인 중 오류가 발생했습니다.",

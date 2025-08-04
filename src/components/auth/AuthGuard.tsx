@@ -15,14 +15,21 @@ const AuthGuard = ({ children, requireRole, redirectTo = '/auth' }: AuthGuardPro
 
   useEffect(() => {
     const userType = localStorage.getItem('userType');
-    const studentId = localStorage.getItem('studentId');
+    const rawStudentId = localStorage.getItem('studentId');
+    
+    // 학생 ID 정규화 (공백 제거 및 유효성 검증)
+    const studentId = rawStudentId ? String(rawStudentId).trim() : null;
+
+    console.log('AuthGuard check - UserType:', userType, 'StudentId:', studentId);
 
     if (!userType) {
+      console.log('No userType found, redirecting to auth');
       navigate(redirectTo);
       return;
     }
 
     if (requireRole && userType !== requireRole) {
+      console.log('Role mismatch - Required:', requireRole, 'Found:', userType);
       // 잘못된 역할로 접근한 경우 올바른 페이지로 리다이렉트
       if (userType === 'admin') {
         navigate('/admin');
@@ -35,9 +42,20 @@ const AuthGuard = ({ children, requireRole, redirectTo = '/auth' }: AuthGuardPro
     }
 
     // 학생의 경우 학번이 있는지 확인
-    if (userType === 'student' && !studentId) {
-      navigate(redirectTo);
-      return;
+    if (userType === 'student') {
+      if (!studentId || studentId.length === 0) {
+        console.log('Student login required but no valid studentId found');
+        // 유효하지 않은 세션 데이터 정리
+        localStorage.removeItem('userType');
+        localStorage.removeItem('studentId');
+        navigate(redirectTo);
+        return;
+      }
+      
+      // 학생 ID 재정규화하여 저장 (불일치 방지)
+      if (rawStudentId !== studentId) {
+        localStorage.setItem('studentId', studentId);
+      }
     }
 
     setIsAuthenticated(true);

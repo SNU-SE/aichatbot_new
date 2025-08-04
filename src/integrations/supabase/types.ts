@@ -829,6 +829,13 @@ export type Database = {
         Args: { "": string } | { "": unknown }
         Returns: unknown
       }
+      cleanup_expired_sessions_with_logging: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          cleaned_count: number
+          session_ids: string[]
+        }[]
+      }
       cleanup_inactive_sessions: {
         Args: Record<PropertyKey, never>
         Returns: undefined
