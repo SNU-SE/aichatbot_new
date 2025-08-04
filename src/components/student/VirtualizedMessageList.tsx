@@ -68,9 +68,10 @@ const MessageItem = ({ index, style, data }: MessageItemProps) => {
 interface VirtualizedMessageListProps {
   messages: Message[];
   isLoading: boolean;
+  height?: number;
 }
 
-const VirtualizedMessageList = ({ messages, isLoading }: VirtualizedMessageListProps) => {
+const VirtualizedMessageList = ({ messages, isLoading, height = 400 }: VirtualizedMessageListProps) => {
   const listRef = useRef<List>(null);
   
   const itemData = useMemo(() => messages, [messages]);
@@ -108,7 +109,7 @@ const VirtualizedMessageList = ({ messages, isLoading }: VirtualizedMessageListP
 
   if (messages.length === 0 && !isLoading) {
     return (
-      <div className="h-96 flex items-center justify-center">
+      <div className="flex items-center justify-center" style={{ height: height }}>
         <div className="text-center">
           <Bot className="h-12 w-12 text-gray-400 mx-auto mb-4" />
           <p className="text-gray-600">AI와 대화를 시작해보세요!</p>
@@ -119,10 +120,10 @@ const VirtualizedMessageList = ({ messages, isLoading }: VirtualizedMessageListP
   }
 
   return (
-    <div className="h-96 w-full">
+    <div className="w-full" style={{ height: height }}>
       <List
         ref={listRef}
-        height={384}
+        height={height}
         width="100%"
         itemCount={messages.length + (isLoading ? 1 : 0)}
         itemSize={getItemSize}

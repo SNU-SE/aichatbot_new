@@ -45,8 +45,10 @@ const ChatInterface = ({
   const [isLoading, setIsLoading] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [messagesHeight, setMessagesHeight] = useState(400);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -230,6 +232,46 @@ const ChatInterface = ({
   useEffect(() => {
     scrollToBottom()
   }, [messages, scrollToBottom])
+
+  // 동적 높이 계산
+  useEffect(() => {
+    const calculateHeight = () => {
+      if (!containerRef.current) return;
+      
+      const container = containerRef.current;
+      const containerHeight = container.clientHeight;
+      
+      // 헤더, 입력창, 여백 등의 고정 높이 계산
+      const header = container.querySelector('.border-b') as HTMLElement;
+      const inputSection = container.querySelector('.border-t:last-child') as HTMLElement;
+      const filePreview = container.querySelector('.border-t:not(:last-child)') as HTMLElement;
+      const argumentationSection = container.querySelector('.mb-4') as HTMLElement;
+      
+      let fixedHeight = 0;
+      if (header) fixedHeight += header.offsetHeight;
+      if (inputSection) fixedHeight += inputSection.offsetHeight;
+      if (filePreview) fixedHeight += filePreview.offsetHeight;
+      if (argumentationSection) fixedHeight += argumentationSection.offsetHeight;
+      
+      // 여백 고려 (padding 등)
+      const padding = 16;
+      const availableHeight = containerHeight - fixedHeight - padding;
+      
+      // 최소 높이 200px, 최대 높이 800px로 제한
+      const newHeight = Math.max(200, Math.min(800, availableHeight));
+      setMessagesHeight(newHeight);
+    };
+
+    calculateHeight();
+    
+    // ResizeObserver로 컨테이너 크기 변화 감지
+    const observer = new ResizeObserver(calculateHeight);
+    if (containerRef.current) {
+      observer.observe(containerRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, [argumentationContext?.activeTask, selectedFile]);
 
   const checkPeerEvaluationStatus = async () => {
     if (!argumentationContext) return false;
@@ -484,7 +526,7 @@ const ChatInterface = ({
   };
 
   return (
-    <div className="flex flex-col h-full bg-white rounded-lg shadow-sm">
+    <div ref={containerRef} className="flex flex-col h-full bg-white rounded-lg shadow-sm">
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b bg-gray-50 rounded-t-lg">
         <div className="flex items-center space-x-3">
@@ -513,6 +555,7 @@ const ChatInterface = ({
         <VirtualizedMessageList 
           messages={messages} 
           isLoading={isLoading}
+          height={messagesHeight}
         />
       </div>
 
