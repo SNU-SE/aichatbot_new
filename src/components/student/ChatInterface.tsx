@@ -236,41 +236,42 @@ const ChatInterface = ({
   // 동적 높이 계산
   useEffect(() => {
     const calculateHeight = () => {
-      if (!containerRef.current) return;
-      
-      const container = containerRef.current;
-      const containerHeight = container.clientHeight;
-      
-      // 헤더, 입력창, 여백 등의 고정 높이 계산
-      const header = container.querySelector('.border-b') as HTMLElement;
-      const inputSection = container.querySelector('.border-t:last-child') as HTMLElement;
-      const filePreview = container.querySelector('.border-t:not(:last-child)') as HTMLElement;
-      const argumentationSection = container.querySelector('.mb-4') as HTMLElement;
-      
-      let fixedHeight = 0;
-      if (header) fixedHeight += header.offsetHeight;
-      if (inputSection) fixedHeight += inputSection.offsetHeight;
-      if (filePreview) fixedHeight += filePreview.offsetHeight;
-      if (argumentationSection) fixedHeight += argumentationSection.offsetHeight;
-      
-      // 여백 고려 (padding 등)
-      const padding = 16;
-      const availableHeight = containerHeight - fixedHeight - padding;
-      
-      // 최소 높이 200px, 최대 높이 800px로 제한
-      const newHeight = Math.max(200, Math.min(800, availableHeight));
-      setMessagesHeight(newHeight);
+      try {
+        if (!containerRef.current) return;
+        
+        const container = containerRef.current;
+        const containerHeight = container.clientHeight;
+        
+        if (containerHeight === 0) return; // 컨테이너가 아직 렌더링되지 않음
+        
+        // 고정 높이들을 상수로 정의 (DOM 쿼리 대신)
+        const headerHeight = 73; // 헤더 + border
+        const inputSectionHeight = 80; // 입력창 영역
+        const filePreviewHeight = selectedFile ? 100 : 0; // 파일 미리보기
+        const argumentationHeight = argumentationContext?.activeTask ? 200 : 0; // 논증 섹션
+        
+        const fixedHeight = headerHeight + inputSectionHeight + filePreviewHeight + argumentationHeight;
+        const padding = 32; // 여백
+        const availableHeight = containerHeight - fixedHeight - padding;
+        
+        // 최소 높이 300px, 최대 높이 600px로 제한
+        const newHeight = Math.max(300, Math.min(600, availableHeight));
+        
+        // 현재 높이와 다를 때만 업데이트 (무한 루프 방지)
+        setMessagesHeight(prev => {
+          const diff = Math.abs(prev - newHeight);
+          return diff > 10 ? newHeight : prev; // 10px 이상 차이날 때만 업데이트
+        });
+      } catch (error) {
+        console.error('Height calculation error:', error);
+        setMessagesHeight(400); // 에러시 기본값
+      }
     };
 
-    calculateHeight();
-    
-    // ResizeObserver로 컨테이너 크기 변화 감지
-    const observer = new ResizeObserver(calculateHeight);
-    if (containerRef.current) {
-      observer.observe(containerRef.current);
-    }
+    // 초기 계산
+    const timeoutId = setTimeout(calculateHeight, 100); // 렌더링 완료 후 계산
 
-    return () => observer.disconnect();
+    return () => clearTimeout(timeoutId);
   }, [argumentationContext?.activeTask, selectedFile]);
 
   const checkPeerEvaluationStatus = async () => {
