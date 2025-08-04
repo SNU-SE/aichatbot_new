@@ -233,7 +233,7 @@ Student question: ${message}`;
       });
     }
 
-    // Save chat log
+    // Save chat log (student message only, bot message will be saved by frontend)
     await supabase.from('chat_logs').insert([
       {
         student_id: studentId,
@@ -243,16 +243,6 @@ Student question: ${message}`;
         file_url: fileUrl || null,
         file_name: fileName || null,
         file_type: fileType || null,
-        timestamp: new Date().toISOString(),
-      }
-    ]);
-
-    await supabase.from('chat_logs').insert([
-      {
-        student_id: studentId,
-        activity_id: activityId,
-        sender: 'bot',
-        message: aiResponse,
         timestamp: new Date().toISOString(),
       }
     ]);
