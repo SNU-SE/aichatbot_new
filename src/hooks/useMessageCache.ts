@@ -37,13 +37,6 @@ export const useMessageCache = ({ studentId, activityId }: UseMessageCacheProps)
   const fetchMessages = useCallback(async () => {
     try {
       setIsLoading(true);
-      
-      // 캐시에서 먼저 확인
-      const cached = localStorage.getItem(cacheKey);
-      if (cached) {
-        const cachedMessages = JSON.parse(cached);
-        setMessages(cachedMessages);
-      }
 
       // 서버에서 최신 데이터 가져오기
       const { data, error } = await supabase
@@ -65,10 +58,16 @@ export const useMessageCache = ({ studentId, activityId }: UseMessageCacheProps)
         file_type: item.file_type
       }));
       
-      // 중복 제거 (ID 기반)
-      const uniqueMessages = typedMessages.filter((message, index, array) => 
-        array.findIndex(m => m.id === message.id) === index
-      );
+      // 강화된 중복 제거 (ID, content, sender, timestamp 기준)
+      const uniqueMessages = typedMessages.filter((message, index, array) => {
+        const duplicateIndex = array.findIndex(m => 
+          m.id === message.id || 
+          (m.message === message.message && 
+           m.sender === message.sender && 
+           Math.abs(new Date(m.timestamp).getTime() - new Date(message.timestamp).getTime()) < 5000)
+        );
+        return duplicateIndex === index;
+      });
       
       setMessages(uniqueMessages);
       

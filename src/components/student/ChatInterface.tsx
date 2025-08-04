@@ -53,6 +53,46 @@ const ChatInterface = ({
 
   useEffect(() => {
     fetchMessages();
+
+    // 실시간 메시지 동기화 설정
+    const channel = supabase
+      .channel('schema-db-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'chat_logs',
+          filter: `student_id=eq.${studentId},activity_id=eq.${activity.id}`
+        },
+        (payload) => {
+          const newMessage = {
+            id: payload.new.id,
+            message: payload.new.message,
+            sender: payload.new.sender as 'student' | 'bot',
+            timestamp: payload.new.timestamp,
+            file_url: payload.new.file_url,
+            file_name: payload.new.file_name,
+            file_type: payload.new.file_type
+          };
+          
+          // 중복 방지하며 메시지 추가
+          setMessages(prev => {
+            const exists = prev.some(m => 
+              m.id === newMessage.id || 
+              (m.message === newMessage.message && 
+               m.sender === newMessage.sender && 
+               Math.abs(new Date(m.timestamp).getTime() - new Date(newMessage.timestamp).getTime()) < 5000)
+            );
+            return exists ? prev : [...prev, newMessage];
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [activity.id, studentId]);
 
   const fetchMessages = async () => {
@@ -181,8 +221,13 @@ const ChatInterface = ({
 
         if (aiResponse?.response) {
           // AI 응답은 Edge Function에서 이미 저장됨
-          // 메시지 목록만 다시 가져오기
-          await fetchMessages();
+          // 낙관적 업데이트로 즉시 UI에 표시
+          setMessages(prev => [...prev, {
+            id: `temp-ai-${Date.now()}`,
+            sender: 'bot' as const,
+            message: aiResponse.response,
+            timestamp: new Date().toISOString()
+          }]);
         }
       } catch (aiError) {
         console.error('AI 응답 생성 실패:', aiError);

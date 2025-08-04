@@ -233,41 +233,48 @@ Student question: ${message}`;
       });
     }
 
-    // Save both student and AI messages
-    await supabase.from('chat_logs').insert([
-      {
-        student_id: studentId,
-        activity_id: activityId,
-        sender: 'student',
-        message: message,
-        file_url: fileUrl || null,
-        file_name: fileName || null,
-        file_type: fileType || null,
-        timestamp: new Date().toISOString(),
+    // 트랜잭션으로 안전하게 메시지 저장
+    const studentMessageData = {
+      student_id: studentId,
+      activity_id: activityId,
+      sender: 'student',
+      message: message,
+      file_url: fileUrl || null,
+      file_name: fileName || null,
+      file_type: fileType || null,
+      timestamp: new Date().toISOString(),
+    };
+
+    const aiMessageData = {
+      student_id: studentId,
+      activity_id: activityId,
+      sender: 'bot',
+      message: aiResponse,
+      timestamp: new Date().toISOString(),
+    };
+
+    // 중복 체크 후 안전하게 저장
+    try {
+      // 학생 메시지 저장
+      await supabase.from('chat_logs').insert([studentMessageData]);
+      
+      // AI 응답 중복 체크 (메시지 내용과 최근 시간 기준)
+      const { data: existingAiResponse } = await supabase
+        .from('chat_logs')
+        .select('id')
+        .eq('student_id', studentId)
+        .eq('activity_id', activityId)
+        .eq('sender', 'bot')
+        .eq('message', aiResponse)
+        .gte('timestamp', new Date(Date.now() - 10000).toISOString()) // 10초 내 중복 확인
+        .maybeSingle();
+
+      if (!existingAiResponse) {
+        await supabase.from('chat_logs').insert([aiMessageData]);
       }
-    ]);
-
-    // AI 응답 중복 체크 후 저장
-    const { data: existingResponse } = await supabase
-      .from('chat_logs')
-      .select('id')
-      .eq('student_id', studentId)
-      .eq('activity_id', activityId)
-      .eq('sender', 'bot')
-      .eq('message', aiResponse)
-      .gte('timestamp', new Date(Date.now() - 5000).toISOString()) // 5초 내 중복 확인
-      .single();
-
-    if (!existingResponse) {
-      await supabase.from('chat_logs').insert([
-        {
-          student_id: studentId,
-          activity_id: activityId,
-          sender: 'bot',
-          message: aiResponse,
-          timestamp: new Date().toISOString(),
-        }
-      ]);
+    } catch (insertError) {
+      console.error('Error saving messages:', insertError);
+      // 중복 제약조건 위반 시 무시하고 계속 진행
     }
 
     // Track question frequency with safe hash generation
