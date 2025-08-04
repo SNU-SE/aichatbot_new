@@ -46,6 +46,7 @@ const ChatInterface = ({
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [messagesHeight, setMessagesHeight] = useState(400);
+  const [isSending, setIsSending] = useState(false); // 중복 전송 방지 플래그
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -194,9 +195,38 @@ const ChatInterface = ({
 
   const handleSendMessage = async () => {
     if (!inputMessage.trim() && !selectedFile) return;
+    
+    // 중복 전송 방지
+    if (isSending) {
+      console.warn('이미 메시지 전송 중입니다.');
+      return;
+    }
 
+    setIsSending(true);
     const tempId = `temp-student-${Date.now()}-${Math.random()}`;
     const currentMessage = inputMessage.trim();
+    
+    // 데이터베이스 저장 전 중복 체크
+    try {
+      const { data: existingMessages, error: checkError } = await supabase
+        .from('chat_logs')
+        .select('id, message, timestamp')
+        .eq('activity_id', activity.id)
+        .eq('student_id', studentId)
+        .eq('sender', 'student')
+        .eq('message', currentMessage)
+        .gte('timestamp', new Date(Date.now() - 5000).toISOString()); // 5초 이내 중복 확인
+
+      if (checkError) throw checkError;
+
+      if (existingMessages && existingMessages.length > 0) {
+        console.warn('중복 메시지 전송 시도 차단:', currentMessage);
+        setIsSending(false);
+        return;
+      }
+    } catch (error) {
+      console.error('중복 확인 중 오류:', error);
+    }
     
     // 1단계: 낙관적 업데이트 (임시 ID로 즉시 표시)
     const tempMessage: Message = {
@@ -332,6 +362,7 @@ const ChatInterface = ({
       });
     } finally {
       setIsLoading(false);
+      setIsSending(false); // 전송 완료 후 플래그 해제
     }
   };
 
