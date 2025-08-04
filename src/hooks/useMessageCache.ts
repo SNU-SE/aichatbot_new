@@ -65,10 +65,15 @@ export const useMessageCache = ({ studentId, activityId }: UseMessageCacheProps)
         file_type: item.file_type
       }));
       
-      setMessages(typedMessages);
+      // 중복 제거 (ID 기반)
+      const uniqueMessages = typedMessages.filter((message, index, array) => 
+        array.findIndex(m => m.id === message.id) === index
+      );
+      
+      setMessages(uniqueMessages);
       
       // 캐시 업데이트
-      localStorage.setItem(cacheKey, JSON.stringify(typedMessages));
+      localStorage.setItem(cacheKey, JSON.stringify(uniqueMessages));
       
     } catch (error: any) {
       setError(error.message);
@@ -79,6 +84,10 @@ export const useMessageCache = ({ studentId, activityId }: UseMessageCacheProps)
 
   const addMessage = useCallback((message: Message) => {
     setMessages(prev => {
+      // 중복 확인 (ID 기반)
+      const exists = prev.some(m => m.id === message.id);
+      if (exists) return prev;
+      
       const updated = [...prev, message];
       localStorage.setItem(cacheKey, JSON.stringify(updated));
       return updated;

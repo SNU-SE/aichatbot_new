@@ -130,16 +130,9 @@ const ChatInterface = ({
         .single();
 
       if (error) throw error;
-
-      setMessages(prevMessages => [...prevMessages, {
-        id: log.id,
-        message: log.message,
-        sender: log.sender as 'student' | 'bot',
-        timestamp: log.timestamp,
-        file_url: log.file_url,
-        file_name: log.file_name,
-        file_type: log.file_type
-      }]);
+      // 메시지 저장 완료 후 다시 가져오기
+      await fetchMessages();
+      
       setInputMessage('');
       setSelectedFile(null);
       setPreviewUrl(null);
@@ -192,17 +185,9 @@ const ChatInterface = ({
             .single();
 
           if (aiLogError) throw aiLogError;
-
-          // 메시지 목록에 AI 응답 추가
-          setMessages(prevMessages => [...prevMessages, {
-            id: aiLog.id,
-            message: aiLog.message,
-            sender: aiLog.sender as 'student' | 'bot',
-            timestamp: aiLog.timestamp,
-            file_url: aiLog.file_url,
-            file_name: aiLog.file_name,
-            file_type: aiLog.file_type
-          }]);
+          
+          // AI 응답 저장 후 다시 가져오기
+          await fetchMessages();
         }
       } catch (aiError) {
         console.error('AI 응답 생성 실패:', aiError);
