@@ -52,22 +52,22 @@ const ChatInterface = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
+  // 실시간 메시지 구독 설정 (단순화된 버전)
   useEffect(() => {
-    fetchMessages();
-
-    // 실시간 메시지 동기화 설정
+    console.log('🔔 실시간 구독 설정:', activity.id, studentId);
+    
     const channel = supabase
-      .channel('schema-db-changes')
+      .channel(`chat_${activity.id}_${studentId}`)
       .on(
         'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
+        { 
+          event: 'INSERT', 
+          schema: 'public', 
           table: 'chat_logs',
-          filter: `student_id=eq.${studentId},activity_id=eq.${activity.id}`
+          filter: `activity_id=eq.${activity.id}`
         },
-        (payload) => {
-          console.log('실시간 메시지 수신:', payload.new);
+        (payload: any) => {
+          console.log('🔔 실시간 메시지 수신:', payload.new.id, payload.new.sender, payload.new.message.substring(0, 30));
           
           const newMessage: Message = {
             id: payload.new.id,
@@ -79,51 +79,28 @@ const ChatInterface = ({
             file_type: payload.new.file_type
           };
           
-          // 강화된 중복 방지 및 임시 메시지 교체 로직
+          // 단순한 중복 방지 (ID 기반만)
           setMessages(prev => {
-            // 1. 실제 ID를 가진 메시지가 이미 존재하는지 확인
             const existsById = prev.some(m => m.id === newMessage.id);
             if (existsById) {
-              console.warn('이미 존재하는 메시지 ID:', newMessage.id);
+              console.log('⚠️ 중복 ID 감지, 무시:', newMessage.id);
               return prev;
             }
             
-            // 2. 임시 메시지 제거 (같은 내용+발송자의 임시 메시지)
-            const withoutTemp = prev.filter(m => {
-              if (!m.id.startsWith('temp-')) return true;
-              
-              const isSameContent = m.message === newMessage.message && 
-                                  m.sender === newMessage.sender;
-              const timeDiff = Math.abs(new Date(m.timestamp).getTime() - new Date(newMessage.timestamp).getTime());
-              
-              // 임시 메시지를 실제 메시지로 교체
-              if (isSameContent && timeDiff < 10000) {
-                console.log('임시 메시지 교체:', m.id, '->', newMessage.id);
-                return false;
-              }
-              return true;
-            });
-            
-            // 3. 중복 내용 확인 (1초 이내)
-            const duplicateByContent = withoutTemp.some(m => 
-              m.message === newMessage.message && 
-              m.sender === newMessage.sender && 
-              Math.abs(new Date(m.timestamp).getTime() - new Date(newMessage.timestamp).getTime()) < 1000
+            console.log('✅ 새 메시지 추가:', newMessage.id);
+            return [...prev, newMessage].sort((a, b) => 
+              new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
             );
-            
-            if (duplicateByContent) {
-              console.warn('중복 메시지 내용 감지:', newMessage.message);
-              return prev;
-            }
-            
-            // 4. 중복 제거 후 추가
-            return removeDuplicateMessages([...withoutTemp, newMessage]);
           });
         }
       )
       .subscribe();
 
+    // 초기 메시지 로드
+    fetchMessages();
+
     return () => {
+      console.log('🔔 실시간 구독 해제');
       supabase.removeChannel(channel);
     };
   }, [activity.id, studentId]);
@@ -193,53 +170,22 @@ const ChatInterface = ({
     return result.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
   };
 
-  const handleSendMessage = async () => {
+  const handleSendMessage = useCallback(async () => {
     if (!inputMessage.trim() && !selectedFile) return;
     
     // 중복 전송 방지
     if (isSending) {
-      console.warn('이미 메시지 전송 중입니다.');
+      console.log('⚠️ 메시지 전송 중복 방지:', inputMessage.substring(0, 20));
       return;
     }
 
+    console.log('📤 메시지 전송 시작:', inputMessage.substring(0, 50));
     setIsSending(true);
-    const tempId = `temp-student-${Date.now()}-${Math.random()}`;
+    
     const currentMessage = inputMessage.trim();
+    const timestamp = new Date().toISOString();
     
-    // 데이터베이스 저장 전 중복 체크
-    try {
-      const { data: existingMessages, error: checkError } = await supabase
-        .from('chat_logs')
-        .select('id, message, timestamp')
-        .eq('activity_id', activity.id)
-        .eq('student_id', studentId)
-        .eq('sender', 'student')
-        .eq('message', currentMessage)
-        .gte('timestamp', new Date(Date.now() - 5000).toISOString()); // 5초 이내 중복 확인
-
-      if (checkError) throw checkError;
-
-      if (existingMessages && existingMessages.length > 0) {
-        console.warn('중복 메시지 전송 시도 차단:', currentMessage);
-        setIsSending(false);
-        return;
-      }
-    } catch (error) {
-      console.error('중복 확인 중 오류:', error);
-    }
-    
-    // 1단계: 낙관적 업데이트 (임시 ID로 즉시 표시)
-    const tempMessage: Message = {
-      id: tempId,
-      sender: 'student' as const,
-      message: currentMessage,
-      timestamp: new Date().toISOString(),
-      file_url: null,
-      file_name: null,
-      file_type: null
-    };
-    
-    setMessages(prev => removeDuplicateMessages([...prev, tempMessage]));
+    // UI 즉시 업데이트 (낙관적 업데이트 제거 - 실시간 구독으로 처리)
     setInputMessage('');
     setIsLoading(true);
 
@@ -248,8 +194,11 @@ const ChatInterface = ({
       let file_name = null;
       let file_type = null;
 
+      // 파일 업로드 처리
       if (selectedFile) {
-        const filePath = `chat_files/${studentId}/${activity.id}/${selectedFile.name}`;
+        console.log('📎 파일 업로드 시작:', selectedFile.name);
+        const filePath = `chat_files/${studentId}/${activity.id}/${Date.now()}-${selectedFile.name}`;
+        
         const { data, error: uploadError } = await supabase.storage
           .from('chat_files')
           .upload(filePath, selectedFile, {
@@ -257,16 +206,16 @@ const ChatInterface = ({
             upsert: false
           });
 
-        if (uploadError) {
-          throw uploadError;
-        }
+        if (uploadError) throw uploadError;
 
         file_url = `${supabase.storage.from('chat_files').getPublicUrl('').data.publicUrl}/${data.path}`;
         file_name = selectedFile.name;
         file_type = selectedFile.type;
+        console.log('✅ 파일 업로드 완료:', file_url);
       }
 
-      // 2단계: 서버에 실제 메시지 저장
+      // 단일 데이터베이스 삽입 (낙관적 업데이트 없이, 실시간 구독으로만 처리)
+      console.log('💾 DB 저장 시작:', currentMessage.substring(0, 30));
       const { data: log, error } = await supabase
         .from('chat_logs')
         .insert([{
@@ -281,30 +230,22 @@ const ChatInterface = ({
         .select('*')
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ DB 저장 실패:', error);
+        throw error;
+      }
       
-      // 3단계: 임시 메시지를 실제 메시지로 교체
-      setMessages(prev => {
-        const withoutTemp = prev.filter(m => m.id !== tempId);
-        const realMessage: Message = {
-          id: log.id,
-          sender: 'student' as const,
-          message: currentMessage,
-          timestamp: log.timestamp,
-          file_url: file_url,
-          file_name: file_name,
-          file_type: file_type
-        };
-        return removeDuplicateMessages([...withoutTemp, realMessage]);
-      });
+      console.log('✅ DB 저장 완료:', log.id);
       
+      // 파일 관련 상태 초기화
       setSelectedFile(null);
       setPreviewUrl(null);
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
 
-      // AI 챗봇 응답 생성
+      // AI 챗봇 응답 생성 (메시지 저장 완료 후)
+      console.log('🤖 AI 응답 요청 시작');
       try {
         const { data: studentData, error: studentError } = await supabase
           .from('students')
@@ -314,15 +255,20 @@ const ChatInterface = ({
 
         if (studentError) throw studentError;
 
-        // 최근 5개 메시지를 대화 히스토리로 전송
-        const recentMessages = messages.slice(-5).map(msg => ({
+        // 현재 메시지를 포함한 대화 히스토리 구성
+        const recentMessages = [...messages, {
+          id: log.id,
+          message: currentMessage,
+          sender: 'student' as const,
+          timestamp: log.timestamp
+        }].slice(-5).map(msg => ({
           role: msg.sender === 'student' ? 'user' : 'assistant',
           content: msg.message
         }));
 
         const { data: aiResponse, error: aiError } = await supabase.functions.invoke('ai-chat', {
           body: {
-            message: inputMessage.trim(),
+            message: currentMessage,
             studentId: studentId,
             activityId: activity.id,
             motherTongue: studentData?.mother_tongue || 'Korean',
@@ -334,19 +280,10 @@ const ChatInterface = ({
         });
 
         if (aiError) throw aiError;
+        console.log('✅ AI 응답 요청 완료');
 
-        if (aiResponse?.response) {
-          // AI 응답 낙관적 업데이트 (실시간 동기화로 실제 메시지가 올 때까지 임시 표시)
-          const tempAiMessage: Message = {
-            id: `temp-ai-${Date.now()}-${Math.random()}`,
-            sender: 'bot' as const,
-            message: aiResponse.response,
-            timestamp: new Date().toISOString()
-          };
-          setMessages(prev => removeDuplicateMessages([...prev, tempAiMessage]));
-        }
       } catch (aiError) {
-        console.error('AI 응답 생성 실패:', aiError);
+        console.error('❌ AI 응답 생성 실패:', aiError);
         toast({
           title: "AI 응답 실패",
           description: "AI가 응답을 생성하지 못했습니다.",
@@ -354,7 +291,11 @@ const ChatInterface = ({
         });
       }
     } catch (error) {
-      console.error('Error sending message:', error);
+      console.error('❌ 메시지 전송 실패:', error);
+      
+      // 실패 시 입력 복원
+      setInputMessage(currentMessage);
+      
       toast({
         title: "메시지 전송 실패",
         description: "메시지를 보내는 동안 오류가 발생했습니다.",
@@ -362,9 +303,10 @@ const ChatInterface = ({
       });
     } finally {
       setIsLoading(false);
-      setIsSending(false); // 전송 완료 후 플래그 해제
+      setIsSending(false);
+      console.log('📤 메시지 전송 완료');
     }
-  };
+  }, [inputMessage, selectedFile, isSending, studentId, activity.id, messages, toast]);
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files && event.target.files[0];
