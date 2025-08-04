@@ -669,14 +669,14 @@ export type Database = {
           {
             foreignKeyName: "student_sessions_student_id_fkey"
             columns: ["student_id"]
-            isOneToOne: false
+            isOneToOne: true
             referencedRelation: "student_activity_view"
             referencedColumns: ["student_id"]
           },
           {
             foreignKeyName: "student_sessions_student_id_fkey"
             columns: ["student_id"]
-            isOneToOne: false
+            isOneToOne: true
             referencedRelation: "students"
             referencedColumns: ["student_id"]
           },
