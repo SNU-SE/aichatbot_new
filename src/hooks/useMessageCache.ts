@@ -58,17 +58,10 @@ export const useMessageCache = ({ studentId, activityId }: UseMessageCacheProps)
         file_type: item.file_type
       }));
       
-      // 강화된 중복 제거 (ID, content, sender, timestamp 기준)
-      const uniqueMessages = typedMessages.filter((message, index, array) => {
-        const duplicateIndex = array.findIndex(m => 
-          m.id === message.id || 
-          (m.message === message.message && 
-           m.sender === message.sender && 
-           Math.abs(new Date(m.timestamp).getTime() - new Date(message.timestamp).getTime()) < 5000)
-        );
-        return duplicateIndex === index;
-      });
+      // 강화된 중복 제거 적용
+      const uniqueMessages = removeDuplicateMessages(typedMessages);
       
+      console.log('useMessageCache - 메시지 로드 완료:', uniqueMessages.length, '개');
       setMessages(uniqueMessages);
       
       // 캐시 업데이트
@@ -83,20 +76,63 @@ export const useMessageCache = ({ studentId, activityId }: UseMessageCacheProps)
 
   const addMessage = useCallback((message: Message) => {
     setMessages(prev => {
-      // 강화된 중복 확인 (ID, content, timestamp 기반)
-      const exists = prev.some(m => 
-        m.id === message.id || 
-        (m.message === message.message && 
-         m.sender === message.sender && 
-         Math.abs(new Date(m.timestamp).getTime() - new Date(message.timestamp).getTime()) < 1000)
-      );
-      if (exists) return prev;
+      console.log('useMessageCache - 메시지 추가 시도:', message.id, message.message.substring(0, 50));
       
+      // ID 기반 중복 확인 (최우선)
+      if (message.id && !message.id.startsWith('temp-')) {
+        const existsById = prev.some(m => m.id === message.id);
+        if (existsById) {
+          console.warn('useMessageCache - 중복 ID 감지:', message.id);
+          return prev;
+        }
+      }
+      
+      // 내용+발송자+시간 기반 중복 확인 (보조)
+      const duplicateByContent = prev.some(m => 
+        m.message === message.message && 
+        m.sender === message.sender && 
+        Math.abs(new Date(m.timestamp).getTime() - new Date(message.timestamp).getTime()) < 500
+      );
+      
+      if (duplicateByContent) {
+        console.warn('useMessageCache - 중복 내용 감지:', message.message.substring(0, 30));
+        return prev;
+      }
+      
+      // 중복 제거된 배열 생성
       const updated = [...prev, message];
-      localStorage.setItem(cacheKey, JSON.stringify(updated));
-      return updated;
+      const deduplicated = removeDuplicateMessages(updated);
+      localStorage.setItem(cacheKey, JSON.stringify(deduplicated));
+      return deduplicated;
     });
   }, [cacheKey]);
+
+  // 중복 제거 유틸리티 함수
+  const removeDuplicateMessages = (messages: Message[]) => {
+    const seen = new Set<string>();
+    const result: Message[] = [];
+    
+    for (const message of messages) {
+      // ID 기반 중복 제거 (우선순위)
+      if (message.id && !message.id.startsWith('temp-') && seen.has(message.id)) {
+        continue;
+      }
+      
+      // 내용+발송자+시간 기반 중복 제거 (보조)
+      const contentKey = `${message.message}-${message.sender}-${Math.floor(new Date(message.timestamp).getTime() / 1000)}`;
+      if (seen.has(contentKey)) {
+        continue;
+      }
+      
+      if (message.id && !message.id.startsWith('temp-')) {
+        seen.add(message.id);
+      }
+      seen.add(contentKey);
+      result.push(message);
+    }
+    
+    return result.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+  };
 
   const clearCache = useCallback(() => {
     localStorage.removeItem(cacheKey);

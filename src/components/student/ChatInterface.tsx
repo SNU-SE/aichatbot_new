@@ -66,7 +66,9 @@ const ChatInterface = ({
           filter: `student_id=eq.${studentId},activity_id=eq.${activity.id}`
         },
         (payload) => {
-          const newMessage = {
+          console.log('실시간 메시지 수신:', payload.new);
+          
+          const newMessage: Message = {
             id: payload.new.id,
             message: payload.new.message,
             sender: payload.new.sender as 'student' | 'bot',
@@ -76,15 +78,45 @@ const ChatInterface = ({
             file_type: payload.new.file_type
           };
           
-          // 중복 방지하며 메시지 추가
+          // 강화된 중복 방지 및 임시 메시지 교체 로직
           setMessages(prev => {
-            const exists = prev.some(m => 
-              m.id === newMessage.id || 
-              (m.message === newMessage.message && 
-               m.sender === newMessage.sender && 
-               Math.abs(new Date(m.timestamp).getTime() - new Date(newMessage.timestamp).getTime()) < 5000)
+            // 1. 실제 ID를 가진 메시지가 이미 존재하는지 확인
+            const existsById = prev.some(m => m.id === newMessage.id);
+            if (existsById) {
+              console.warn('이미 존재하는 메시지 ID:', newMessage.id);
+              return prev;
+            }
+            
+            // 2. 임시 메시지 제거 (같은 내용+발송자의 임시 메시지)
+            const withoutTemp = prev.filter(m => {
+              if (!m.id.startsWith('temp-')) return true;
+              
+              const isSameContent = m.message === newMessage.message && 
+                                  m.sender === newMessage.sender;
+              const timeDiff = Math.abs(new Date(m.timestamp).getTime() - new Date(newMessage.timestamp).getTime());
+              
+              // 임시 메시지를 실제 메시지로 교체
+              if (isSameContent && timeDiff < 10000) {
+                console.log('임시 메시지 교체:', m.id, '->', newMessage.id);
+                return false;
+              }
+              return true;
+            });
+            
+            // 3. 중복 내용 확인 (1초 이내)
+            const duplicateByContent = withoutTemp.some(m => 
+              m.message === newMessage.message && 
+              m.sender === newMessage.sender && 
+              Math.abs(new Date(m.timestamp).getTime() - new Date(newMessage.timestamp).getTime()) < 1000
             );
-            return exists ? prev : [...prev, newMessage];
+            
+            if (duplicateByContent) {
+              console.warn('중복 메시지 내용 감지:', newMessage.message);
+              return prev;
+            }
+            
+            // 4. 중복 제거 후 추가
+            return removeDuplicateMessages([...withoutTemp, newMessage]);
           });
         }
       )
@@ -107,7 +139,7 @@ const ChatInterface = ({
 
       if (error) throw error;
 
-      setMessages(data.map(msg => ({
+      const messages = data.map(msg => ({
         id: msg.id,
         message: msg.message,
         sender: msg.sender as 'student' | 'bot',
@@ -115,7 +147,10 @@ const ChatInterface = ({
         file_url: msg.file_url,
         file_name: msg.file_name,
         file_type: msg.file_type
-      })));
+      }));
+      
+      // 초기 로드 시에도 중복 제거 적용
+      setMessages(removeDuplicateMessages(messages));
     } catch (error) {
       console.error('Error fetching messages:', error);
       toast({
@@ -128,10 +163,56 @@ const ChatInterface = ({
     }
   };
 
+  // 중복 제거 유틸리티 함수
+  const removeDuplicateMessages = (messages: Message[]) => {
+    const seen = new Set<string>();
+    const result: Message[] = [];
+    
+    for (const message of messages) {
+      // ID 기반 중복 제거 (우선순위)
+      if (message.id && !message.id.startsWith('temp-') && seen.has(message.id)) {
+        console.warn('중복 메시지 ID 감지:', message.id);
+        continue;
+      }
+      
+      // 내용+발송자+시간 기반 중복 제거 (보조)
+      const contentKey = `${message.message}-${message.sender}-${Math.floor(new Date(message.timestamp).getTime() / 1000)}`;
+      if (seen.has(contentKey)) {
+        console.warn('중복 메시지 내용 감지:', contentKey);
+        continue;
+      }
+      
+      if (message.id && !message.id.startsWith('temp-')) {
+        seen.add(message.id);
+      }
+      seen.add(contentKey);
+      result.push(message);
+    }
+    
+    return result.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+  };
+
   const handleSendMessage = async () => {
     if (!inputMessage.trim() && !selectedFile) return;
 
+    const tempId = `temp-student-${Date.now()}-${Math.random()}`;
+    const currentMessage = inputMessage.trim();
+    
+    // 1단계: 낙관적 업데이트 (임시 ID로 즉시 표시)
+    const tempMessage: Message = {
+      id: tempId,
+      sender: 'student' as const,
+      message: currentMessage,
+      timestamp: new Date().toISOString(),
+      file_url: null,
+      file_name: null,
+      file_type: null
+    };
+    
+    setMessages(prev => removeDuplicateMessages([...prev, tempMessage]));
+    setInputMessage('');
     setIsLoading(true);
+
     try {
       let file_url = null;
       let file_name = null;
@@ -155,12 +236,13 @@ const ChatInterface = ({
         file_type = selectedFile.type;
       }
 
+      // 2단계: 서버에 실제 메시지 저장
       const { data: log, error } = await supabase
         .from('chat_logs')
         .insert([{
           activity_id: activity.id,
           student_id: studentId,
-          message: inputMessage.trim(),
+          message: currentMessage,
           sender: 'student',
           file_url: file_url,
           file_name: file_name,
@@ -170,18 +252,22 @@ const ChatInterface = ({
         .single();
 
       if (error) throw error;
-      // 낙관적 업데이트: 즉시 로컬 상태에 추가
-      setMessages(prev => [...prev, {
-        id: log.id,
-        sender: 'student' as const,
-        message: inputMessage.trim(),
-        timestamp: log.timestamp,
-        file_url: file_url,
-        file_name: file_name,
-        file_type: file_type
-      }]);
       
-      setInputMessage('');
+      // 3단계: 임시 메시지를 실제 메시지로 교체
+      setMessages(prev => {
+        const withoutTemp = prev.filter(m => m.id !== tempId);
+        const realMessage: Message = {
+          id: log.id,
+          sender: 'student' as const,
+          message: currentMessage,
+          timestamp: log.timestamp,
+          file_url: file_url,
+          file_name: file_name,
+          file_type: file_type
+        };
+        return removeDuplicateMessages([...withoutTemp, realMessage]);
+      });
+      
       setSelectedFile(null);
       setPreviewUrl(null);
       if (fileInputRef.current) {
@@ -220,14 +306,14 @@ const ChatInterface = ({
         if (aiError) throw aiError;
 
         if (aiResponse?.response) {
-          // AI 응답은 Edge Function에서 이미 저장됨
-          // 낙관적 업데이트로 즉시 UI에 표시
-          setMessages(prev => [...prev, {
-            id: `temp-ai-${Date.now()}`,
+          // AI 응답 낙관적 업데이트 (실시간 동기화로 실제 메시지가 올 때까지 임시 표시)
+          const tempAiMessage: Message = {
+            id: `temp-ai-${Date.now()}-${Math.random()}`,
             sender: 'bot' as const,
             message: aiResponse.response,
             timestamp: new Date().toISOString()
-          }]);
+          };
+          setMessages(prev => removeDuplicateMessages([...prev, tempAiMessage]));
         }
       } catch (aiError) {
         console.error('AI 응답 생성 실패:', aiError);
