@@ -130,8 +130,16 @@ const ChatInterface = ({
         .single();
 
       if (error) throw error;
-      // 메시지 저장 완료 후 다시 가져오기
-      await fetchMessages();
+      // 낙관적 업데이트: 즉시 로컬 상태에 추가
+      setMessages(prev => [...prev, {
+        id: log.id,
+        sender: 'student' as const,
+        message: inputMessage.trim(),
+        timestamp: log.timestamp,
+        file_url: file_url,
+        file_name: file_name,
+        file_type: file_type
+      }]);
       
       setInputMessage('');
       setSelectedFile(null);
@@ -172,21 +180,8 @@ const ChatInterface = ({
         if (aiError) throw aiError;
 
         if (aiResponse?.response) {
-          // AI 응답을 chat_logs에 저장
-          const { data: aiLog, error: aiLogError } = await supabase
-            .from('chat_logs')
-            .insert([{
-              activity_id: activity.id,
-              student_id: studentId,
-              message: aiResponse.response,
-              sender: 'bot'
-            }])
-            .select('*')
-            .single();
-
-          if (aiLogError) throw aiLogError;
-          
-          // AI 응답 저장 후 다시 가져오기
+          // AI 응답은 Edge Function에서 이미 저장됨
+          // 메시지 목록만 다시 가져오기
           await fetchMessages();
         }
       } catch (aiError) {

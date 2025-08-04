@@ -84,8 +84,13 @@ export const useMessageCache = ({ studentId, activityId }: UseMessageCacheProps)
 
   const addMessage = useCallback((message: Message) => {
     setMessages(prev => {
-      // 중복 확인 (ID 기반)
-      const exists = prev.some(m => m.id === message.id);
+      // 강화된 중복 확인 (ID, content, timestamp 기반)
+      const exists = prev.some(m => 
+        m.id === message.id || 
+        (m.message === message.message && 
+         m.sender === message.sender && 
+         Math.abs(new Date(m.timestamp).getTime() - new Date(message.timestamp).getTime()) < 1000)
+      );
       if (exists) return prev;
       
       const updated = [...prev, message];

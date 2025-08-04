@@ -233,7 +233,7 @@ Student question: ${message}`;
       });
     }
 
-    // Save chat log (student message only, bot message will be saved by frontend)
+    // Save both student and AI messages
     await supabase.from('chat_logs').insert([
       {
         student_id: studentId,
@@ -246,6 +246,29 @@ Student question: ${message}`;
         timestamp: new Date().toISOString(),
       }
     ]);
+
+    // AI 응답 중복 체크 후 저장
+    const { data: existingResponse } = await supabase
+      .from('chat_logs')
+      .select('id')
+      .eq('student_id', studentId)
+      .eq('activity_id', activityId)
+      .eq('sender', 'bot')
+      .eq('message', aiResponse)
+      .gte('timestamp', new Date(Date.now() - 5000).toISOString()) // 5초 내 중복 확인
+      .single();
+
+    if (!existingResponse) {
+      await supabase.from('chat_logs').insert([
+        {
+          student_id: studentId,
+          activity_id: activityId,
+          sender: 'bot',
+          message: aiResponse,
+          timestamp: new Date().toISOString(),
+        }
+      ]);
+    }
 
     // Track question frequency with safe hash generation
     const questionHash = generateSafeHash(message);
