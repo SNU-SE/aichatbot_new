@@ -188,19 +188,40 @@ const ArgumentationActivity = ({
     }
 
     try {
-      const { error } = await supabase
+      // 기존 응답 확인
+      const { data: existingResponse } = await supabase
         .from('argumentation_responses')
-        .upsert({
-          activity_id: activity.id,
-          student_id: studentId,
-          response_text: argument,
-          is_submitted: true,
-          submitted_at: new Date().toISOString()
-        }, {
-          onConflict: 'activity_id,student_id'
-        });
+        .select('id')
+        .eq('activity_id', activity.id)
+        .eq('student_id', studentId)
+        .maybeSingle();
 
-      if (error) throw error;
+      if (existingResponse) {
+        // 기존 응답 업데이트
+        const { error } = await supabase
+          .from('argumentation_responses')
+          .update({
+            response_text: argument,
+            is_submitted: true,
+            submitted_at: new Date().toISOString()
+          })
+          .eq('id', existingResponse.id);
+        
+        if (error) throw error;
+      } else {
+        // 새 응답 생성
+        const { error } = await supabase
+          .from('argumentation_responses')
+          .insert({
+            activity_id: activity.id,
+            student_id: studentId,
+            response_text: argument,
+            is_submitted: true,
+            submitted_at: new Date().toISOString()
+          });
+        
+        if (error) throw error;
+      }
 
       setIsSubmitted(true);
       setActiveTask('none');
