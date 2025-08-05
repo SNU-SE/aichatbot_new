@@ -7,11 +7,13 @@ import ActivitySelection from '@/components/student/ActivitySelection';
 import ExperimentActivity from '@/components/student/ExperimentActivity';
 import ArgumentationActivity from '@/components/student/ArgumentationActivity';
 import DiscussionActivity from '@/components/student/DiscussionActivity';
-import EnhancedAuthGuard from '@/components/auth/EnhancedAuthGuard';
+import AuthGuard from '@/components/auth/AuthGuard';
 import { Activity } from '@/types/activity';
 import { useToast } from '@/hooks/use-toast';
 import { useSessionRecovery } from '@/hooks/useSessionRecovery';
 import { Badge } from '@/components/ui/badge';
+import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/integrations/supabase/client';
 
 const StudentDashboard = () => {
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
@@ -20,20 +22,46 @@ const StudentDashboard = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { updateSession, saveDraft, loadDraft } = useSessionRecovery();
+  const { user, signOut } = useAuth();
 
   useEffect(() => {
-    const storedStudentId = localStorage.getItem('studentId');
-    if (storedStudentId) {
-      setStudentId(storedStudentId);
-      // 세션 업데이트
-      updateSession(storedStudentId);
-    }
+    // 실제 인증된 사용자의 학번 가져오기
+    const fetchStudentId = async () => {
+      if (user) {
+        try {
+          const { data: student, error } = await supabase
+            .from('students')
+            .select('student_id')
+            .eq('user_id', user.id)
+            .single();
+
+          if (error) {
+            console.error('학생 정보 조회 실패:', error);
+            toast({
+              title: "학생 정보 조회 실패",
+              description: "학생 정보를 불러오는데 실패했습니다.",
+              variant: "destructive"
+            });
+            return;
+          }
+
+          if (student) {
+            setStudentId(student.student_id);
+            updateSession(student.student_id);
+          }
+        } catch (error) {
+          console.error('학생 정보 조회 오류:', error);
+        }
+      }
+    };
+
+    fetchStudentId();
 
     // 온라인/오프라인 상태 감지
     const handleOnline = () => {
       setIsOnline(true);
-      if (storedStudentId) {
-        updateSession(storedStudentId);
+      if (studentId) {
+        updateSession(studentId);
         toast({
           title: "연결 복구됨",
           description: "인터넷 연결이 복구되었습니다."
@@ -57,16 +85,20 @@ const StudentDashboard = () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, [updateSession, toast]);
+  }, [user, updateSession, toast, studentId]);
 
-  const handleLogout = () => {
-    localStorage.removeItem('userType');
-    localStorage.removeItem('studentId');
-    toast({
-      title: "로그아웃 완료",
-      description: "성공적으로 로그아웃되었습니다."
-    });
-    navigate('/auth');
+  const handleLogout = async () => {
+    try {
+      await signOut();
+      navigate('/auth');
+    } catch (error) {
+      console.error('로그아웃 오류:', error);
+      toast({
+        title: "로그아웃 실패",
+        description: "로그아웃 중 오류가 발생했습니다.",
+        variant: "destructive"
+      });
+    }
   };
 
   const handleActivitySelect = (activity: Activity) => {
@@ -101,7 +133,7 @@ const StudentDashboard = () => {
   };
 
   return (
-    <EnhancedAuthGuard requiredRole="student">
+    <AuthGuard requireRole="student">
       <div className="min-h-screen bg-gray-50">
         {/* Header */}
         <div className="bg-white shadow-sm border-b">
@@ -158,7 +190,7 @@ const StudentDashboard = () => {
           )}
         </div>
       </div>
-    </EnhancedAuthGuard>
+    </AuthGuard>
   );
 };
 

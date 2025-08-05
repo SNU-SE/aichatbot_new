@@ -52,7 +52,7 @@ const ChatInterface = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
-  // 실시간 메시지 구독 설정 (단순화된 버전)
+  // 실시간 메시지 구독 설정 (학생별 필터링 추가)
   useEffect(() => {
     console.log('🔔 실시간 구독 설정:', activity.id, studentId);
     
@@ -64,10 +64,16 @@ const ChatInterface = ({
           event: 'INSERT', 
           schema: 'public', 
           table: 'chat_logs',
-          filter: `activity_id=eq.${activity.id}`
+          filter: `activity_id=eq.${activity.id},student_id=eq.${studentId}`  // 중요: 학생 ID로도 필터링
         },
         (payload: any) => {
           console.log('🔔 실시간 메시지 수신:', payload.new.id, payload.new.sender, payload.new.message.substring(0, 30));
+          
+          // 추가 보안: 수신된 메시지가 현재 학생의 것인지 다시 한번 확인
+          if (payload.new.student_id !== studentId) {
+            console.log('⚠️ 다른 학생의 메시지, 무시:', payload.new.student_id, '!==', studentId);
+            return;
+          }
           
           const newMessage: Message = {
             id: payload.new.id,
