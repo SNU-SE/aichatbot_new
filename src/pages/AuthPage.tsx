@@ -79,7 +79,7 @@ const AuthPage = () => {
           return;
         }
 
-        console.log('Student authentication for:', normalizedId);
+        console.log('🔐 Student authentication for:', normalizedId);
 
         // 기존 세션 정리
         localStorage.removeItem('userType');
@@ -96,7 +96,7 @@ const AuthPage = () => {
           .single();
 
         if (studentError || !student) {
-          console.error('Student lookup failed:', studentError);
+          console.error('❌ Student lookup failed:', studentError, 'for ID:', normalizedId);
           toast({
             title: "로그인 실패",
             description: "등록되지 않은 학번입니다.",
@@ -105,6 +105,8 @@ const AuthPage = () => {
           setIsLoading(false);
           return;
         }
+
+        console.log('✅ Student found:', student.student_id, 'user_id:', student.user_id);
 
         // 학생에게 연결된 Supabase 사용자 계정이 있는지 확인
         let authUser = null;
@@ -127,7 +129,7 @@ const AuthPage = () => {
         }
         
         if (!authUser) {
-          // 새로운 Supabase 사용자 계정 생성
+          console.log('🆕 Creating new Supabase user account for:', normalizedId);
           const tempEmail = `${normalizedId}@student.temp`;
           const tempPassword = `student_${normalizedId}`;
           
@@ -143,11 +145,13 @@ const AuthPage = () => {
             }
           });
 
+          console.log('🔍 SignUp response:', signUpData, 'Error:', signUpError);
+
           if (signUpError) {
-            console.error('User creation failed:', signUpError);
+            console.error('❌ User creation failed:', signUpError);
             toast({
               title: "로그인 실패",
-              description: "사용자 계정 생성에 실패했습니다.",
+              description: `사용자 계정 생성에 실패했습니다: ${signUpError.message}`,
               variant: "destructive"
             });
             setIsLoading(false);
@@ -155,26 +159,41 @@ const AuthPage = () => {
           }
 
           authUser = signUpData.user;
+          console.log('✅ New user created:', authUser?.id);
           
           // students 테이블의 user_id 업데이트
           if (authUser) {
-            await supabase
+            console.log('📝 Updating student record with user_id:', authUser.id);
+            const { error: updateError } = await supabase
               .from('students')
               .update({ user_id: authUser.id })
               .eq('student_id', normalizedId);
               
+            if (updateError) {
+              console.error('❌ Student update failed:', updateError);
+            } else {
+              console.log('✅ Student record updated');
+            }
+              
             // user_roles에 student 역할 추가
-            await supabase
+            console.log('👤 Adding student role for user:', authUser.id);
+            const { error: roleError } = await supabase
               .from('user_roles')
               .insert({
                 user_id: authUser.id,
                 role: 'student'
               });
+              
+            if (roleError) {
+              console.error('❌ Role creation failed:', roleError);
+            } else {
+              console.log('✅ Student role added');
+            }
           }
         }
 
         if (authUser) {
-          console.log('Student authentication successful:', normalizedId);
+          console.log('🎉 Student authentication successful:', normalizedId, 'user:', authUser.id);
           
           // 세션 활성화
           try {
