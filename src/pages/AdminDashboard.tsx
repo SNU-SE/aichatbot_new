@@ -2,7 +2,8 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { LogOut, Settings, Users, Activity, MessageCircle, BarChart3, GraduationCap } from 'lucide-react';
+import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+import { LogOut, Settings, Users, Activity, MessageCircle, BarChart3, GraduationCap, Menu, TrendingUp } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import StudentManagement from '@/components/admin/StudentManagement';
 import ActivityManagement from '@/components/admin/ActivityManagement';
@@ -10,12 +11,17 @@ import AISettings from '@/components/admin/AISettings';
 import RealTimeMonitoring from '@/components/admin/RealTimeMonitoring';
 import StudentRecords from '@/components/admin/StudentRecords';
 import ClassManagement from '@/components/admin/ClassManagement';
+import { PWAInstallBanner } from '@/components/enhanced-rag/PWAInstallBanner';
+import { AnalyticsDemo } from '@/components/analytics/AnalyticsDemo';
 import { useToast } from '@/hooks/use-toast';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 
 const AdminDashboard = () => {
   const [activeTab, setActiveTab] = useState('students');
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
+  const isMobile = useMediaQuery('(max-width: 768px)');
 
   const handleLogout = () => {
     localStorage.removeItem('userType');
@@ -27,8 +33,21 @@ const AdminDashboard = () => {
     navigate('/auth');
   };
 
+  const tabItems = [
+    { value: 'students', label: '학생관리', icon: Users },
+    { value: 'activities', label: '활동관리', icon: Activity },
+    { value: 'ai-settings', label: 'AI설정', icon: Settings },
+    { value: 'monitoring', label: '실시간모니터', icon: MessageCircle },
+    { value: 'class-management', label: '수업관리', icon: GraduationCap },
+    { value: 'records', label: '학습기록', icon: BarChart3 },
+    { value: 'analytics', label: '분석대시보드', icon: TrendingUp },
+  ];
+
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* PWA Install Banner */}
+      <PWAInstallBanner variant="banner" />
+
       {/* Header */}
       <div className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -38,18 +57,60 @@ const AdminDashboard = () => {
                 <Settings className="h-6 w-6 text-white" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">AI 학습 도우미 관리자</h1>
-                <p className="text-sm text-gray-600">시스템 관리 및 모니터링</p>
+                <h1 className={`font-bold text-gray-900 ${isMobile ? 'text-lg' : 'text-2xl'}`}>
+                  AI 학습 도우미 관리자
+                </h1>
+                {!isMobile && (
+                  <p className="text-sm text-gray-600">시스템 관리 및 모니터링</p>
+                )}
               </div>
             </div>
-            <Button 
-              onClick={handleLogout}
-              variant="outline"
-              className="flex items-center space-x-2"
-            >
-              <LogOut className="h-4 w-4" />
-              <span>로그아웃</span>
-            </Button>
+            
+            <div className="flex items-center space-x-2">
+              {isMobile && (
+                <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
+                  <SheetTrigger asChild>
+                    <Button variant="outline" size="sm">
+                      <Menu className="h-4 w-4" />
+                    </Button>
+                  </SheetTrigger>
+                  <SheetContent side="right" className="w-80">
+                    <div className="space-y-4 pt-6">
+                      <h3 className="text-lg font-semibold">메뉴</h3>
+                      <div className="space-y-2">
+                        {tabItems.map((item) => {
+                          const Icon = item.icon;
+                          return (
+                            <Button
+                              key={item.value}
+                              variant={activeTab === item.value ? "default" : "ghost"}
+                              className="w-full justify-start"
+                              onClick={() => {
+                                setActiveTab(item.value);
+                                setIsMobileMenuOpen(false);
+                              }}
+                            >
+                              <Icon className="h-4 w-4 mr-2" />
+                              {item.label}
+                            </Button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </SheetContent>
+                </Sheet>
+              )}
+              
+              <Button 
+                onClick={handleLogout}
+                variant="outline"
+                size={isMobile ? "sm" : "default"}
+                className="flex items-center space-x-2"
+              >
+                <LogOut className="h-4 w-4" />
+                {!isMobile && <span>로그아웃</span>}
+              </Button>
+            </div>
           </div>
         </div>
       </div>
@@ -57,32 +118,19 @@ const AdminDashboard = () => {
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-6">
-            <TabsTrigger value="students" className="flex items-center space-x-2">
-              <Users className="h-4 w-4" />
-              <span>학생관리</span>
-            </TabsTrigger>
-            <TabsTrigger value="activities" className="flex items-center space-x-2">
-              <Activity className="h-4 w-4" />
-              <span>활동관리</span>
-            </TabsTrigger>
-            <TabsTrigger value="ai-settings" className="flex items-center space-x-2">
-              <Settings className="h-4 w-4" />
-              <span>AI설정</span>
-            </TabsTrigger>
-            <TabsTrigger value="monitoring" className="flex items-center space-x-2">
-              <MessageCircle className="h-4 w-4" />
-              <span>실시간모니터</span>
-            </TabsTrigger>
-            <TabsTrigger value="class-management" className="flex items-center space-x-2">
-              <GraduationCap className="h-4 w-4" />
-              <span>수업관리</span>
-            </TabsTrigger>
-            <TabsTrigger value="records" className="flex items-center space-x-2">
-              <BarChart3 className="h-4 w-4" />
-              <span>학습기록</span>
-            </TabsTrigger>
-          </TabsList>
+          {!isMobile && (
+            <TabsList className="grid w-full grid-cols-7">
+              {tabItems.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <TabsTrigger key={item.value} value={item.value} className="flex items-center space-x-2">
+                    <Icon className="h-4 w-4" />
+                    <span className="hidden lg:inline">{item.label}</span>
+                  </TabsTrigger>
+                );
+              })}
+            </TabsList>
+          )}
 
           <TabsContent value="students">
             <StudentManagement />
@@ -106,6 +154,10 @@ const AdminDashboard = () => {
 
           <TabsContent value="records">
             <StudentRecords />
+          </TabsContent>
+
+          <TabsContent value="analytics">
+            <AnalyticsDemo />
           </TabsContent>
         </Tabs>
       </div>

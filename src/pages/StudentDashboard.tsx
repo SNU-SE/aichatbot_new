@@ -1,7 +1,8 @@
 
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { LogOut, GraduationCap, Wifi, WifiOff } from 'lucide-react';
+import { LogOut, GraduationCap, Wifi, WifiOff, Menu } from 'lucide-react';
+import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { useNavigate } from 'react-router-dom';
 import ActivitySelection from '@/components/student/ActivitySelection';
 import ExperimentActivity from '@/components/student/ExperimentActivity';
@@ -14,15 +15,19 @@ import { useSessionRecovery } from '@/hooks/useSessionRecovery';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
+import { PWAInstallBanner } from '@/components/enhanced-rag/PWAInstallBanner';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 
 const StudentDashboard = () => {
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
   const [studentId, setStudentId] = useState<string>('');
   const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
   const { updateSession, saveDraft, loadDraft } = useSessionRecovery();
   const { user, signOut } = useAuth();
+  const isMobile = useMediaQuery('(max-width: 768px)');
 
   useEffect(() => {
     // 실제 인증된 사용자의 학번 가져오기
@@ -135,31 +140,36 @@ const StudentDashboard = () => {
   return (
     <AuthGuard requireRole="student">
       <div className="min-h-screen bg-gray-50">
+        {/* PWA Install Banner */}
+        <PWAInstallBanner variant="banner" />
+
         {/* Header */}
         <div className="bg-white shadow-sm border-b">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between items-center py-4">
-              <div className="flex items-center space-x-4">
-                <div className="w-10 h-10 bg-[rgb(15,15,112)] rounded-full flex items-center justify-center">
+              <div className="flex items-center space-x-4 flex-1 min-w-0">
+                <div className="w-10 h-10 bg-[rgb(15,15,112)] rounded-full flex items-center justify-center flex-shrink-0">
                   <GraduationCap className="h-6 w-6 text-white" />
                 </div>
-                <div>
-                  <h1 className="text-2xl font-bold text-gray-900">AI 학습 도우미</h1>
+                <div className="flex-1 min-w-0">
+                  <h1 className={`font-bold text-gray-900 truncate ${isMobile ? 'text-lg' : 'text-2xl'}`}>
+                    AI 학습 도우미
+                  </h1>
                   {studentId && (
-                    <div className="flex items-center space-x-2">
-                      <p className="text-sm text-gray-600">
+                    <div className={`flex items-center space-x-2 ${isMobile ? 'flex-wrap' : ''}`}>
+                      <p className="text-sm text-gray-600 truncate">
                         학번: {studentId}
                       </p>
-                      <Badge variant={isOnline ? "default" : "destructive"} className="text-xs">
+                      <Badge variant={isOnline ? "default" : "destructive"} className="text-xs flex-shrink-0">
                         {isOnline ? (
                           <>
                             <Wifi className="h-3 w-3 mr-1" />
-                            온라인
+                            {isMobile ? '온라인' : '온라인'}
                           </>
                         ) : (
                           <>
                             <WifiOff className="h-3 w-3 mr-1" />
-                            오프라인
+                            {isMobile ? '오프라인' : '오프라인'}
                           </>
                         )}
                       </Badge>
@@ -167,26 +177,68 @@ const StudentDashboard = () => {
                   )}
                 </div>
               </div>
-              <Button 
-                onClick={handleLogout}
-                variant="outline"
-                className="flex items-center space-x-2"
-              >
-                <LogOut className="h-4 w-4" />
-                <span>로그아웃</span>
-              </Button>
+              
+              <div className="flex items-center space-x-2 flex-shrink-0">
+                {selectedActivity && isMobile && (
+                  <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
+                    <SheetTrigger asChild>
+                      <Button variant="outline" size="sm">
+                        <Menu className="h-4 w-4" />
+                      </Button>
+                    </SheetTrigger>
+                    <SheetContent side="right" className="w-80">
+                      <div className="space-y-4 pt-6">
+                        <h3 className="text-lg font-semibold">활동 메뉴</h3>
+                        <div className="space-y-2">
+                          <Button
+                            variant="ghost"
+                            className="w-full justify-start"
+                            onClick={() => {
+                              handleBack();
+                              setIsMobileMenuOpen(false);
+                            }}
+                          >
+                            활동 선택으로 돌아가기
+                          </Button>
+                        </div>
+                      </div>
+                    </SheetContent>
+                  </Sheet>
+                )}
+                
+                <Button 
+                  onClick={handleLogout}
+                  variant="outline"
+                  size={isMobile ? "sm" : "default"}
+                  className="flex items-center space-x-2"
+                >
+                  <LogOut className="h-4 w-4" />
+                  {!isMobile && <span>로그아웃</span>}
+                </Button>
+              </div>
             </div>
           </div>
         </div>
 
         {/* Main Content */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 ${isMobile ? 'py-4' : 'py-8'}`}>
           {!selectedActivity ? (
             <ActivitySelection 
               onActivitySelect={handleActivitySelect}
             />
           ) : (
-            renderActivityInterface()
+            <div className={isMobile ? 'space-y-4' : ''}>
+              {isMobile && (
+                <Button
+                  variant="outline"
+                  onClick={handleBack}
+                  className="mb-4"
+                >
+                  ← 활동 선택으로 돌아가기
+                </Button>
+              )}
+              {renderActivityInterface()}
+            </div>
           )}
         </div>
       </div>

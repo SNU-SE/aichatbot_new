@@ -7,6 +7,7 @@ export default {
 		"./components/**/*.{ts,tsx}",
 		"./app/**/*.{ts,tsx}",
 		"./src/**/*.{ts,tsx}",
+		"./index.html",
 	],
 	prefix: "",
 	theme: {
@@ -92,5 +93,10 @@ export default {
 			}
 		}
 	},
-	plugins: [require("tailwindcss-animate")],
+	plugins: [
+		// eslint-disable-next-line @typescript-eslint/no-require-imports
+		require("tailwindcss-animate"),
+		// eslint-disable-next-line @typescript-eslint/no-require-imports
+		require("@tailwindcss/typography"),
+	],
 } satisfies Config;
