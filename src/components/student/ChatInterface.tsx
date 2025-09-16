@@ -51,16 +51,11 @@ const ChatInterface = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
-  const isGeneralChat = activity.id === 'general_chat';
 
   // 실시간 메시지 구독 설정 (학생별 필터링 추가)
   useEffect(() => {
     console.log('🔔 실시간 구독 설정:', activity.id, studentId);
     
-    const realtimeFilter = isGeneralChat
-      ? `student_id=eq.${studentId}`
-      : `activity_id=eq.${activity.id},student_id=eq.${studentId}`;
-
     const channel = supabase
       .channel(`chat_${activity.id}_${studentId}`)
       .on(
@@ -69,7 +64,7 @@ const ChatInterface = ({
           event: 'INSERT', 
           schema: 'public', 
           table: 'chat_logs',
-          filter: realtimeFilter  // 중요: 학생 ID로도 필터링
+          filter: `activity_id=eq.${activity.id},student_id=eq.${studentId}`  // 중요: 학생 ID로도 필터링
         },
         (payload: any) => {
           console.log('🔔 실시간 메시지 수신:', payload.new.id, payload.new.sender, payload.new.message.substring(0, 30));
@@ -80,13 +75,8 @@ const ChatInterface = ({
             return;
           }
 
-          if (!isGeneralChat && payload.new.activity_id !== activity.id) {
+          if (payload.new.activity_id !== activity.id) {
             console.log('⚠️ 다른 활동의 메시지, 무시:', payload.new.activity_id, '!==', activity.id);
-            return;
-          }
-
-          if (isGeneralChat && payload.new.activity_id) {
-            console.log('⚠️ 일반 대화가 아닌 메시지, 무시:', payload.new.activity_id);
             return;
           }
           
@@ -124,21 +114,17 @@ const ChatInterface = ({
       console.log('🔔 실시간 구독 해제');
       supabase.removeChannel(channel);
     };
-  }, [activity.id, studentId, isGeneralChat]);
+  }, [activity.id, studentId]);
 
   const fetchMessages = async () => {
     setIsLoading(true);
     try {
-      let query = supabase
+      const { data, error } = await supabase
         .from('chat_logs')
         .select('*')
-        .eq('student_id', studentId); // 중요: 현재 학생의 메시지만 필터링
-
-      query = isGeneralChat
-        ? query.is('activity_id', null)
-        : query.eq('activity_id', activity.id);
-
-      const { data, error } = await query.order('timestamp', { ascending: true });
+        .eq('activity_id', activity.id)
+        .eq('student_id', studentId) // 중요: 현재 학생의 메시지만 필터링
+        .order('timestamp', { ascending: true });
 
       if (error) throw error;
 
@@ -208,18 +194,13 @@ const ChatInterface = ({
     
     // 최근 5초 내 동일한 메시지가 있는지 사전 확인
     const fiveSecondsAgo = new Date(Date.now() - 5000).toISOString();
-    let duplicateCheckQuery = supabase
+    const { data: recentMessages } = await supabase
       .from('chat_logs')
       .select('*')
       .eq('student_id', studentId)
+      .eq('activity_id', activity.id)
       .eq('message', currentMessage)
       .gte('timestamp', fiveSecondsAgo);
-
-    duplicateCheckQuery = isGeneralChat
-      ? duplicateCheckQuery.is('activity_id', null)
-      : duplicateCheckQuery.eq('activity_id', activity.id);
-
-    const { data: recentMessages } = await duplicateCheckQuery;
     
     if (recentMessages && recentMessages.length > 0) {
       console.log('⚠️ 최근 5초 내 동일한 메시지 존재, 전송 취소:', currentMessage.substring(0, 30));
@@ -264,7 +245,7 @@ const ChatInterface = ({
       const { data: log, error } = await supabase
         .from('chat_logs')
         .insert([{
-          activity_id: isGeneralChat ? null : activity.id,
+          activity_id: activity.id,
           student_id: studentId,
           message: currentMessage,
           sender: 'student',
@@ -315,7 +296,7 @@ const ChatInterface = ({
           body: {
             message: currentMessage,
             studentId: studentId,
-            activityId: isGeneralChat ? null : activity.id,
+            activityId: activity.id,
             motherTongue: studentData?.mother_tongue || 'Korean',
             fileUrl: file_url,
             fileName: file_name,
@@ -351,7 +332,7 @@ const ChatInterface = ({
       setIsSending(false);
       console.log('📤 메시지 전송 완료');
     }
-  }, [inputMessage, selectedFile, isSending, studentId, activity.id, messages, toast, isGeneralChat]);
+  }, [inputMessage, selectedFile, isSending, studentId, activity.id, messages, toast]);
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files && event.target.files[0];
