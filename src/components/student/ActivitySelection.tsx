@@ -25,6 +25,38 @@ const createLocalGeneralChatActivity = (): Activity => ({
   is_hidden: false
 });
 
+const buildGeneralChatActivity = (activity?: Activity | null): Activity => {
+  const fallback = createLocalGeneralChatActivity();
+
+  if (!activity) {
+    return fallback;
+  }
+
+  const normalizedContent =
+    activity.content && typeof activity.content === 'object'
+      ? {
+          ...activity.content,
+          description:
+            (activity.content as Record<string, any>).description ||
+            GENERAL_CHAT_DESCRIPTION
+        }
+      : fallback.content;
+
+  return {
+    ...fallback,
+    ...activity,
+    id: GENERAL_CHAT_ACTIVITY_ID,
+    type: GENERAL_CHAT_TYPE,
+    title: activity.title || fallback.title,
+    content: normalizedContent,
+    created_at: activity.created_at || fallback.created_at,
+    file_url: activity.file_url ?? null,
+    final_question: activity.final_question ?? null,
+    modules_count: activity.modules_count ?? null,
+    is_hidden: false
+  };
+};
+
 interface ActivitySelectionProps {
   onActivitySelect: (activity: Activity) => void;
 }
@@ -43,22 +75,32 @@ const ActivitySelection = ({ onActivitySelect }: ActivitySelectionProps) => {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      const visibleActivities = data || [];
-      const hasGeneralChat = visibleActivities.some(
-        (activity) => activity.id === GENERAL_CHAT_ACTIVITY_ID
+      const visibleActivities = (data || []).map(activity => ({
+        ...activity,
+        is_hidden: activity.is_hidden ?? false
+      }));
+
+      const generalChatFromDb = visibleActivities.find(
+        (activity) =>
+          activity.type === GENERAL_CHAT_TYPE ||
+          activity.id === GENERAL_CHAT_ACTIVITY_ID
       );
 
-      const enrichedActivities = hasGeneralChat
-        ? visibleActivities
-        : [createLocalGeneralChatActivity(), ...visibleActivities];
+      const generalChatActivity = buildGeneralChatActivity(generalChatFromDb);
 
-      const sortedActivities = [...enrichedActivities].sort((a, b) => {
-        if (a.id === GENERAL_CHAT_ACTIVITY_ID) return -1;
-        if (b.id === GENERAL_CHAT_ACTIVITY_ID) return 1;
-        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-      });
+      const otherActivities = visibleActivities
+        .filter(
+          (activity) =>
+            activity.type !== GENERAL_CHAT_TYPE &&
+            activity.id !== GENERAL_CHAT_ACTIVITY_ID
+        )
+        .sort(
+          (a, b) =>
+            new Date(b.created_at).getTime() -
+            new Date(a.created_at).getTime()
+        );
 
-      setActivities(sortedActivities);
+      setActivities([generalChatActivity, ...otherActivities]);
     } catch (error: any) {
       toast({
         title: "오류",
