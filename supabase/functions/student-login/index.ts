@@ -82,7 +82,7 @@ Deno.serve(async (req) => {
     // Generate JWT valid for 1 hour
     const now = Math.floor(Date.now() / 1000);
     const payload = {
-      role: 'student',
+      role: 'authenticated',
       student_id: normalizedId,
       iss: supabaseUrl,
       aud: 'authenticated',
