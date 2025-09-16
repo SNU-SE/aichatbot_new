@@ -4,7 +4,12 @@ import { env, supabaseConfig } from '../_shared/environment.ts';
 
 const supabaseUrl = supabaseConfig.url();
 const serviceRoleKey = supabaseConfig.serviceRoleKey();
-const jwtSecret = env.get('SUPABASE_JWT_SECRET');
+const jwtSecret = env.get('JWT_SECRET', false) || env.get('SUPABASE_JWT_SECRET', false);
+
+if (!jwtSecret) {
+  console.error('JWT secret environment variable (JWT_SECRET) is not configured.');
+  throw new Error('JWT secret is not configured');
+}
 
 const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
 
