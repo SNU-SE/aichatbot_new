@@ -28,29 +28,20 @@ export const useSessionRecovery = (): SessionRecoveryHook => {
 
       console.log('Attempting session recovery for normalized ID:', normalizedStudentId);
 
-      // 학생 등록 상태 확인 (정확한 문자열 매칭)
-      const { data: student, error } = await supabase
-        .from('students')
-        .select('*')
-        .eq('student_id', normalizedStudentId)
-        .single();
-
-      if (error || !student) {
-        console.error('Student verification failed:', error, 'for ID:', normalizedStudentId);
-        // 유효하지 않은 세션 데이터 정리
+      // 존재하는 프로필 확인
+      const storedProfile = localStorage.getItem('studentProfile');
+      if (!storedProfile) {
+        console.error('No stored student profile for ID:', normalizedStudentId);
         localStorage.removeItem('userType');
         localStorage.removeItem('studentId');
         return false;
       }
 
-      console.log('Session recovery - Student found:', student.student_id);
-
-      // localStorage 데이터 정규화
-      localStorage.setItem('studentId', student.student_id);
+      localStorage.setItem('studentId', normalizedStudentId);
       localStorage.setItem('userType', 'student');
 
       // 세션 업데이트
-      await updateSession(student.student_id);
+      await updateSession(normalizedStudentId);
       
       toast({
         title: "세션 복구 완료",

@@ -57,18 +57,12 @@ export const useChecklistProgress = ({ studentId, activityId }: UseChecklistProg
     try {
       setLoading(true);
       
-      // Get student's mother tongue
-      const { data: studentData, error: studentError } = await supabase
-        .from('students')
-        .select('mother_tongue')
-        .eq('student_id', studentId)
-        .single();
-
-      if (studentError) {
-        console.error('Student data error:', studentError);
-      } else {
-        setMotherTongue(studentData.mother_tongue || 'Korean');
-      }
+      const storedProfile = typeof window !== 'undefined'
+        ? localStorage.getItem('studentProfile')
+        : null;
+      const studentProfile = storedProfile ? JSON.parse(storedProfile) : null;
+      const currentMotherTongue = studentProfile?.mother_tongue || 'Korean';
+      setMotherTongue(currentMotherTongue);
       
       // Get checklist items for the activity
       const { data: checklistData, error: checklistError } = await supabase
@@ -95,8 +89,8 @@ export const useChecklistProgress = ({ studentId, activityId }: UseChecklistProg
         
         // Translate description if student's mother tongue is not Korean
         let translatedDescription = item.description;
-        if (studentData?.mother_tongue && studentData.mother_tongue !== 'Korean') {
-          translatedDescription = await translateText(item.description, studentData.mother_tongue);
+        if (currentMotherTongue && currentMotherTongue !== 'Korean') {
+          translatedDescription = await translateText(item.description, currentMotherTongue);
         }
         
         combinedItems.push({

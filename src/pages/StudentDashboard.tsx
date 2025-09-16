@@ -16,7 +16,6 @@ import { useToast } from '@/hooks/use-toast';
 import { useSessionRecovery } from '@/hooks/useSessionRecovery';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/hooks/useAuth';
-import { supabase } from '@/integrations/supabase/client';
 import { PWAInstallBanner } from '@/components/enhanced-rag/PWAInstallBanner';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 
@@ -28,41 +27,16 @@ const StudentDashboard = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { updateSession, saveDraft, loadDraft } = useSessionRecovery();
-  const { user, signOut } = useAuth();
+  const { signOut } = useAuth();
   const isMobile = useMediaQuery('(max-width: 768px)');
 
   useEffect(() => {
     // 실제 인증된 사용자의 학번 가져오기
-    const fetchStudentId = async () => {
-      if (user) {
-        try {
-          const { data: student, error } = await supabase
-            .from('students')
-            .select('student_id')
-            .eq('user_id', user.id)
-            .single();
-
-          if (error) {
-            console.error('학생 정보 조회 실패:', error);
-            toast({
-              title: "학생 정보 조회 실패",
-              description: "학생 정보를 불러오는데 실패했습니다.",
-              variant: "destructive"
-            });
-            return;
-          }
-
-          if (student) {
-            setStudentId(student.student_id);
-            updateSession(student.student_id);
-          }
-        } catch (error) {
-          console.error('학생 정보 조회 오류:', error);
-        }
-      }
-    };
-
-    fetchStudentId();
+    const storedId = typeof window !== 'undefined' ? localStorage.getItem('studentId') : null;
+    if (storedId) {
+      setStudentId(storedId);
+      updateSession(storedId);
+    }
 
     // 온라인/오프라인 상태 감지
     const handleOnline = () => {
@@ -92,7 +66,7 @@ const StudentDashboard = () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, [user, updateSession, toast, studentId]);
+  }, [updateSession, toast, studentId]);
 
   const handleLogout = async () => {
     try {

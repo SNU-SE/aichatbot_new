@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { GraduationCap } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { persistStudentToken } from '@/hooks/useSupabaseAuth';
 
 const AuthPage = () => {
   const [loginId, setLoginId] = useState('');
@@ -49,6 +50,8 @@ const AuthPage = () => {
         if (isValidPassword) {
           // 기존 학생 세션 정리
           localStorage.removeItem('studentId');
+          localStorage.removeItem('studentProfile');
+          persistStudentToken(null);
           localStorage.setItem('userType', 'admin');
           toast({
             title: "관리자 로그인 성공",
@@ -65,7 +68,7 @@ const AuthPage = () => {
         setIsLoading(false);
       }, 500);
     } else {
-      // 학생 로그인 - 원래 방식으로 복구 (localStorage 기반)
+      // 학생 로그인 - Edge Function을 통한 JWT 발급
       try {
         const normalizedId = String(loginId).trim();
         
@@ -83,36 +86,32 @@ const AuthPage = () => {
         localStorage.removeItem('userType');
         localStorage.removeItem('studentId');
 
-        // 학생 정보 조회
-        const { data: student, error: studentError } = await supabase
-          .from('students')
-          .select('student_id, class_name, name, mother_tongue')
-          .eq('student_id', normalizedId)
-          .single();
+        persistStudentToken(null);
 
-        if (studentError || !student) {
+        localStorage.removeItem('studentProfile');
+
+        const { data, error } = await supabase.functions.invoke('student-login', {
+          body: { studentId: normalizedId }
+        });
+
+        if (error || !data?.token) {
           toast({
             title: "로그인 실패",
-            description: "등록되지 않은 학번입니다.",
+            description: '로그인을 완료할 수 없습니다.',
             variant: "destructive"
           });
           setIsLoading(false);
           return;
         }
 
-        // localStorage에 학생 정보 저장 (원래 방식)
+        // Store token and student info
+        persistStudentToken(data.token);
         localStorage.setItem('studentId', normalizedId);
         localStorage.setItem('userType', 'student');
-        
-        // 세션 활성화
-        try {
-          await supabase.rpc('update_student_session', {
-            student_id_param: normalizedId
-          });
-        } catch (sessionError) {
-          console.error('Session activation failed:', sessionError);
+        if (data.student) {
+          localStorage.setItem('studentProfile', JSON.stringify(data.student));
         }
-        
+
         toast({
           title: "로그인 성공",
           description: `학번 ${normalizedId}로 로그인되었습니다.`
@@ -122,6 +121,7 @@ const AuthPage = () => {
         setIsLoading(false);
       } catch (error) {
         console.error('Login error:', error);
+        persistStudentToken(null);
         toast({
           title: "로그인 실패",
           description: "로그인 중 오류가 발생했습니다.",

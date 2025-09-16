@@ -273,14 +273,6 @@ const ChatInterface = ({
       // AI 챗봇 응답 생성 (메시지 저장 완료 후)
       console.log('🤖 AI 응답 요청 시작');
       try {
-        const { data: studentData, error: studentError } = await supabase
-          .from('students')
-          .select('mother_tongue')
-          .eq('student_id', studentId)
-          .single();
-
-        if (studentError) throw studentError;
-
         // 현재 메시지를 포함한 대화 히스토리 구성
         const recentMessages = [...messages, {
           id: log.id,
@@ -297,7 +289,6 @@ const ChatInterface = ({
             message: currentMessage,
             studentId: studentId,
             activityId: activity.id,
-            motherTongue: studentData?.mother_tongue || 'Korean',
             fileUrl: file_url,
             fileName: file_name,
             fileType: file_type,
