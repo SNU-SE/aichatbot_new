@@ -147,6 +147,23 @@ function loadEnvironmentFile(filePath) {
   return env;
 }
 
+// Merge env file with process.env for CI/Netlify usage
+function loadEnvForValidation() {
+  const fileEnv = loadEnvironmentFile('.env.local');
+  const merged = { ...fileEnv };
+  const allKeys = [
+    ...Object.keys(envVarDefinitions.required),
+    ...Object.keys(envVarDefinitions.optional),
+    ...Object.keys(envVarDefinitions.config),
+  ];
+  for (const key of allKeys) {
+    if (process.env[key]) {
+      merged[key] = process.env[key];
+    }
+  }
+  return merged;
+}
+
 function validateEnvironmentVariable(key, value, definition) {
   const result = {
     key,
@@ -293,7 +310,16 @@ function generateRecommendations(results) {
   }
   
   if (results.summary.missing > 0) {
-    log('\n1. Add missing required variables to your .env.local file', 'yellow');
+    const missingKeys = results.required
+      .filter(r => r.status === 'missing')
+      .map(r => r.key);
+    log('\n1. Missing required variables:', 'yellow');
+    log(`   → ${missingKeys.join(', ')}`, 'yellow');
+    if (process.env.NETLIFY === 'true') {
+      log('   Netlify: Add them in Site settings → Environment variables.', 'yellow');
+    } else {
+      log('   Local: Add them to .env.local (see .env.example).', 'yellow');
+    }
   }
   
   if (results.summary.invalid > 0) {
@@ -323,6 +349,10 @@ function checkEnvironmentFiles() {
   });
   
   if (!fs.existsSync('.env.local')) {
+    if (process.env.NETLIFY === 'true') {
+      log('\nℹ️  .env.local not found, NETLIFY environment detected. Using Netlify env vars.', 'yellow');
+      return true;
+    }
     log('\n⚠️  No .env.local file found. Run npm run setup:env to create one.', 'yellow');
     return false;
   }
@@ -339,8 +369,8 @@ export function main() {
       process.exit(1);
     }
     
-    // Load environment variables
-    const env = loadEnvironmentFile('.env.local');
+    // Load environment variables (file + process.env for Netlify)
+    const env = loadEnvForValidation();
     
     // Validate environment
     const results = validateEnvironment(env);

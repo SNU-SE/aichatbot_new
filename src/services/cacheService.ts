@@ -52,7 +52,12 @@ export class CacheService {
   };
 
   private constructor() {
-    this.initIndexedDB();
+    // Guard for environments without IndexedDB (SSR/tests)
+    if (typeof indexedDB !== 'undefined') {
+      this.initIndexedDB().catch(err => {
+        console.warn('IndexedDB initialization failed, falling back to memory cache:', err);
+      });
+    }
     this.startCleanupInterval();
   }
 

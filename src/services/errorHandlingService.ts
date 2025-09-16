@@ -145,7 +145,7 @@ export class ErrorHandlingService {
     this.listeners.forEach(listener => listener(logEntry));
 
     // Log to console in development
-    if (process.env.NODE_ENV === 'development') {
+    if (import.meta.env?.MODE === 'development') {
       console.error(`[${severity.toUpperCase()}] ${category.toUpperCase()}:`, {
         error,
         context

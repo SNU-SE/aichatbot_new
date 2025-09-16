@@ -3,7 +3,7 @@
  * Handles cross-language document search and retrieval
  */
 
-import { supabase } from '../lib/supabase';
+import { supabase } from '@/integrations/supabase/client';
 import { 
   SearchResult, 
   MultiLanguageSearchOptions, 

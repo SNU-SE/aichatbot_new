@@ -3,7 +3,7 @@
  * Handles automatic language detection for documents and text content
  */
 
-import { supabase } from '../lib/supabase';
+import { supabase } from '@/integrations/supabase/client';
 import { 
   LanguageDetectionResult, 
   LanguageDetectionMethod, 

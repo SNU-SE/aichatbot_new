@@ -4,6 +4,7 @@
  */
 
 import { supabase } from '@/integrations/supabase/client';
+import { supabaseConfig } from '@/config/environment';
 import {
   SearchOptions,
   SearchResult,
@@ -57,7 +58,8 @@ export class VectorSearchService {
   private baseUrl: string;
 
   private constructor() {
-    this.baseUrl = `${supabase.supabaseUrl}/functions/v1`;
+    const base = (supabaseConfig.url || '').replace(/\/$/, '');
+    this.baseUrl = `${base}/functions/v1`;
   }
 
   /**

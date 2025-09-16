@@ -34,6 +34,12 @@ export function useEnhancedChat(initialSessionId?: string): UseChatReturn {
   const { toast } = useToast();
   const abortControllerRef = useRef<AbortController | null>(null);
   const streamingMessageRef = useRef<string>('');
+  const messagesRef = useRef<ChatMessageWithState[]>([]);
+
+  // Keep a ref of messages to avoid effect re-subscriptions
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   /**
    * Load session and messages
@@ -187,14 +193,16 @@ export function useEnhancedChat(initialSessionId?: string): UseChatReturn {
           message,
           currentSession.id,
           handleChunk,
-          options
+          options,
+          abortControllerRef.current?.signal || undefined
         );
       } else {
         // Non-streaming response
         const response = await enhancedChatService.sendMessage(
           message,
           currentSession.id,
-          options
+          options,
+          abortControllerRef.current?.signal || undefined
         );
 
         setMessages(prev => prev.map(msg => 
@@ -360,7 +368,7 @@ export function useEnhancedChat(initialSessionId?: string): UseChatReturn {
           const newMessage = payload.new as any;
           
           // Avoid duplicates from our own messages
-          const messageExists = messages.some(msg => 
+          const messageExists = messagesRef.current.some(msg => 
             msg.message === newMessage.message && 
             msg.role === newMessage.role &&
             Math.abs(new Date(msg.createdAt).getTime() - new Date(newMessage.created_at).getTime()) < 5000
@@ -389,7 +397,7 @@ export function useEnhancedChat(initialSessionId?: string): UseChatReturn {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [currentSession, messages]);
+  }, [currentSession]);
 
   /**
    * Load initial session

@@ -3,7 +3,7 @@
  * Collection of utilities for optimizing application performance
  */
 
-import { useCallback, useRef, useMemo } from 'react';
+import React, { useCallback, useRef, useMemo, useState, useEffect } from 'react';
 
 /**
  * Debounce function to limit function calls
@@ -13,7 +13,7 @@ export function debounce<T extends (...args: any[]) => any>(
   wait: number,
   immediate?: boolean
 ): (...args: Parameters<T>) => void {
-  let timeout: NodeJS.Timeout | null = null;
+  let timeout: ReturnType<typeof setTimeout> | null = null;
   
   return function executedFunction(...args: Parameters<T>) {
     const later = () => {
@@ -75,9 +75,9 @@ export function memoize<T extends (...args: any[]) => any>(
  * Hook for debounced values
  */
 export function useDebounce<T>(value: T, delay: number): T {
-  const [debouncedValue, setDebouncedValue] = React.useState<T>(value);
+  const [debouncedValue, setDebouncedValue] = useState<T>(value);
 
-  React.useEffect(() => {
+  useEffect(() => {
     const handler = setTimeout(() => {
       setDebouncedValue(value);
     }, delay);
@@ -121,7 +121,7 @@ export function useExpensiveComputation<T>(
  */
 export class BatchProcessor<T> {
   private batch: T[] = [];
-  private timeoutId: NodeJS.Timeout | null = null;
+  private timeoutId: ReturnType<typeof setTimeout> | null = null;
   private processFn: (items: T[]) => void;
   private delay: number;
 

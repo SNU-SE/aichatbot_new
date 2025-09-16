@@ -91,7 +91,7 @@ async function generateQueryEmbedding(query: string): Promise<number[]> {
       },
       body: JSON.stringify({
         input: query,
-        model: 'text-embedding-ada-002',
+        model: 'text-embedding-3-small',
       }),
     });
 

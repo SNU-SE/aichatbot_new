@@ -4,6 +4,7 @@
  */
 
 import { supabase } from '@/integrations/supabase/client';
+import { supabaseConfig } from '@/config/environment';
 import { vectorSearchService } from './vectorSearchService';
 import {
   EnhancedChatMessage,
@@ -33,7 +34,8 @@ export class EnhancedChatService {
   private messageCache = new Map<string, EnhancedChatMessage>();
 
   private constructor() {
-    this.baseUrl = `${supabase.supabaseUrl}/functions/v1`;
+    const base = (supabaseConfig.url || '').replace(/\/$/, '');
+    this.baseUrl = `${base}/functions/v1`;
   }
 
   /**
@@ -298,7 +300,8 @@ export class EnhancedChatService {
   public async sendMessage(
     message: string,
     sessionId: string,
-    options: SendMessageOptions = {}
+    options: SendMessageOptions = {},
+    signal?: AbortSignal
   ): Promise<EnhancedAIResponse> {
     try {
       const headers = await this.getAuthHeaders();
@@ -347,6 +350,7 @@ User question: ${message}`;
           conversationHistory: recentHistory,
           documentContext: documentContext.length > 0,
         }),
+        signal,
       });
 
       if (!response.ok) {
@@ -422,7 +426,8 @@ User question: ${message}`;
     message: string,
     sessionId: string,
     onChunk: (chunk: AIResponseChunk) => void,
-    options: SendMessageOptions = {}
+    options: SendMessageOptions = {},
+    signal?: AbortSignal
   ): Promise<void> {
     try {
       const headers = await this.getAuthHeaders();
@@ -468,6 +473,7 @@ User question: ${message}`;
           documentContext: documentContext.length > 0,
           stream: true,
         }),
+        signal,
       });
 
       if (!response.ok) {
