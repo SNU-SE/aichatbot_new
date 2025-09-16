@@ -17,4 +17,4 @@ WHERE id IN (
 
 -- 향후 중복 방지를 위한 고유 제약조건 추가
 CREATE UNIQUE INDEX IF NOT EXISTS idx_chat_logs_unique_message 
-ON chat_logs (student_id, activity_id, sender, message, DATE_TRUNC('second', timestamp));
+ON chat_logs (student_id, activity_id, sender, message, ("timestamp"::timestamptz(0)));

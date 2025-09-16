@@ -28,6 +28,8 @@ CREATE TYPE message_role_enum AS ENUM (
 );
 
 -- Create document_folders table for organizing documents
+DROP TABLE IF EXISTS document_chunks CASCADE;
+
 CREATE TABLE document_folders (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,

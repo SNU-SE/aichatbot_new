@@ -228,7 +228,7 @@ async function getOfflinePage() {
     <!DOCTYPE html>
     <html>
     <head>
-      <title>Enhanced RAG - Offline</title>
+      <title>과학 학습 AI 챗봇 도우미</title>
       <meta name="viewport" content="width=device-width, initial-scale=1">
       <style>
         body {
