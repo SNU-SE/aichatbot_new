@@ -8,6 +8,7 @@ import ActivitySelection from '@/components/student/ActivitySelection';
 import ExperimentActivity from '@/components/student/ExperimentActivity';
 import ArgumentationActivity from '@/components/student/ArgumentationActivity';
 import DiscussionActivity from '@/components/student/DiscussionActivity';
+import GeneralChatActivity from '@/components/student/GeneralChatActivity';
 import AuthGuard from '@/components/auth/AuthGuard';
 import { Activity } from '@/types/activity';
 import { useToast } from '@/hooks/use-toast';
@@ -132,6 +133,8 @@ const StudentDashboard = () => {
         return <ArgumentationActivity {...commonProps} saveDraft={saveDraft} loadDraft={loadDraft} />;
       case 'discussion':
         return <DiscussionActivity {...commonProps} />;
+      case 'general_chat':
+        return <GeneralChatActivity {...commonProps} />;
       default:
         return <div>지원하지 않는 활동 유형입니다.</div>;
     }
