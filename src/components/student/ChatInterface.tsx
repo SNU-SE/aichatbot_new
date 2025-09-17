@@ -20,6 +20,7 @@ interface Message {
   file_url?: string;
   file_name?: string;
   file_type?: string;
+  isOptimistic?: boolean;
 }
 
 interface ChatInterfaceProps {
@@ -32,6 +33,11 @@ interface ChatInterfaceProps {
     allSteps: any[];
   };
 }
+
+const sortMessages = (messageList: Message[]) =>
+  [...messageList].sort(
+    (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+  );
 
 const ChatInterface = ({ 
   activity, 
@@ -48,9 +54,21 @@ const ChatInterface = ({
   const [messagesHeight, setMessagesHeight] = useState(400);
   const [isSending, setIsSending] = useState(false); // 중복 전송 방지 플래그
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const messagesRef = useRef<Message[]>([]);
   const { toast } = useToast();
+
+  const updateMessages = useCallback((updater: (prev: Message[]) => Message[]) => {
+    setMessages(prev => {
+      const next = sortMessages(updater(prev));
+      messagesRef.current = next;
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   // 실시간 메시지 구독 설정 (학생별 필터링 추가)
   useEffect(() => {
@@ -90,18 +108,30 @@ const ChatInterface = ({
             file_type: payload.new.file_type
           };
           
-          // 단순한 중복 방지 (ID 기반만)
-          setMessages(prev => {
-            const existsById = prev.some(m => m.id === newMessage.id);
-            if (existsById) {
-              console.log('⚠️ 중복 ID 감지, 무시:', newMessage.id);
-              return prev;
+          // 낙관적 메시지와의 중복을 포함해 정교하게 병합
+          updateMessages(prev => {
+            const next = [...prev];
+            const existingIndex = next.findIndex(m => m.id === newMessage.id);
+            if (existingIndex !== -1) {
+              next[existingIndex] = { ...next[existingIndex], ...newMessage, isOptimistic: false };
+              return next;
             }
-            
-            console.log('✅ 새 메시지 추가:', newMessage.id);
-            return [...prev, newMessage].sort((a, b) => 
-              new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+
+            const optimisticIndex = next.findIndex(
+              m =>
+                m.isOptimistic &&
+                m.sender === newMessage.sender &&
+                m.message.trim() === (newMessage.message || '').trim()
             );
+
+            if (optimisticIndex !== -1) {
+              next[optimisticIndex] = { ...newMessage, isOptimistic: false };
+              return next;
+            }
+
+            console.log('✅ 새 메시지 추가:', newMessage.id);
+            next.push({ ...newMessage, isOptimistic: false });
+            return next;
           });
         }
       )
@@ -118,6 +148,7 @@ const ChatInterface = ({
 
   const fetchMessages = async () => {
     setIsLoading(true);
+
     try {
       const { data, error } = await supabase
         .from('chat_logs')
@@ -139,7 +170,9 @@ const ChatInterface = ({
       }));
       
       // 초기 로드 시에도 중복 제거 적용
-      setMessages(removeDuplicateMessages(messages));
+      const deduped = removeDuplicateMessages(messages);
+      messagesRef.current = deduped;
+      setMessages(deduped);
     } catch (error) {
       console.error('Error fetching messages:', error);
       toast({
@@ -191,6 +224,7 @@ const ChatInterface = ({
     }
 
     const currentMessage = inputMessage.trim();
+    let tempStudentMessageId: string | null = null;
     
     // 최근 5초 내 동일한 메시지가 있는지 사전 확인
     const fiveSecondsAgo = new Date(Date.now() - 5000).toISOString();
@@ -240,6 +274,23 @@ const ChatInterface = ({
         console.log('✅ 파일 업로드 완료:', file_url);
       }
 
+      const tempId = `temp-${Date.now()}`;
+      tempStudentMessageId = tempId;
+      const sentAt = new Date().toISOString();
+
+      const optimisticMessage: Message = {
+        id: tempId,
+        message: currentMessage,
+        sender: 'student',
+        timestamp: sentAt,
+        file_url: file_url || undefined,
+        file_name: file_name || undefined,
+        file_type: file_type || undefined,
+        isOptimistic: true,
+      };
+
+      updateMessages(prev => [...prev, optimisticMessage]);
+
       // 단일 데이터베이스 삽입 (낙관적 업데이트 없이, 실시간 구독으로만 처리)
       console.log('💾 DB 저장 시작:', currentMessage.substring(0, 30));
       const { data: log, error } = await supabase
@@ -260,9 +311,24 @@ const ChatInterface = ({
         console.error('❌ DB 저장 실패:', error);
         throw error;
       }
-      
+
       console.log('✅ DB 저장 완료:', log.id);
-      
+
+      const persistedMessage: Message = {
+        id: log.id,
+        message: log.message,
+        sender: log.sender as 'student' | 'bot',
+        timestamp: log.timestamp,
+        file_url: log.file_url,
+        file_name: log.file_name,
+        file_type: log.file_type,
+        isOptimistic: false,
+      };
+
+      updateMessages(prev =>
+        prev.map(msg => (msg.id === tempId ? persistedMessage : msg))
+      );
+
       // 파일 관련 상태 초기화
       setSelectedFile(null);
       setPreviewUrl(null);
@@ -274,12 +340,9 @@ const ChatInterface = ({
       console.log('🤖 AI 응답 요청 시작');
       try {
         // 현재 메시지를 포함한 대화 히스토리 구성
-        const recentMessages = [...messages, {
-          id: log.id,
-          message: currentMessage,
-          sender: 'student' as const,
-          timestamp: log.timestamp
-        }].slice(-5).map(msg => ({
+        const recentMessages = sortMessages([...messagesRef.current])
+          .slice(-10)
+          .map(msg => ({
           role: msg.sender === 'student' ? 'user' : 'assistant',
           content: msg.message
         }));
@@ -299,6 +362,18 @@ const ChatInterface = ({
         if (aiError) throw aiError;
         console.log('✅ AI 응답 요청 완료');
 
+        if (aiResponse?.response) {
+          const botMessage: Message = {
+            id: `temp-bot-${Date.now()}`,
+            message: aiResponse.response,
+            sender: 'bot',
+            timestamp: new Date().toISOString(),
+            isOptimistic: true,
+          };
+
+          updateMessages(prev => [...prev, botMessage]);
+        }
+
       } catch (aiError) {
         console.error('❌ AI 응답 생성 실패:', aiError);
         toast({
@@ -312,6 +387,10 @@ const ChatInterface = ({
       
       // 실패 시 입력 복원
       setInputMessage(currentMessage);
+      if (tempStudentMessageId) {
+        const failedId = tempStudentMessageId;
+        updateMessages(prev => prev.filter(msg => msg.id !== failedId));
+      }
       
       toast({
         title: "메시지 전송 실패",
@@ -323,7 +402,7 @@ const ChatInterface = ({
       setIsSending(false);
       console.log('📤 메시지 전송 완료');
     }
-  }, [inputMessage, selectedFile, isSending, studentId, activity.id, messages, toast]);
+  }, [inputMessage, selectedFile, isSending, studentId, activity.id, toast]);
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files && event.target.files[0];
@@ -332,14 +411,6 @@ const ChatInterface = ({
       setPreviewUrl(URL.createObjectURL(file));
     }
   };
-
-  const scrollToBottom = useCallback(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [])
-
-  useEffect(() => {
-    scrollToBottom()
-  }, [messages, scrollToBottom])
 
   // 동적 높이 계산 with debounced ResizeObserver
   useEffect(() => {
