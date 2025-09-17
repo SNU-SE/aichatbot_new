@@ -11,6 +11,7 @@ import { corsHeaders } from '../_shared/cors.ts';
 // Types for search functionality
 interface SearchRequest {
   query: string;
+  activityId?: string;
   options?: SearchOptions;
 }
 
@@ -124,6 +125,34 @@ async function getUserAccessibleDocuments(userId: string): Promise<string[]> {
     return data || [];
   } catch (error) {
     console.error('Error in getUserAccessibleDocuments:', error);
+    return [];
+  }
+}
+
+/**
+ * Get documents linked to a specific activity
+ */
+async function getActivityDocumentIds(activityId: string): Promise<string[]> {
+  try {
+    const { data, error } = await supabase
+      .from('activity_documents')
+      .select('document_id, processing_status, documents!inner(processing_status)')
+      .eq('activity_id', activityId);
+
+    if (error) {
+      console.error('Error getting activity documents:', error);
+      return [];
+    }
+
+    return (data || [])
+      .filter((row: any) => {
+        const activityStatus = row.processing_status;
+        const documentStatus = row.documents?.processing_status;
+        return activityStatus === 'completed' || documentStatus === 'completed';
+      })
+      .map((row: any) => row.document_id);
+  } catch (error) {
+    console.error('Error in getActivityDocumentIds:', error);
     return [];
   }
 }
@@ -421,12 +450,58 @@ serve(async (req) => {
       );
     }
 
-    const { query, options = {} } = requestBody;
-    
+    const { query, activityId, options = {} } = requestBody;
+
     // Get user accessible documents
     const accessibleDocs = await getUserAccessibleDocuments(user.id);
-    
+
     if (accessibleDocs.length === 0) {
+      return new Response(
+        JSON.stringify({
+          results: [],
+          totalCount: 0,
+          processingTime: Date.now() - startTime,
+          searchType: 'vector',
+          query,
+        } as SearchResponse),
+        {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
+    }
+
+    // Apply document filters
+    let scopedDocs = [...accessibleDocs];
+
+    if (options.documentIds && options.documentIds.length > 0) {
+      const requested = new Set(options.documentIds);
+      scopedDocs = scopedDocs.filter(docId => requested.has(docId));
+    }
+
+    if (activityId) {
+      const activityDocs = await getActivityDocumentIds(activityId);
+      if (activityDocs.length === 0) {
+        return new Response(
+          JSON.stringify({
+            results: [],
+            totalCount: 0,
+            processingTime: Date.now() - startTime,
+            searchType: 'vector',
+            query,
+          } as SearchResponse),
+          {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          }
+        );
+      }
+
+      const activitySet = new Set(activityDocs);
+      scopedDocs = scopedDocs.filter(docId => activitySet.has(docId));
+    }
+
+    if (scopedDocs.length === 0) {
       return new Response(
         JSON.stringify({
           results: [],
@@ -449,11 +524,11 @@ serve(async (req) => {
     if (options.hybridSearch) {
       searchType = 'hybrid';
       const queryEmbedding = await generateQueryEmbedding(query);
-      results = await performHybridSearch(query, queryEmbedding, options, accessibleDocs);
+      results = await performHybridSearch(query, queryEmbedding, options, scopedDocs);
     } else {
       // Default to vector search
       const queryEmbedding = await generateQueryEmbedding(query);
-      results = await performVectorSearch(queryEmbedding, options, accessibleDocs);
+      results = await performVectorSearch(queryEmbedding, options, scopedDocs);
     }
 
     // Add highlighting if requested

@@ -10,6 +10,7 @@ interface ProcessingRequest {
   documentId: string;
   fileUrl: string;
   userId: string;
+  activityId?: string;
   chunkingConfig?: ChunkingConfig;
 }
 
@@ -43,7 +44,7 @@ serve(async (req) => {
   const startTime = Date.now();
   
   try {
-    const { documentId, fileUrl, userId, chunkingConfig } = await req.json() as ProcessingRequest;
+    const { documentId, fileUrl, userId, activityId, chunkingConfig } = await req.json() as ProcessingRequest;
     
     console.log('Processing document:', { documentId, fileUrl, userId });
 
@@ -60,6 +61,9 @@ serve(async (req) => {
 
     // Update status to extracting
     await updateProcessingStatus(supabase, documentId, 'extracting');
+    if (activityId) {
+      await updateActivityDocumentStatus(supabase, activityId, documentId, 'extracting');
+    }
 
     // Extract text from PDF
     const extractedText = await extractTextFromPDF(fileUrl);
@@ -70,6 +74,9 @@ serve(async (req) => {
 
     // Update status to chunking
     await updateProcessingStatus(supabase, documentId, 'chunking');
+    if (activityId) {
+      await updateActivityDocumentStatus(supabase, activityId, documentId, 'chunking');
+    }
 
     // Split text into chunks
     const config = { ...DEFAULT_CHUNKING_CONFIG, ...chunkingConfig };
@@ -81,6 +88,9 @@ serve(async (req) => {
 
     // Update status to embedding
     await updateProcessingStatus(supabase, documentId, 'embedding');
+    if (activityId) {
+      await updateActivityDocumentStatus(supabase, activityId, documentId, 'embedding');
+    }
 
     // Process chunks and generate embeddings
     let chunksCreated = 0;
@@ -143,6 +153,9 @@ serve(async (req) => {
       wordCount: extractedText.split(/\s+/).length,
       extractionMethod: 'enhanced-processor-v1',
     });
+    if (activityId) {
+      await updateActivityDocumentStatus(supabase, activityId, documentId, 'completed');
+    }
 
     const result: ProcessingResult = {
       success: true,
@@ -176,6 +189,9 @@ serve(async (req) => {
           errorMessage: error.message,
           processingTimeMs: Date.now() - startTime,
         });
+        if (body.activityId) {
+          await updateActivityDocumentStatus(supabase, body.activityId, body.documentId, 'failed', error.message);
+        }
       }
     } catch (statusError) {
       console.error('Failed to update error status:', statusError);
@@ -214,6 +230,25 @@ async function updateProcessingStatus(
   if (error) {
     console.error('Error updating processing status:', error);
     throw new Error(`Failed to update status to ${status}: ${error.message}`);
+  }
+}
+
+async function updateActivityDocumentStatus(
+  supabase: any,
+  activityId: string,
+  documentId: string,
+  status: string,
+  errorMessage?: string
+) {
+  try {
+    await supabase.rpc('upsert_activity_document_link', {
+      p_activity_id: activityId,
+      p_document_id: documentId,
+      p_processing_status: status,
+      p_processing_error: errorMessage ?? null
+    });
+  } catch (error) {
+    console.error('Failed to update activity document status:', error);
   }
 }
 

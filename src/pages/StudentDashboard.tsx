@@ -203,6 +203,7 @@ const StudentDashboard = () => {
           {!selectedActivity ? (
             <ActivitySelection 
               onActivitySelect={handleActivitySelect}
+              studentId={studentId || null}
             />
           ) : (
             <div className={isMobile ? 'space-y-4' : ''}>

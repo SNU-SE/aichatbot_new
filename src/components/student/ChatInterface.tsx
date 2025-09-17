@@ -12,6 +12,12 @@ import VirtualizedMessageList from './VirtualizedMessageList';
 import FilePreview from './FilePreview';
 import { Badge } from '@/components/ui/badge';
 
+interface MessageSource {
+  documentTitle?: string;
+  pageNumber?: number;
+  similarity?: number;
+}
+
 interface Message {
   id: string;
   message: string;
@@ -21,6 +27,7 @@ interface Message {
   file_name?: string;
   file_type?: string;
   isOptimistic?: boolean;
+  sources?: MessageSource[];
 }
 
 interface ChatInterfaceProps {
@@ -38,6 +45,16 @@ const sortMessages = (messageList: Message[]) =>
   [...messageList].sort(
     (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
   );
+
+const mapSources = (rawSources: any): MessageSource[] => {
+  if (!Array.isArray(rawSources)) return [];
+
+  return rawSources.map((source) => ({
+    documentTitle: source.documentTitle || source.title || undefined,
+    pageNumber: typeof source.pageNumber === 'number' ? source.pageNumber : undefined,
+    similarity: typeof source.similarity === 'number' ? source.similarity : undefined,
+  }));
+};
 
 const ChatInterface = ({ 
   activity, 
@@ -343,9 +360,9 @@ const ChatInterface = ({
         const recentMessages = sortMessages([...messagesRef.current])
           .slice(-10)
           .map(msg => ({
-          role: msg.sender === 'student' ? 'user' : 'assistant',
-          content: msg.message
-        }));
+            role: msg.sender === 'student' ? 'user' : 'assistant',
+            content: msg.message
+          }));
 
         const { data: aiResponse, error: aiError } = await supabase.functions.invoke('ai-chat', {
           body: {
@@ -369,6 +386,7 @@ const ChatInterface = ({
             sender: 'bot',
             timestamp: new Date().toISOString(),
             isOptimistic: true,
+            sources: mapSources(aiResponse.sources),
           };
 
           updateMessages(prev => [...prev, botMessage]);

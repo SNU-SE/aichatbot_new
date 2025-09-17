@@ -140,6 +140,26 @@ export class PermissionService {
   }
 
   /**
+   * Synchronize permissions for documents linked to an activity
+   */
+  async syncActivityDocumentPermissions(activityId: string, grantedBy?: string): Promise<void> {
+    try {
+      const { error } = await supabase.rpc('sync_activity_document_permissions', {
+        p_activity_id: activityId,
+        p_granted_by: grantedBy ?? null
+      });
+
+      if (error) {
+        console.error('Failed to sync activity document permissions:', error);
+        throw new Error('문서 권한을 동기화하지 못했습니다.');
+      }
+    } catch (error) {
+      console.error('Sync activity document permissions error:', error);
+      throw new Error(`권한을 동기화하는 중 오류가 발생했습니다: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
    * Update an existing permission
    */
   async updatePermission(permissionId: string, updates: PermissionUpdateInput): Promise<DocumentPermissionDetails> {

@@ -1,7 +1,7 @@
 
 import { useMemo, useRef, useEffect } from 'react';
 import { VariableSizeList as List } from 'react-window';
-import { Bot, User } from 'lucide-react';
+import { Bot, User, FileText } from 'lucide-react';
 import MessageFile from './MessageFile';
 
 interface Message {
@@ -12,6 +12,11 @@ interface Message {
   file_url?: string | null;
   file_name?: string | null;
   file_type?: string | null;
+  sources?: {
+    documentTitle?: string;
+    pageNumber?: number;
+    similarity?: number;
+  }[];
 }
 
 interface MessageItemProps {
@@ -37,21 +42,21 @@ const MessageItem = ({ index, style, data }: MessageItemProps) => {
   
   return (
     <div style={style}>
-      <div className="flex items-start p-1 gap-3">
+      <div className="flex items-start px-2 py-1 gap-2">
         {msg.sender === 'student' ? (
           // 학생 메시지 (오른쪽 정렬)
           <>
             <div className="flex-1 min-w-0" />
-            <div className="flex flex-col items-end w-full max-w-[70%]">
-              <div className="p-3 rounded-lg bg-[rgb(15,15,112)] text-white w-full">
-                <p className="whitespace-pre-wrap break-words leading-6 text-sm">{removeMarkdown(msg.message)}</p>
+            <div className="flex flex-col items-end max-w-[70%] space-y-1">
+              <div className="inline-flex px-3 py-2 rounded-lg bg-[rgb(15,15,112)] text-white">
+                <p className="whitespace-pre-wrap break-words leading-5 text-sm">{removeMarkdown(msg.message)}</p>
                 <MessageFile 
                   fileUrl={msg.file_url || ''}
                   fileName={msg.file_name}
                   fileType={msg.file_type}
                 />
               </div>
-              <p className="text-xs text-gray-500 mt-1">
+              <p className="text-[11px] text-gray-500">
                 {new Date(msg.timestamp).toLocaleTimeString('ko-KR')}
               </p>
             </div>
@@ -65,16 +70,32 @@ const MessageItem = ({ index, style, data }: MessageItemProps) => {
             <div className="p-2 rounded-full bg-gray-200 text-gray-700 flex-shrink-0">
               <Bot className="h-4 w-4" />
             </div>
-            <div className="flex flex-col w-full max-w-[70%]">
-              <div className="p-3 rounded-lg bg-gray-100 text-gray-900 w-full">
-                <p className="whitespace-pre-wrap break-words leading-6 text-sm">{removeMarkdown(msg.message)}</p>
+            <div className="flex flex-col max-w-[70%] space-y-1">
+              <div className="inline-flex px-3 py-2 rounded-lg bg-gray-100 text-gray-900">
+                <p className="whitespace-pre-wrap break-words leading-5 text-sm">{removeMarkdown(msg.message)}</p>
                 <MessageFile 
                   fileUrl={msg.file_url || ''}
                   fileName={msg.file_name}
                   fileType={msg.file_type}
                 />
               </div>
-              <p className="text-xs text-gray-500 mt-1">
+              {msg.sources && msg.sources.length > 0 && (
+                <div className="mt-1 space-y-1">
+                  {msg.sources.map((source, idx) => (
+                    <div key={`${msg.id}-source-${idx}`} className="flex items-center gap-2 text-xs text-gray-600 bg-gray-50 px-2 py-1 rounded">
+                      <FileText className="h-3 w-3" />
+                      <span className="truncate">
+                        {source.documentTitle || '활동 자료'}
+                        {typeof source.pageNumber === 'number' ? ` p.${source.pageNumber}` : ''}
+                      </span>
+                      {typeof source.similarity === 'number' && (
+                        <span className="text-[10px] text-gray-400">유사도 {source.similarity.toFixed(2)}</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+              <p className="text-[11px] text-gray-500">
                 {new Date(msg.timestamp).toLocaleTimeString('ko-KR')}
               </p>
             </div>
@@ -107,7 +128,7 @@ const VirtualizedMessageList = ({ messages, isLoading, height = 400 }: Virtualiz
     if (!msg) return 120;
     
     // 기본 높이 (아바타 + 패딩 + 타임스탬프)
-    let height = 100;
+    let height = 60;
     
     // 텍스트 영역의 실제 크기 계산
     const cleanText = removeMarkdown(msg.message);
@@ -123,18 +144,22 @@ const VirtualizedMessageList = ({ messages, isLoading, height = 400 }: Virtualiz
     height += totalLines * 24;
     
     // 패딩 고려 (메시지 박스 내부 패딩)
-    height += 24; // p-3 = 12px * 2
+    height += 12; // padding more compact
     
     // 파일이 있는 경우 추가 높이
     if (msg.file_url) {
       height += 80; // 파일 컴포넌트 높이
     }
-    
+
+    if (msg.sources && msg.sources.length > 0) {
+      height += msg.sources.length * 24 + 12;
+    }
+
     // 메시지 간 여백 (더 축소)
-    height += 4;
-    
+    height += 2;
+
     // 최소 높이 보장 및 안전 마진
-    return Math.max(height, 120) + 10;
+    return Math.max(height, 80) + 6;
   };
   
   useEffect(() => {

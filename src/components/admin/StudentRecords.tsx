@@ -340,9 +340,12 @@ const StudentRecords = () => {
   };
 
   const getActivityInfo = (activityId: string | null) => {
-    if (!activityId) return '-';
+    if (!activityId) return '챗봇 대화';
     const activity = activities.find(a => a.id === activityId);
-    return activity ? activity.title : '알 수 없는 활동';
+    if (!activity) {
+      return '챗봇 대화';
+    }
+    return activity.title;
   };
 
   const getFilteredUnifiedLogs = () => {

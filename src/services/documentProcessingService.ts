@@ -15,6 +15,7 @@ export interface ProcessingRequest {
   documentId: string;
   fileUrl: string;
   userId: string;
+  activityId?: string;
   chunkingConfig?: ChunkingConfig;
 }
 
@@ -163,7 +164,8 @@ class DocumentProcessingService {
    */
   async retryProcessing(
     documentId: string,
-    listener?: ProcessingStatusListener
+    listener?: ProcessingStatusListener,
+    activityId?: string
   ): Promise<ProcessingResult> {
     try {
       // Get document details
@@ -175,6 +177,19 @@ class DocumentProcessingService {
 
       if (error || !document) {
         throw new Error('Document not found');
+      }
+
+      let targetActivityId = activityId;
+
+      if (!targetActivityId) {
+        const { data: activityLinks } = await supabase
+          .from('activity_documents')
+          .select('activity_id')
+          .eq('document_id', documentId);
+
+        if (activityLinks && activityLinks.length === 1) {
+          targetActivityId = activityLinks[0].activity_id;
+        }
       }
 
       // Reset status to uploading
@@ -197,6 +212,7 @@ class DocumentProcessingService {
         documentId,
         fileUrl: document.file_path,
         userId: document.user_id,
+        activityId: targetActivityId,
       }, listener);
 
     } catch (error) {

@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
-import { LogOut, Settings, Users, Activity, MessageCircle, BarChart3, GraduationCap, Menu, TrendingUp } from 'lucide-react';
+import { LogOut, Settings, Users, Activity, MessageCircle, BarChart3, GraduationCap, Menu } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import StudentManagement from '@/components/admin/StudentManagement';
 import ActivityManagement from '@/components/admin/ActivityManagement';
@@ -12,7 +12,6 @@ import RealTimeMonitoring from '@/components/admin/RealTimeMonitoring';
 import StudentRecords from '@/components/admin/StudentRecords';
 import ClassManagement from '@/components/admin/ClassManagement';
 import { PWAInstallBanner } from '@/components/enhanced-rag/PWAInstallBanner';
-import { AnalyticsDemo } from '@/components/analytics/AnalyticsDemo';
 import { useToast } from '@/hooks/use-toast';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 
@@ -40,7 +39,6 @@ const AdminDashboard = () => {
     { value: 'monitoring', label: '실시간모니터', icon: MessageCircle },
     { value: 'class-management', label: '수업관리', icon: GraduationCap },
     { value: 'records', label: '학습기록', icon: BarChart3 },
-    { value: 'analytics', label: '분석대시보드', icon: TrendingUp },
   ];
 
   return (
@@ -119,7 +117,7 @@ const AdminDashboard = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           {!isMobile && (
-            <TabsList className="grid w-full grid-cols-7">
+            <TabsList className="grid w-full grid-cols-6">
               {tabItems.map((item) => {
                 const Icon = item.icon;
                 return (
@@ -154,10 +152,6 @@ const AdminDashboard = () => {
 
           <TabsContent value="records">
             <StudentRecords />
-          </TabsContent>
-
-          <TabsContent value="analytics">
-            <AnalyticsDemo />
           </TabsContent>
         </Tabs>
       </div>

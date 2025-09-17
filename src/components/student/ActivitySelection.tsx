@@ -19,10 +19,12 @@ const createLocalGeneralChatActivity = (): Activity => ({
   type: GENERAL_CHAT_TYPE,
   content: { description: GENERAL_CHAT_DESCRIPTION },
   created_at: new Date(0).toISOString(),
-  file_url: null,
   final_question: null,
   modules_count: null,
-  is_hidden: false
+  is_hidden: false,
+  assignedClasses: [],
+  allowAllClasses: true,
+  documentCount: 0
 });
 
 const buildGeneralChatActivity = (activity?: Activity | null): Activity => {
@@ -50,37 +52,122 @@ const buildGeneralChatActivity = (activity?: Activity | null): Activity => {
     title: activity.title || fallback.title,
     content: normalizedContent,
     created_at: activity.created_at || fallback.created_at,
-    file_url: activity.file_url ?? null,
     final_question: activity.final_question ?? null,
     modules_count: activity.modules_count ?? null,
-    is_hidden: false
+    is_hidden: false,
+    assignedClasses: [],
+    allowAllClasses: true,
+    documentCount: 0
   };
 };
 
 interface ActivitySelectionProps {
   onActivitySelect: (activity: Activity) => void;
+  studentId?: string | null;
 }
 
-const ActivitySelection = ({ onActivitySelect }: ActivitySelectionProps) => {
+const ActivitySelection = ({ onActivitySelect, studentId }: ActivitySelectionProps) => {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
+  const [studentClass, setStudentClass] = useState<string | null>(null);
+  const [classLoading, setClassLoading] = useState(true);
   const { toast } = useToast();
 
+  const loadStudentClass = useCallback(async () => {
+    if (typeof window === 'undefined') {
+      setClassLoading(false);
+      return;
+    }
+
+    setClassLoading(true);
+
+    try {
+      const storedProfileRaw = localStorage.getItem('studentProfile');
+      let storedProfile: Record<string, any> | null = null;
+      let className: string | null = null;
+
+      if (storedProfileRaw) {
+        try {
+          storedProfile = JSON.parse(storedProfileRaw);
+          className = storedProfile?.class_name ?? null;
+        } catch (error) {
+          console.warn('학생 프로필 파싱 오류:', error);
+        }
+      }
+
+      const normalizedStudentId = studentId?.trim() || null;
+
+      if ((!className || className.trim() === '') && normalizedStudentId) {
+        const { data, error } = await supabase
+          .from('students')
+          .select('class_name')
+          .eq('student_id', normalizedStudentId)
+          .maybeSingle();
+
+        if (error) throw error;
+
+        className = data?.class_name ?? null;
+
+        if (className) {
+          const updatedProfile = { ...(storedProfile || {}), class_name: className };
+          localStorage.setItem('studentProfile', JSON.stringify(updatedProfile));
+        }
+      }
+
+      setStudentClass(className?.trim() || null);
+    } catch (error) {
+      console.error('학생 클래스 정보 로드 실패:', error);
+      toast({
+        title: "오류",
+        description: "클래스 정보를 불러오는데 실패했습니다.",
+        variant: "destructive"
+      });
+      setStudentClass(null);
+    } finally {
+      setClassLoading(false);
+    }
+  }, [studentId, toast]);
+
+  useEffect(() => {
+    loadStudentClass();
+  }, [loadStudentClass]);
+
   const fetchActivities = useCallback(async () => {
+    setLoading(true);
     try {
       const { data, error } = await supabase
         .from('activities')
-        .select('*')
+        .select('*, activity_class_assignments(class_name)')
         .eq('is_hidden', false)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      const visibleActivities = (data || []).map(activity => ({
-        ...activity,
-        is_hidden: activity.is_hidden ?? false
-      }));
 
-      const generalChatFromDb = visibleActivities.find(
+      const normalizedActivities: Activity[] = (data || []).map((activity: any) => {
+        const assignments = activity.activity_class_assignments || [];
+
+        const assignedClasses = assignments
+          .map((assignment: { class_name: string | null }) => assignment.class_name)
+          .filter((className: string | null): className is string => Boolean(className));
+
+        const allowAllClasses = assignedClasses.length === 0;
+
+        return {
+          id: activity.id,
+          title: activity.title,
+          type: activity.type,
+          content: activity.content,
+          final_question: activity.final_question,
+          modules_count: activity.modules_count,
+          created_at: activity.created_at,
+          is_hidden: activity.is_hidden,
+          assignedClasses,
+          allowAllClasses,
+          documentCount: 0,
+        } as Activity;
+      });
+
+      const generalChatFromDb = normalizedActivities.find(
         (activity) =>
           activity.type === GENERAL_CHAT_TYPE ||
           activity.id === GENERAL_CHAT_ACTIVITY_ID
@@ -88,19 +175,31 @@ const ActivitySelection = ({ onActivitySelect }: ActivitySelectionProps) => {
 
       const generalChatActivity = buildGeneralChatActivity(generalChatFromDb);
 
-      const otherActivities = visibleActivities
+      const accessibleActivities = normalizedActivities
         .filter(
           (activity) =>
             activity.type !== GENERAL_CHAT_TYPE &&
             activity.id !== GENERAL_CHAT_ACTIVITY_ID
         )
-        .sort(
-          (a, b) =>
-            new Date(b.created_at).getTime() -
-            new Date(a.created_at).getTime()
-        );
+        .filter((activity) => {
+          if (activity.allowAllClasses !== false) {
+            return true;
+          }
 
-      setActivities([generalChatActivity, ...otherActivities]);
+          if (!studentClass) {
+            return false;
+          }
+
+          return activity.assignedClasses?.includes(studentClass) ?? false;
+        });
+
+      const sortedActivities = accessibleActivities.sort(
+        (a, b) =>
+          new Date(b.created_at).getTime() -
+          new Date(a.created_at).getTime()
+      );
+
+      setActivities([generalChatActivity, ...sortedActivities]);
     } catch (error: any) {
       toast({
         title: "오류",
@@ -111,7 +210,7 @@ const ActivitySelection = ({ onActivitySelect }: ActivitySelectionProps) => {
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, [studentClass, toast]);
 
   useEffect(() => {
     fetchActivities();
@@ -167,7 +266,7 @@ const ActivitySelection = ({ onActivitySelect }: ActivitySelectionProps) => {
     (activity) => activity.id !== GENERAL_CHAT_ACTIVITY_ID
   );
 
-  if (loading) {
+  if (loading || classLoading) {
     return (
       <div className="flex justify-center items-center py-12">
         <div className="text-gray-500">활동 목록을 불러오는 중...</div>
@@ -186,6 +285,12 @@ const ActivitySelection = ({ onActivitySelect }: ActivitySelectionProps) => {
           </p>
         )}
       </div>
+
+      {!studentClass && (
+        <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 text-sm rounded-md p-4">
+          학생 클래스 정보를 확인할 수 없어 전체 공개된 활동만 표시됩니다. 문제가 지속되면 담당 교사에게 문의해주세요.
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {activities.map((activity) => (

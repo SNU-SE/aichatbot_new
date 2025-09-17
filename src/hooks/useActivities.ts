@@ -13,11 +13,47 @@ export const useActivities = () => {
     try {
       const { data, error } = await supabase
         .from('activities')
-        .select('*')
+        .select('*, activity_class_assignments(class_name)')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setActivities(data || []);
+
+      const { data: documentRows } = await supabase
+        .from('activity_document_details')
+        .select('activity_id');
+
+      const documentCountMap = (documentRows || []).reduce<Record<string, number>>((acc, row: any) => {
+        const activityId = row.activity_id;
+        if (!activityId) return acc;
+        acc[activityId] = (acc[activityId] || 0) + 1;
+        return acc;
+      }, {});
+
+      const normalizedActivities: Activity[] = (data || []).map((activity: any) => {
+        const assignments = activity.activity_class_assignments || [];
+
+        const assignedClasses = assignments
+          .map((assignment: { class_name: string | null }) => assignment.class_name)
+          .filter((className: string | null): className is string => Boolean(className));
+
+        const allowAllClasses = assignedClasses.length === 0;
+
+        return {
+          id: activity.id,
+          title: activity.title,
+          type: activity.type,
+          content: activity.content,
+          final_question: activity.final_question,
+          modules_count: activity.modules_count,
+          created_at: activity.created_at,
+          is_hidden: activity.is_hidden,
+          assignedClasses,
+          allowAllClasses,
+          documentCount: documentCountMap[activity.id] || 0
+        } as Activity;
+      });
+
+      setActivities(normalizedActivities);
     } catch (error) {
       toast({
         title: "오류",

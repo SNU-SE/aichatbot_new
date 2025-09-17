@@ -17,6 +17,7 @@ interface StreamChatRequest {
   sessionId: string;
   conversationHistory?: Array<{role: string; content: string}>;
   documentContext?: boolean;
+  activityId?: string;
   stream?: boolean;
 }
 
@@ -36,6 +37,7 @@ serve(async (req) => {
       sessionId, 
       conversationHistory = [], 
       documentContext = false,
+      activityId,
       stream = true 
     } = await req.json() as StreamChatRequest;
 
@@ -75,12 +77,15 @@ serve(async (req) => {
     let enhancedMessage = message;
 
     // Add document context if enabled and available
-    if (documentContext && session.document_context?.length > 0) {
+    let ragReferences: any[] = [];
+
+    if (documentContext && (session.document_context?.length > 0 || activityId)) {
       try {
         // Search for relevant document chunks
         const { data: ragData, error: ragError } = await supabase.functions.invoke('rag-search', {
           body: { 
             query: message,
+            activityId,
             options: {
               documentIds: session.document_context,
               maxResults: 5,
@@ -90,9 +95,18 @@ serve(async (req) => {
         });
         
         if (!ragError && ragData?.results && ragData.results.length > 0) {
+          ragReferences = ragData.results;
+
           const contextInfo = ragData.results
-            .map((result: any) => `Document: ${result.documentTitle}\nContent: ${result.content}\nPage: ${result.pageNumber || 'N/A'}`)
-            .join('\n\n');
+            .map((result: any, index: number) => {
+              const docTitle = result.documentTitle || `Document ${index + 1}`;
+              const pageInfo = result.pageNumber ? ` (p. ${result.pageNumber})` : '';
+              const similarity = typeof result.similarity === 'number'
+                ? ` [similarity: ${result.similarity.toFixed(2)}]`
+                : '';
+              return `Document: ${docTitle}${pageInfo}${similarity}\n${result.content}`;
+            })
+            .join('\n---\n');
           
           enhancedMessage = `Context from documents:
 ${contextInfo}
@@ -163,6 +177,7 @@ Please provide a helpful response based on the context above. If the context doe
                   content: fullContent,
                   isComplete: true,
                   timestamp: new Date().toISOString(),
+                  sources: ragReferences
                 };
                 
                 controller.enqueue(encoder.encode(`data: ${JSON.stringify(finalChunk)}\n\n`));

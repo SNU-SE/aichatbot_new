@@ -4,11 +4,13 @@ export interface Activity {
   title: string;
   type: string;
   content: any;
-  file_url: string | null;
   final_question: string | null;
   modules_count: number | null;
   created_at: string;
   is_hidden?: boolean;
+  assignedClasses?: string[];
+  allowAllClasses?: boolean;
+  documentCount?: number;
 }
 
 export interface Module {
@@ -30,5 +32,6 @@ export interface ActivityFormData {
   type: string;
   final_question: string;
   modules_count: number;
-  file_url: string;
+  assignedClasses: string[];
+  allowAllClasses: boolean;
 }

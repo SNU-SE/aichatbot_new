@@ -135,6 +135,8 @@ serve(async (req) => {
     let enhancedMessage = message;
     
     // RAG search if enabled and not a translation request
+    let ragReferences: any[] = [];
+
     if (ragEnabled && activityId && !isTranslationRequest) {
       try {
         const { data: ragData, error: ragError } = await supabase.functions.invoke('rag-search', {
@@ -145,9 +147,18 @@ serve(async (req) => {
         });
         
         if (!ragError && ragData?.results && ragData.results.length > 0) {
+          ragReferences = ragData.results;
+
           const contextInfo = ragData.results
-            .map((result: any) => result.chunk_text)
-            .join('\n\n');
+            .map((result: any, index: number) => {
+              const docTitle = result.documentTitle || `Document ${index + 1}`;
+              const pageInfo = result.pageNumber ? ` (p. ${result.pageNumber})` : '';
+              const similarity = typeof result.similarity === 'number'
+                ? ` [similarity: ${result.similarity.toFixed(2)}]`
+                : '';
+              return `Document: ${docTitle}${pageInfo}${similarity}\n${result.content}`;
+            })
+            .join('\n---\n');
           
           enhancedMessage = `Context from activity materials:
 ${contextInfo}
@@ -275,8 +286,21 @@ Student question: ${message}`;
 
     // 중복 체크 후 안전하게 저장
     try {
-      // 학생 메시지 저장
-      await supabase.from('chat_logs').insert([studentMessageData]);
+      // 학생 메시지 최근 중복 확인 (프런트에서 이미 저장했는지 확인)
+      const duplicateThreshold = new Date(Date.now() - 1000).toISOString();
+      const { data: existingStudentMessage } = await supabase
+        .from('chat_logs')
+        .select('id')
+        .eq('student_id', studentId)
+        .eq('activity_id', activityId)
+        .eq('sender', 'student')
+        .eq('message', message)
+        .gte('timestamp', duplicateThreshold)
+        .maybeSingle();
+
+      if (!existingStudentMessage) {
+        await supabase.from('chat_logs').insert([studentMessageData]);
+      }
       
       // AI 응답 중복 체크 (메시지 내용과 최근 시간 기준)
       const { data: existingAiResponse } = await supabase
@@ -328,7 +352,7 @@ Student question: ${message}`;
         });
     }
 
-    return new Response(JSON.stringify({ response: aiResponse }), {
+    return new Response(JSON.stringify({ response: aiResponse, sources: ragReferences }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 

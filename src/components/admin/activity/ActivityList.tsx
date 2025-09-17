@@ -7,6 +7,7 @@ import { Edit, Trash2, FileText, EyeOff, Eye } from 'lucide-react';
 import { Activity } from '@/types/activity';
 import { supabase } from '@/integrations/supabase/client';
 import ActivityDeleteDialog from './ActivityDeleteDialog';
+import { Badge } from '@/components/ui/badge';
 
 interface ActivityListProps {
   activities: Activity[];
@@ -105,8 +106,9 @@ const ActivityList = ({ activities, onEdit, onDeleteSuccess }: ActivityListProps
               <TableRow>
                 <TableHead>제목</TableHead>
                 <TableHead>유형</TableHead>
+                <TableHead>대상 클래스</TableHead>
                 <TableHead>모듈/질문</TableHead>
-                <TableHead>파일</TableHead>
+                <TableHead>자료</TableHead>
                 <TableHead>생성일</TableHead>
                 <TableHead>작업</TableHead>
               </TableRow>
@@ -117,14 +119,30 @@ const ActivityList = ({ activities, onEdit, onDeleteSuccess }: ActivityListProps
                   <TableCell className="font-medium">{activity.title}</TableCell>
                   <TableCell>{getTypeLabel(activity.type)}</TableCell>
                   <TableCell>
+                    {activity.allowAllClasses !== false || !activity.assignedClasses?.length ? (
+                      <Badge variant="secondary">전체</Badge>
+                    ) : (
+                      <div className="flex flex-wrap gap-1">
+                        {activity.assignedClasses.map((className) => (
+                          <Badge key={className} variant="outline">
+                            {className}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                  </TableCell>
+                  <TableCell>
                     {activity.type === 'experiment' ? 
                       `${activity.actualModuleCount || 1}개 모듈` : 
                       activity.final_question ? '최종질문 설정됨' : '-'
                     }
                   </TableCell>
                   <TableCell>
-                    {activity.file_url ? (
-                      <FileText className="h-4 w-4 text-green-600" />
+                    {activity.documentCount && activity.documentCount > 0 ? (
+                      <div className="flex items-center gap-1 text-sm">
+                        <FileText className="h-4 w-4 text-[rgb(15,15,112)]" />
+                        <span>{activity.documentCount}건</span>
+                      </div>
                     ) : (
                       <span className="text-gray-400">없음</span>
                     )}
@@ -161,7 +179,7 @@ const ActivityList = ({ activities, onEdit, onDeleteSuccess }: ActivityListProps
               ))}
               {activities.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-gray-500">
+                  <TableCell colSpan={7} className="text-center py-8 text-gray-500">
                     생성된 활동이 없습니다.
                   </TableCell>
                 </TableRow>

@@ -34,7 +34,6 @@ const ActivityManagement = () => {
         const activityData = {
           title: row['제목'] || row['title'] || '',
           type: row['유형'] || row['type'] || 'experiment',
-          file_url: row['파일URL'] || row['file_url'] || null,
           final_question: row['최종질문'] || row['final_question'] || null,
           modules_count: parseInt(row['모듈수'] || row['modules_count'] || '1'),
           content: {}

@@ -7,10 +7,35 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instanciate createClient with right options
+  // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "12.2.12 (cd3cf9e)"
+    PostgrestVersion: "13.0.5"
+  }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
   }
   public: {
     Tables: {
@@ -52,6 +77,83 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      activity_class_assignments: {
+        Row: {
+          activity_id: string
+          class_name: string
+          created_at: string
+          id: string
+        }
+        Insert: {
+          activity_id: string
+          class_name: string
+          created_at?: string
+          id?: string
+        }
+        Update: {
+          activity_id?: string
+          class_name?: string
+          created_at?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_class_assignments_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "activities"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      activity_documents: {
+        Row: {
+          activity_id: string
+          created_at: string
+          document_id: string
+          processing_error: string | null
+          processing_status:
+            | Database["public"]["Enums"]["processing_status_enum"]
+            | null
+          updated_at: string
+        }
+        Insert: {
+          activity_id: string
+          created_at?: string
+          document_id: string
+          processing_error?: string | null
+          processing_status?:
+            | Database["public"]["Enums"]["processing_status_enum"]
+            | null
+          updated_at?: string
+        }
+        Update: {
+          activity_id?: string
+          created_at?: string
+          document_id?: string
+          processing_error?: string | null
+          processing_status?:
+            | Database["public"]["Enums"]["processing_status_enum"]
+            | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_documents_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activity_documents_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       activity_modules: {
         Row: {
@@ -269,6 +371,10 @@ export type Database = {
           activity_id: string
           created_at: string
           description: string
+          description_en: string | null
+          description_ja: string | null
+          description_ko: string | null
+          description_zh: string | null
           id: string
           module_id: string | null
           step_number: number
@@ -277,6 +383,10 @@ export type Database = {
           activity_id: string
           created_at?: string
           description: string
+          description_en?: string | null
+          description_ja?: string | null
+          description_ko?: string | null
+          description_zh?: string | null
           id?: string
           module_id?: string | null
           step_number: number
@@ -285,6 +395,10 @@ export type Database = {
           activity_id?: string
           created_at?: string
           description?: string
+          description_en?: string | null
+          description_ja?: string | null
+          description_ko?: string | null
+          description_zh?: string | null
           id?: string
           module_id?: string | null
           step_number?: number
@@ -352,38 +466,239 @@ export type Database = {
       }
       document_chunks: {
         Row: {
-          activity_id: string
           chunk_index: number
-          chunk_text: string
-          created_at: string
+          content: string
+          created_at: string | null
+          document_id: string | null
           embedding: string | null
           id: string
+          metadata: Json | null
+          page_number: number | null
+          position_end: number | null
+          position_start: number | null
         }
         Insert: {
-          activity_id: string
           chunk_index: number
-          chunk_text: string
-          created_at?: string
+          content: string
+          created_at?: string | null
+          document_id?: string | null
           embedding?: string | null
           id?: string
+          metadata?: Json | null
+          page_number?: number | null
+          position_end?: number | null
+          position_start?: number | null
         }
         Update: {
-          activity_id?: string
           chunk_index?: number
-          chunk_text?: string
-          created_at?: string
+          content?: string
+          created_at?: string | null
+          document_id?: string | null
           embedding?: string | null
           id?: string
+          metadata?: Json | null
+          page_number?: number | null
+          position_end?: number | null
+          position_start?: number | null
         }
         Relationships: [
           {
-            foreignKeyName: "document_chunks_activity_id_fkey"
-            columns: ["activity_id"]
+            foreignKeyName: "document_chunks_document_id_fkey"
+            columns: ["document_id"]
             isOneToOne: false
-            referencedRelation: "activities"
+            referencedRelation: "documents"
             referencedColumns: ["id"]
           },
         ]
+      }
+      document_folders: {
+        Row: {
+          created_at: string | null
+          id: string
+          name: string
+          parent_id: string | null
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          name: string
+          parent_id?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          name?: string
+          parent_id?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "document_folders_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "document_folders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      document_permissions: {
+        Row: {
+          activity_ids: string[] | null
+          class_id: string | null
+          created_at: string | null
+          document_id: string | null
+          granted_by: string | null
+          id: string
+          managed_by_activity: boolean | null
+          permission_level:
+            | Database["public"]["Enums"]["access_level_enum"]
+            | null
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          activity_ids?: string[] | null
+          class_id?: string | null
+          created_at?: string | null
+          document_id?: string | null
+          granted_by?: string | null
+          id?: string
+          managed_by_activity?: boolean | null
+          permission_level?:
+            | Database["public"]["Enums"]["access_level_enum"]
+            | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          activity_ids?: string[] | null
+          class_id?: string | null
+          created_at?: string | null
+          document_id?: string | null
+          granted_by?: string | null
+          id?: string
+          managed_by_activity?: boolean | null
+          permission_level?:
+            | Database["public"]["Enums"]["access_level_enum"]
+            | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "document_permissions_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      documents: {
+        Row: {
+          created_at: string | null
+          file_path: string
+          file_size: number
+          filename: string
+          folder_id: string | null
+          id: string
+          language: string | null
+          metadata: Json | null
+          mime_type: string
+          processed_at: string | null
+          processing_status:
+            | Database["public"]["Enums"]["processing_status_enum"]
+            | null
+          title: string
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          file_path: string
+          file_size: number
+          filename: string
+          folder_id?: string | null
+          id?: string
+          language?: string | null
+          metadata?: Json | null
+          mime_type?: string
+          processed_at?: string | null
+          processing_status?:
+            | Database["public"]["Enums"]["processing_status_enum"]
+            | null
+          title: string
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          file_path?: string
+          file_size?: number
+          filename?: string
+          folder_id?: string | null
+          id?: string
+          language?: string | null
+          metadata?: Json | null
+          mime_type?: string
+          processed_at?: string | null
+          processing_status?:
+            | Database["public"]["Enums"]["processing_status_enum"]
+            | null
+          title?: string
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "documents_folder_id_fkey"
+            columns: ["folder_id"]
+            isOneToOne: false
+            referencedRelation: "document_folders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      enhanced_chat_logs: {
+        Row: {
+          confidence_score: number | null
+          created_at: string | null
+          document_references: Json | null
+          id: string
+          message: string
+          processing_time_ms: number | null
+          role: Database["public"]["Enums"]["message_role_enum"]
+          session_id: string
+          user_id: string | null
+        }
+        Insert: {
+          confidence_score?: number | null
+          created_at?: string | null
+          document_references?: Json | null
+          id?: string
+          message: string
+          processing_time_ms?: number | null
+          role: Database["public"]["Enums"]["message_role_enum"]
+          session_id: string
+          user_id?: string | null
+        }
+        Update: {
+          confidence_score?: number | null
+          created_at?: string | null
+          document_references?: Json | null
+          id?: string
+          message?: string
+          processing_time_ms?: number | null
+          role?: Database["public"]["Enums"]["message_role_enum"]
+          session_id?: string
+          user_id?: string | null
+        }
+        Relationships: []
       }
       evaluation_reflections: {
         Row: {
@@ -643,6 +958,41 @@ export type Database = {
           },
         ]
       }
+      student_notes: {
+        Row: {
+          activity_id: string
+          created_at: string | null
+          id: string
+          notes: string | null
+          student_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          activity_id: string
+          created_at?: string | null
+          id?: string
+          notes?: string | null
+          student_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          activity_id?: string
+          created_at?: string | null
+          id?: string
+          notes?: string | null
+          student_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "student_notes_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "activities"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       student_sessions: {
         Row: {
           created_at: string
@@ -779,6 +1129,43 @@ export type Database = {
       }
     }
     Views: {
+      activity_document_details: {
+        Row: {
+          activity_id: string | null
+          created_at: string | null
+          document_id: string | null
+          document_processing_status:
+            | Database["public"]["Enums"]["processing_status_enum"]
+            | null
+          file_path: string | null
+          file_size: number | null
+          filename: string | null
+          metadata: Json | null
+          mime_type: string | null
+          processing_error: string | null
+          processing_status:
+            | Database["public"]["Enums"]["processing_status_enum"]
+            | null
+          title: string | null
+          updated_at: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_documents_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activity_documents_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       student_activity_view: {
         Row: {
           activities_participated: number | null
@@ -855,32 +1242,36 @@ export type Database = {
       get_peer_evaluation_stats: {
         Args: { activity_id_param: string }
         Returns: {
-          total_responses: number
-          submitted_responses: number
-          total_evaluations: number
           completed_evaluations: number
           completion_rate: number
+          submitted_responses: number
+          total_evaluations: number
+          total_responses: number
         }[]
       }
       get_peer_evaluation_stats_by_class: {
         Args: { activity_id_param: string }
         Returns: {
           class_name: string
-          total_responses: number
-          submitted_responses: number
-          total_evaluations: number
           completed_evaluations: number
           completion_rate: number
+          submitted_responses: number
+          total_evaluations: number
+          total_responses: number
         }[]
       }
       get_student_evaluation_status: {
-        Args: { student_id_param: string; activity_id_param: string }
+        Args: { activity_id_param: string; student_id_param: string }
         Returns: {
-          has_submitted_response: boolean
           assigned_evaluations: number
           completed_evaluations: number
+          has_submitted_response: boolean
           received_evaluations: number
         }[]
+      }
+      get_user_accessible_documents: {
+        Args: { target_user_id: string }
+        Returns: string[]
       }
       halfvec_avg: {
         Args: { "": number[] }
@@ -900,8 +1291,8 @@ export type Database = {
       }
       has_role: {
         Args: {
-          _user_id: string
           _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
         }
         Returns: boolean
       }
@@ -943,19 +1334,43 @@ export type Database = {
       }
       l2_normalize: {
         Args: { "": string } | { "": unknown } | { "": unknown }
-        Returns: unknown
+        Returns: string
+      }
+      rebuild_document_permissions_for_document: {
+        Args: { p_document_id: string; p_granted_by?: string }
+        Returns: Json
+      }
+      remove_activity_document: {
+        Args: { p_activity_id: string; p_document_id: string }
+        Returns: Json
+      }
+      search_documents_with_vector: {
+        Args: {
+          max_results?: number
+          query_embedding: string
+          similarity_threshold?: number
+          user_accessible_docs?: string[]
+        }
+        Returns: {
+          chunk_id: string
+          content: string
+          document_id: string
+          document_title: string
+          page_number: number
+          similarity: number
+        }[]
       }
       search_similar_chunks: {
         Args: {
-          query_embedding: string
           activity_id_param: string
-          similarity_threshold?: number
           match_count?: number
+          query_embedding: string
+          similarity_threshold?: number
         }
         Returns: {
+          chunk_index: number
           chunk_text: string
           similarity: number
-          chunk_index: number
         }[]
       }
       sparsevec_out: {
@@ -970,6 +1385,18 @@ export type Database = {
         Args: { "": unknown[] }
         Returns: number
       }
+      sync_activity_document_permissions: {
+        Args: { p_activity_id: string; p_granted_by?: string }
+        Returns: Json
+      }
+      update_document_processing_status: {
+        Args: {
+          doc_id: string
+          new_status: Database["public"]["Enums"]["processing_status_enum"]
+          processing_metadata?: Json
+        }
+        Returns: undefined
+      }
       update_peer_evaluation_phase: {
         Args: {
           activity_id_param: string
@@ -981,6 +1408,24 @@ export type Database = {
       update_student_session: {
         Args: { student_id_param: string }
         Returns: undefined
+      }
+      upsert_activity_document_link: {
+        Args: {
+          p_activity_id: string
+          p_document_id: string
+          p_processing_error?: string
+          p_processing_status?: Database["public"]["Enums"]["processing_status_enum"]
+        }
+        Returns: {
+          activity_id: string
+          created_at: string
+          document_id: string
+          processing_error: string | null
+          processing_status:
+            | Database["public"]["Enums"]["processing_status_enum"]
+            | null
+          updated_at: string
+        }
       }
       vector_avg: {
         Args: { "": number[] }
@@ -1008,7 +1453,16 @@ export type Database = {
       }
     }
     Enums: {
+      access_level_enum: "read" | "write" | "admin"
       app_role: "admin" | "student"
+      message_role_enum: "user" | "assistant" | "system"
+      processing_status_enum:
+        | "uploading"
+        | "extracting"
+        | "chunking"
+        | "embedding"
+        | "completed"
+        | "failed"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1134,9 +1588,22 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
+      access_level_enum: ["read", "write", "admin"],
       app_role: ["admin", "student"],
+      message_role_enum: ["user", "assistant", "system"],
+      processing_status_enum: [
+        "uploading",
+        "extracting",
+        "chunking",
+        "embedding",
+        "completed",
+        "failed",
+      ],
     },
   },
 } as const
