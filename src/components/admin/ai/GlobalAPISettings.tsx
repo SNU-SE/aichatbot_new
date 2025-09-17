@@ -1,5 +1,5 @@
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -9,6 +9,7 @@ import { Switch } from '@/components/ui/switch';
 import { Save, Key } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { getDefaultModel, getModelOptions, isValidModelForProvider } from '@/constants/aiModels';
 
 interface GlobalAPISettingsProps {
   settings: any;
@@ -16,44 +17,28 @@ interface GlobalAPISettingsProps {
 }
 
 const GlobalAPISettings = ({ settings, onSettingsUpdate }: GlobalAPISettingsProps) => {
+  const sanitizedProvider = useMemo(() => {
+    if (settings?.selected_provider === 'anthropic') return 'anthropic';
+    return 'openai';
+  }, [settings?.selected_provider]);
+
+  const sanitizedModel = useMemo(() => {
+    const storedModel = settings?.selected_model;
+    if (storedModel && isValidModelForProvider(sanitizedProvider, storedModel)) {
+      return storedModel;
+    }
+    return getDefaultModel(sanitizedProvider);
+  }, [settings?.selected_model, sanitizedProvider]);
+
   const [globalSettings, setGlobalSettings] = useState({
-    selected_provider: settings?.selected_provider || 'openai',
-    selected_model: settings?.selected_model || 'gpt-4.1-2025-04-14',
+    selected_provider: sanitizedProvider,
+    selected_model: sanitizedModel,
     system_prompt: settings?.system_prompt || '학생의 질문에 직접적으로 답을 하지 말고, 그 답이 나오기까지 필요한 최소한의 정보를 제공해. 단계별로 학생들이 생각하고 질문할 수 있도록 유도해줘.',
     rag_enabled: settings?.rag_enabled || false
   });
 
   const [saving, setSaving] = useState(false);
   const { toast } = useToast();
-
-  const getModelOptions = (provider: string) => {
-    if (provider === 'openai') {
-      return [
-        // 최신 창의적 모델들
-        { value: 'gpt-4.1-2025-04-14', label: 'GPT-4.1 (최신 플래그십 - 창의적 작업 최적화)' },
-        { value: 'gpt-4o', label: 'GPT-4o (고성능 - 창의적 작업)' },
-        
-        // 최신 추론 모델들
-        { value: 'o3-2025-04-16', label: 'O3 (강력한 추론 모델 - 복잡한 분석)' },
-        { value: 'o4-mini-2025-04-16', label: 'O4 Mini (빠른 추론 - 효율적)' },
-        
-        // 기존 모델들 (구버전 표시)
-        { value: 'gpt-4o-mini', label: 'GPT-4o Mini (구버전 - 빠름)' },
-        { value: 'gpt-4-turbo', label: 'GPT-4 Turbo (구버전)' }
-      ];
-    } else if (provider === 'anthropic') {
-      return [
-        // Claude 4 모델들
-        { value: 'claude-sonnet-4-20250514', label: 'Claude 4 Sonnet (최신 - 고성능 추론)' },
-        
-        // Claude 3 모델들
-        { value: 'claude-3-opus-20240229', label: 'Claude 3 Opus (강력함)' },
-        { value: 'claude-3-5-sonnet-20241022', label: 'Claude 3.5 Sonnet (구버전)' },
-        { value: 'claude-3-5-haiku-20241022', label: 'Claude 3.5 Haiku (구버전 - 빠름)' }
-      ];
-    }
-    return [];
-  };
 
   const saveSettings = async () => {
     setSaving(true);
@@ -113,7 +98,7 @@ const GlobalAPISettings = ({ settings, onSettingsUpdate }: GlobalAPISettingsProp
             <Select 
               value={globalSettings.selected_provider} 
               onValueChange={(value) => {
-                const defaultModel = value === 'openai' ? 'gpt-4.1-2025-04-14' : 'claude-sonnet-4-20250514';
+                const defaultModel = getDefaultModel(value);
                 setGlobalSettings({
                   ...globalSettings, 
                   selected_provider: value,
@@ -150,8 +135,8 @@ const GlobalAPISettings = ({ settings, onSettingsUpdate }: GlobalAPISettingsProp
             </Select>
             <p className="text-xs text-gray-500 mt-1">
               {globalSettings.selected_provider === 'openai' 
-                ? '창의적 작업: GPT-4.1, GPT-4o | 추론 작업: O3, O4 Mini'
-                : '고성능 추론: Claude 4 Sonnet | 강력한 분석: Claude 3 Opus'
+                ? 'GPT-5 Mini, GPT-4o 등 최신 OpenAI 대화형 모델을 선택할 수 있습니다.'
+                : 'Anthropic 모델은 Messages API를 사용합니다.'
               }
             </p>
           </div>

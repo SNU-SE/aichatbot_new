@@ -9,6 +9,7 @@ import { Switch } from '@/components/ui/switch';
 import { Save, Bot } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { getDefaultModel, getModelOptions, isValidModelForProvider } from '@/constants/aiModels';
 
 interface ClassAISettingsProps {
   selectedClass: string;
@@ -22,19 +23,29 @@ const ClassAISettings = ({ selectedClass, classSettings, onClassSettingsUpdate }
 
   const currentClassSetting = classSettings.find(cs => cs.class_name === selectedClass);
 
+  const initialProvider = currentClassSetting?.selected_provider === 'anthropic' ? 'anthropic' : 'openai';
+  const initialModel = currentClassSetting?.selected_model && isValidModelForProvider(initialProvider, currentClassSetting.selected_model)
+    ? currentClassSetting.selected_model
+    : getDefaultModel(initialProvider);
+
   const [currentClassSettings, setCurrentClassSettings] = useState({
-    selected_provider: 'openai',
-    selected_model: 'gpt-4.1-2025-04-14',
-    system_prompt: '',
-    rag_enabled: false
+    selected_provider: initialProvider,
+    selected_model: initialModel,
+    system_prompt: currentClassSetting?.system_prompt || '',
+    rag_enabled: currentClassSetting?.rag_enabled || false
   });
 
   // 클래스 변경 시 설정값 업데이트
   useEffect(() => {
     if (currentClassSetting) {
+      const provider = currentClassSetting.selected_provider === 'anthropic' ? 'anthropic' : 'openai';
+      const model = isValidModelForProvider(provider, currentClassSetting.selected_model)
+        ? currentClassSetting.selected_model
+        : getDefaultModel(provider);
+
       setCurrentClassSettings({
-        selected_provider: currentClassSetting.selected_provider || 'openai',
-        selected_model: currentClassSetting.selected_model || 'gpt-4.1-2025-04-14',
+        selected_provider: provider,
+        selected_model: model,
         system_prompt: currentClassSetting.system_prompt || '',
         rag_enabled: currentClassSetting.rag_enabled || false
       });
@@ -42,41 +53,12 @@ const ClassAISettings = ({ selectedClass, classSettings, onClassSettingsUpdate }
       // 새로운 클래스인 경우 기본값으로 리셋
       setCurrentClassSettings({
         selected_provider: 'openai',
-        selected_model: 'gpt-4.1-2025-04-14',
+        selected_model: getDefaultModel('openai'),
         system_prompt: '',
         rag_enabled: false
       });
     }
   }, [selectedClass, currentClassSetting]);
-
-  const getModelOptions = (provider: string) => {
-    if (provider === 'openai') {
-      return [
-        // 최신 창의적 모델들
-        { value: 'gpt-4.1-2025-04-14', label: 'GPT-4.1 (최신 플래그십 - 창의적 작업 최적화)' },
-        { value: 'gpt-4o', label: 'GPT-4o (고성능 - 창의적 작업)' },
-        
-        // 최신 추론 모델들
-        { value: 'o3-2025-04-16', label: 'O3 (강력한 추론 모델 - 복잡한 분석)' },
-        { value: 'o4-mini-2025-04-16', label: 'O4 Mini (빠른 추론 - 효율적)' },
-        
-        // 기존 모델들 (구버전 표시)
-        { value: 'gpt-4o-mini', label: 'GPT-4o Mini (구버전 - 빠름)' },
-        { value: 'gpt-4-turbo', label: 'GPT-4 Turbo (구버전)' }
-      ];
-    } else if (provider === 'anthropic') {
-      return [
-        // Claude 4 모델들
-        { value: 'claude-sonnet-4-20250514', label: 'Claude 4 Sonnet (최신 - 고성능 추론)' },
-        
-        // Claude 3 모델들
-        { value: 'claude-3-opus-20240229', label: 'Claude 3 Opus (강력함)' },
-        { value: 'claude-3-5-sonnet-20241022', label: 'Claude 3.5 Sonnet (구버전)' },
-        { value: 'claude-3-5-haiku-20241022', label: 'Claude 3.5 Haiku (구버전 - 빠름)' }
-      ];
-    }
-    return [];
-  };
 
   const saveCurrentClassSettings = async () => {
     if (!selectedClass) return;
@@ -145,7 +127,7 @@ const ClassAISettings = ({ selectedClass, classSettings, onClassSettingsUpdate }
             <Select 
               value={currentClassSettings.selected_provider} 
               onValueChange={(value) => {
-                const defaultModel = value === 'openai' ? 'gpt-4.1-2025-04-14' : 'claude-sonnet-4-20250514';
+                const defaultModel = getDefaultModel(value);
                 setCurrentClassSettings({
                   ...currentClassSettings, 
                   selected_provider: value,
@@ -182,8 +164,8 @@ const ClassAISettings = ({ selectedClass, classSettings, onClassSettingsUpdate }
             </Select>
             <p className="text-xs text-gray-500 mt-1">
               {currentClassSettings.selected_provider === 'openai' 
-                ? '창의적 작업: GPT-4.1, GPT-4o | 추론 작업: O3, O4 Mini'
-                : '고성능 추론: Claude 4 Sonnet | 강력한 분석: Claude 3 Opus'
+                ? 'GPT-5 Mini, GPT-4o 등 최신 OpenAI 대화형 모델을 사용할 수 있습니다.'
+                : 'Anthropic 모델은 Messages API를 사용합니다.'
               }
             </p>
           </div>

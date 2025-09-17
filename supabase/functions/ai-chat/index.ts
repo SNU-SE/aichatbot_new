@@ -2,10 +2,12 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { resolveModelConfig } from '../_shared/aiModelRegistry.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
 interface ChatRequest {
@@ -158,9 +160,14 @@ Student question: ${message}`;
     }
 
     // Call appropriate AI service
+    const resolvedModel = resolveModelConfig(selectedProvider, selectedModel);
     let aiResponse = '';
-    
-    if (selectedProvider === 'openai') {
+
+    if (resolvedModel.provider === 'openai') {
+      if (resolvedModel.isFallback) {
+        console.warn(`Model ${selectedModel} not supported for provider ${selectedProvider}. Falling back to ${resolvedModel.modelKey}.`);
+      }
+
       const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
       if (!openaiApiKey) {
         throw new Error('OpenAI API key not configured');
@@ -173,26 +180,36 @@ Student question: ${message}`;
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: selectedModel,
+          model: resolvedModel.config.apiModel,
           messages: [
             { role: 'system', content: systemPrompt },
             ...(conversationHistory || []),
             { role: 'user', content: enhancedMessage }
           ],
-          temperature: 0.7,
-          max_tokens: 1000,
         }),
       });
 
       if (!openaiResponse.ok) {
-        const errorData = await openaiResponse.json();
-        throw new Error(`OpenAI API error: ${errorData.error?.message || 'Unknown error'}`);
+        let errorMessage = 'Unknown error';
+        try {
+          const errorData = await openaiResponse.json();
+          errorMessage = errorData.error?.message || errorMessage;
+        } catch (_jsonError) {
+          errorMessage = `${openaiResponse.status} ${openaiResponse.statusText}`;
+        }
+        throw new Error(`OpenAI API error: ${errorMessage}`);
       }
 
       const openaiData = await openaiResponse.json();
-      aiResponse = openaiData.choices[0]?.message?.content || 'Sorry, I could not generate a response.';
-      
-    } else if (selectedProvider === 'anthropic') {
+      aiResponse = openaiData.choices?.[0]?.message?.content || 'Sorry, I could not generate a response.';
+
+      selectedProvider = resolvedModel.provider;
+      selectedModel = resolvedModel.modelKey;
+    } else if (resolvedModel.provider === 'anthropic') {
+      if (resolvedModel.isFallback) {
+        console.warn(`Model ${selectedModel} not supported for provider ${selectedProvider}. Falling back to ${resolvedModel.modelKey}.`);
+      }
+
       const anthropicApiKey = Deno.env.get('ANTHROPIC_API_KEY');
       if (!anthropicApiKey) {
         throw new Error('Anthropic API key not configured');
@@ -206,7 +223,7 @@ Student question: ${message}`;
           'anthropic-version': '2023-06-01'
         },
         body: JSON.stringify({
-          model: selectedModel,
+          model: resolvedModel.config.apiModel,
           max_tokens: 1000,
           messages: [
             { 
@@ -224,6 +241,9 @@ Student question: ${message}`;
 
       const anthropicData = await anthropicResponse.json();
       aiResponse = anthropicData.content[0]?.text || 'Sorry, I could not generate a response.';
+
+      selectedProvider = resolvedModel.provider;
+      selectedModel = resolvedModel.modelKey;
     }
 
     // For translation requests, return only the response
