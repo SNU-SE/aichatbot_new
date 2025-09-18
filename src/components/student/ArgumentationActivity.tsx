@@ -36,12 +36,14 @@ const ArgumentationActivity = ({
   const [peerResponse, setPeerResponse] = useState<any>(null);
   const [peerEvaluations, setPeerEvaluations] = useState<any[]>([]);
   const [evaluationCheckEnabled, setEvaluationCheckEnabled] = useState(false);
+  const [peerAssignmentReady, setPeerAssignmentReady] = useState(false);
   const { toast } = useToast();
   const { items, loading, toggleItem } = useChecklistProgress({ 
     studentId, 
     activityId: activity.id 
   });
   const peerEvaluationEnabled = activity.enable_peer_evaluation !== false;
+  const peerEvaluationAvailable = peerEvaluationEnabled && peerAssignmentReady;
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -54,13 +56,14 @@ const ArgumentationActivity = ({
     }
 
     if (!peerEvaluationEnabled) {
+      setPeerAssignmentReady(false);
       setEvaluationCheckEnabled(false);
       return;
     }
 
-    // 평가 가능 여부 확인
+    // 평가 가능 여부 및 배정 상태 확인
     checkEvaluationAvailability();
-    
+
     // 30초마다 평가 가능 여부 재확인
     const interval = setInterval(checkEvaluationAvailability, 30000);
     return () => clearInterval(interval);
@@ -137,6 +140,7 @@ const ArgumentationActivity = ({
 
   const checkEvaluationAvailability = async () => {
     if (!peerEvaluationEnabled) {
+      setPeerAssignmentReady(false);
       setEvaluationCheckEnabled(false);
       return;
     }
@@ -149,20 +153,44 @@ const ArgumentationActivity = ({
         .single();
 
       if (studentError) throw studentError;
+      const className = studentData?.class_name;
+
+      if (!className) {
+        setPeerAssignmentReady(false);
+        setEvaluationCheckEnabled(false);
+        return;
+      }
 
       // 교사가 해당 활동/클래스에 대해 평가완료를 했는지 확인
       const { data: isCompleted, error: phaseError } = await supabase
         .rpc('is_peer_evaluation_completed', {
           activity_id_param: activity.id,
-          class_name_param: studentData.class_name
+          class_name_param: className
         });
 
       if (phaseError) throw phaseError;
 
       setEvaluationCheckEnabled(isCompleted || false);
+
+      // 배정 여부 확인 (peer_evaluation_phases 테이블 조회)
+      const { data: phaseRecord, error: phaseFetchError } = await supabase
+        .from('peer_evaluation_phases')
+        .select('phase')
+        .eq('activity_id', activity.id)
+        .eq('class_name', className)
+        .maybeSingle();
+
+      if (phaseFetchError && phaseFetchError.code !== 'PGRST116') {
+        throw phaseFetchError;
+      }
+
+      const phaseValue = phaseRecord?.phase;
+      const hasAssignment = phaseValue === 'peer-evaluation' || phaseValue === 'evaluation-check';
+      setPeerAssignmentReady(hasAssignment);
     } catch (error) {
       console.error('평가 가능 여부 확인 오류:', error);
       setEvaluationCheckEnabled(false);
+      setPeerAssignmentReady(false);
     }
   };
 
@@ -268,7 +296,7 @@ const ArgumentationActivity = ({
   const [isSubmittingEvaluation, setIsSubmittingEvaluation] = useState(false);
 
   const submitPeerEvaluation = async () => {
-    if (!peerEvaluationEnabled) {
+    if (!peerEvaluationAvailable) {
       return;
     }
     if (!evaluationText.trim()) {
@@ -437,8 +465,15 @@ const ArgumentationActivity = ({
     submitArgument,
     submitPeerEvaluation,
     submitReflection,
-    peerEvaluationEnabled
+    peerEvaluationEnabled: peerEvaluationAvailable,
+    peerAssignmentReady
   };
+
+  useEffect(() => {
+    if (!peerEvaluationAvailable && activeTask === 'peer-evaluation') {
+      setActiveTask(isSubmitted ? 'argument' : 'none');
+    }
+  }, [peerEvaluationAvailable, activeTask, isSubmitted]);
 
   if (loading) {
     return (
@@ -516,7 +551,7 @@ const ArgumentationActivity = ({
                 <Button
                   onClick={() => setActiveTask('peer-evaluation')}
                   className="w-full bg-green-600 hover:bg-green-700"
-                  disabled={!isSubmitted}
+                  disabled={!isSubmitted || !peerAssignmentReady}
                 >
                   동료 평가
                 </Button>
@@ -530,6 +565,11 @@ const ArgumentationActivity = ({
                     <span className="ml-2 text-xs">(대기중)</span>
                   )}
                 </Button>
+                {!peerAssignmentReady && (
+                  <p className="text-xs text-gray-500 text-center">
+                    교사가 동료평가를 배정하면 사용할 수 있습니다.
+                  </p>
+                )}
               </>
             )}
           </div>

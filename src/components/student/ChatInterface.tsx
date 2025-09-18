@@ -74,7 +74,7 @@ const ChatInterface = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const messagesRef = useRef<Message[]>([]);
   const { toast } = useToast();
-  const peerEvaluationEnabled = activity.enable_peer_evaluation !== false;
+  const peerEvaluationEnabled = Boolean(argumentationContext?.peerEvaluationEnabled);
 
   const updateMessages = useCallback((updater: (prev: Message[]) => Message[]) => {
     setMessages(prev => {
@@ -373,6 +373,7 @@ const ChatInterface = ({
             fileUrl: file_url,
             fileName: file_name,
             fileType: file_type,
+            clientMessageId: log.id,
             conversationHistory: recentMessages
           }
         });
@@ -655,13 +656,8 @@ const ChatInterface = ({
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-gray-600">
-              AI가 동료의 논증을 분석하고 평가할 수 있도록 도와드립니다.
+              동료평가가 활성화되었습니다. AI에게 평가 방법을 요청하거나 질문을 통해 평가를 진행해보세요.
             </p>
-            <div className="p-3 bg-blue-50 rounded-lg">
-              <p className="text-sm">
-                "동료평가를 시작해줘" 또는 "평가할 논증을 보여줘"라고 메시지를 보내보세요.
-              </p>
-            </div>
           </CardContent>
         </Card>
       );
@@ -761,7 +757,7 @@ const ChatInterface = ({
   return (
     <div ref={containerRef} className="flex flex-col h-full bg-white rounded-lg shadow-sm">
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b bg-gray-50 rounded-t-lg">
+      <div className="flex items-center justify-between p-4 border-b bg-gray-50 rounded-t-lg" data-header>
         <div className="flex items-center space-x-3">
           <Button onClick={onBack} variant="ghost" size="sm">
             <ArrowLeft className="h-4 w-4" />
@@ -781,7 +777,7 @@ const ChatInterface = ({
       </div>
 
       {/* Argumentation Interface */}
-      {renderArgumentationInterface()}
+      <div data-argumentation>{renderArgumentationInterface()}</div>
 
       {/* Messages */}
       <div className="flex-1 min-h-0">
@@ -824,7 +820,7 @@ const ChatInterface = ({
       )}
 
       {/* Input */}
-      <div className="p-4 border-t">
+      <div className="p-4 border-t" data-input>
         <div className="flex space-x-2">
           <Button
             onClick={() => fileInputRef.current?.click()}

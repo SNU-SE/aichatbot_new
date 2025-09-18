@@ -367,6 +367,19 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
       const { error } = await deleteQuery;
       if (error) throw error;
 
+      if (selectedClass === 'all') {
+        await supabase
+          .from('peer_evaluation_phases')
+          .delete()
+          .eq('activity_id', selectedActivity);
+      } else if (selectedClass) {
+        await supabase.rpc('update_peer_evaluation_phase', {
+          activity_id_param: selectedActivity,
+          class_name_param: selectedClass,
+          new_phase: 'argument'
+        });
+      }
+
       toast({
         title: "성공",
         description: selectedClass === 'all' ? "모든 동료평가가 삭제되었습니다." : `${selectedClass} 클래스의 동료평가가 삭제되었습니다.`
@@ -397,6 +410,11 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
       // 그 다음 논증응답 삭제
       await supabase
         .from('argumentation_responses')
+        .delete()
+        .eq('activity_id', selectedActivity);
+
+      await supabase
+        .from('peer_evaluation_phases')
         .delete()
         .eq('activity_id', selectedActivity);
 

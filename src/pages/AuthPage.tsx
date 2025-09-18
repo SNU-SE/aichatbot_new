@@ -7,7 +7,18 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { GraduationCap } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { persistStudentToken } from '@/hooks/useSupabaseAuth';
+import { persistAuthToken } from '@/hooks/useSupabaseAuth';
+
+interface AdminLoginResponse {
+  success: boolean;
+  token?: string;
+  message?: string;
+  admin?: {
+    id: string;
+    email?: string;
+    is_admin?: boolean;
+  };
+}
 
 const AuthPage = () => {
   const [loginId, setLoginId] = useState('');
@@ -18,7 +29,7 @@ const AuthPage = () => {
 
   const isAdminLogin = loginId === 'admin';
 
-  const verifyAdminPassword = async (password: string): Promise<boolean> => {
+  const verifyAdminPassword = async (password: string): Promise<AdminLoginResponse> => {
     try {
       const { data, error } = await supabase.functions.invoke('verify-admin', {
         body: { password }
@@ -26,13 +37,13 @@ const AuthPage = () => {
 
       if (error) {
         console.error('Error calling verify-admin function:', error);
-        return false;
+        return { success: false, message: '관리자 인증 중 오류가 발생했습니다.' };
       }
 
-      return data?.success || false;
+      return data || { success: false };
     } catch (error) {
       console.error('Error verifying admin password:', error);
-      return false;
+      return { success: false, message: '관리자 인증 중 오류가 발생했습니다.' };
     }
   };
 
@@ -43,30 +54,48 @@ const AuthPage = () => {
     setIsLoading(true);
     
     if (isAdminLogin) {
-      // 관리자 로그인 - 환경변수로 비밀번호 검증
-      const isValidPassword = await verifyAdminPassword(password);
-      
-      setTimeout(() => {
-        if (isValidPassword) {
-          // 기존 학생 세션 정리
-          localStorage.removeItem('studentId');
-          localStorage.removeItem('studentProfile');
-          persistStudentToken(null);
-          localStorage.setItem('userType', 'admin');
-          toast({
-            title: "관리자 로그인 성공",
-            description: "관리자로 로그인되었습니다."
-          });
-          navigate('/admin');
-        } else {
+      try {
+        const result = await verifyAdminPassword(password);
+
+        if (!result?.success || !result?.token) {
+          persistAuthToken(null);
+          localStorage.removeItem('adminProfile');
           toast({
             title: "로그인 실패",
-            description: "관리자 비밀번호가 올바르지 않습니다.",
+            description: result?.message || "관리자 인증에 실패했습니다.",
             variant: "destructive"
           });
+          return;
         }
+
+        // Clear legacy student state
+        localStorage.removeItem('studentId');
+        localStorage.removeItem('studentProfile');
+
+        persistAuthToken(result.token);
+        localStorage.setItem('userType', 'admin');
+        if (result.admin) {
+          localStorage.setItem('adminProfile', JSON.stringify(result.admin));
+        } else {
+          localStorage.removeItem('adminProfile');
+        }
+
+        toast({
+          title: "관리자 로그인 성공",
+          description: "관리자로 로그인되었습니다."
+        });
+        navigate('/admin');
+      } catch (error) {
+        console.error('Admin login error:', error);
+        persistAuthToken(null);
+        toast({
+          title: "로그인 실패",
+          description: "관리자 로그인 중 오류가 발생했습니다.",
+          variant: "destructive"
+        });
+      } finally {
         setIsLoading(false);
-      }, 500);
+      }
     } else {
       // 학생 로그인 - Edge Function을 통한 JWT 발급
       try {
@@ -85,8 +114,9 @@ const AuthPage = () => {
         // 기존 세션 정리
         localStorage.removeItem('userType');
         localStorage.removeItem('studentId');
+        localStorage.removeItem('adminProfile');
 
-        persistStudentToken(null);
+        persistAuthToken(null);
 
         localStorage.removeItem('studentProfile');
 
@@ -105,7 +135,7 @@ const AuthPage = () => {
         }
 
         // Store token and student info
-        persistStudentToken(data.token);
+        persistAuthToken(data.token);
         localStorage.setItem('studentId', normalizedId);
         localStorage.setItem('userType', 'student');
         if (data.student) {
@@ -121,7 +151,8 @@ const AuthPage = () => {
         setIsLoading(false);
       } catch (error) {
         console.error('Login error:', error);
-        persistStudentToken(null);
+        persistAuthToken(null);
+        localStorage.removeItem('adminProfile');
         toast({
           title: "로그인 실패",
           description: "로그인 중 오류가 발생했습니다.",

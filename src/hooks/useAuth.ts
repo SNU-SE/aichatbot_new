@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
-import { persistStudentToken } from './useSupabaseAuth';
+import { persistAuthToken } from './useSupabaseAuth';
 import { useToast } from '@/hooks/use-toast';
 
 interface AuthState {
@@ -159,7 +159,8 @@ export const useAuth = () => {
       localStorage.removeItem('userType');
       localStorage.removeItem('studentId');
       localStorage.removeItem('studentProfile');
-      persistStudentToken(null);
+      localStorage.removeItem('adminProfile');
+      persistAuthToken(null);
 
       toast({
         title: "로그아웃 완료",

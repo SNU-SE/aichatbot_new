@@ -21,6 +21,7 @@ interface ChatRequest {
   isTranslationRequest?: boolean;
   translationModel?: string;
   conversationHistory?: Array<{role: string; content: string}>;
+  clientMessageId?: string;
 }
 
 // UTF-8 안전한 해시 생성 함수
@@ -46,7 +47,7 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    const { message, studentId, activityId, fileUrl, fileName, fileType, motherTongue, isTranslationRequest, translationModel, conversationHistory } = await req.json() as ChatRequest;
+    const { message, studentId, activityId, fileUrl, fileName, fileType, motherTongue, isTranslationRequest, translationModel, conversationHistory, clientMessageId } = await req.json() as ChatRequest;
 
     console.log('AI Chat Request:', { 
       message: message?.substring(0, 100) + '...', 
@@ -284,24 +285,8 @@ Student question: ${message}`;
       timestamp: new Date().toISOString(),
     };
 
-    // 중복 체크 후 안전하게 저장
+    // AI 응답만 중복 체크 후 저장
     try {
-      // 학생 메시지 최근 중복 확인 (프런트에서 이미 저장했는지 확인)
-      const duplicateThreshold = new Date(Date.now() - 1000).toISOString();
-      const { data: existingStudentMessage } = await supabase
-        .from('chat_logs')
-        .select('id')
-        .eq('student_id', studentId)
-        .eq('activity_id', activityId)
-        .eq('sender', 'student')
-        .eq('message', message)
-        .gte('timestamp', duplicateThreshold)
-        .maybeSingle();
-
-      if (!existingStudentMessage) {
-        await supabase.from('chat_logs').insert([studentMessageData]);
-      }
-      
       // AI 응답 중복 체크 (메시지 내용과 최근 시간 기준)
       const { data: existingAiResponse } = await supabase
         .from('chat_logs')
