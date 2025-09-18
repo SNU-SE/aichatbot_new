@@ -24,6 +24,7 @@ const createLocalGeneralChatActivity = (): Activity => ({
   is_hidden: false,
   assignedClasses: [],
   allowAllClasses: true,
+  enable_peer_evaluation: true,
   documentCount: 0
 });
 
@@ -57,6 +58,7 @@ const buildGeneralChatActivity = (activity?: Activity | null): Activity => {
     is_hidden: false,
     assignedClasses: [],
     allowAllClasses: true,
+    enable_peer_evaluation: true,
     documentCount: 0
   };
 };
@@ -163,6 +165,7 @@ const ActivitySelection = ({ onActivitySelect, studentId }: ActivitySelectionPro
           is_hidden: activity.is_hidden,
           assignedClasses,
           allowAllClasses,
+          enable_peer_evaluation: activity.enable_peer_evaluation ?? true,
           documentCount: 0,
         } as Activity;
       });

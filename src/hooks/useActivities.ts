@@ -49,6 +49,7 @@ export const useActivities = () => {
           is_hidden: activity.is_hidden,
           assignedClasses,
           allowAllClasses,
+          enable_peer_evaluation: activity.enable_peer_evaluation ?? true,
           documentCount: documentCountMap[activity.id] || 0
         } as Activity;
       });

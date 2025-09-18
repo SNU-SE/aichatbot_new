@@ -74,6 +74,7 @@ const ChatInterface = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const messagesRef = useRef<Message[]>([]);
   const { toast } = useToast();
+  const peerEvaluationEnabled = activity.enable_peer_evaluation !== false;
 
   const updateMessages = useCallback((updater: (prev: Message[]) => Message[]) => {
     setMessages(prev => {
@@ -500,7 +501,7 @@ const ChatInterface = ({
   }, [argumentationContext?.activeTask, selectedFile]);
 
   const checkPeerEvaluationStatus = async () => {
-    if (!argumentationContext) return false;
+    if (!argumentationContext || !peerEvaluationEnabled) return false;
 
     try {
       // 현재 학생의 클래스 정보 가져오기
@@ -567,12 +568,14 @@ const ChatInterface = ({
   };
 
   const handlePeerEvaluationSubmit = async () => {
+    if (!peerEvaluationEnabled) return;
     if (argumentationContext) {
       await argumentationContext.submitPeerEvaluation();
     }
   };
 
   const handleEvaluationCheck = async () => {
+    if (!peerEvaluationEnabled) return;
     if (argumentationContext) {
       const hasEvaluations = await checkPeerEvaluationStatus();
       if (hasEvaluations) {
@@ -607,7 +610,11 @@ const ChatInterface = ({
       isSubmitted 
     } = argumentationContext;
 
-    if (activeTask === 'argument') {
+    const currentTask = !peerEvaluationEnabled && activeTask !== 'argument'
+      ? 'argument'
+      : activeTask;
+
+    if (currentTask === 'argument') {
       return (
         <Card className="mb-4">
           <CardHeader>
@@ -640,7 +647,7 @@ const ChatInterface = ({
       );
     }
 
-    if (activeTask === 'peer-evaluation') {
+    if (peerEvaluationEnabled && currentTask === 'peer-evaluation') {
       return (
         <Card className="mb-4">
           <CardHeader>
@@ -660,7 +667,7 @@ const ChatInterface = ({
       );
     }
 
-    if (activeTask === 'evaluation-check') {
+    if (peerEvaluationEnabled && currentTask === 'evaluation-check') {
       return (
         <Card className="mb-4">
           <CardHeader>

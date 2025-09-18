@@ -18,6 +18,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { activityDocumentService, ActivityDocumentRecord } from '@/services/activityDocumentService';
 import { documentProcessingService } from '@/services/documentProcessingService';
 import { permissionService } from '@/services/permissionService';
+import { Switch } from '@/components/ui/switch';
 
 interface ActivityFormProps {
   editingActivity: Activity | null;
@@ -49,7 +50,8 @@ const ActivityForm = ({
     final_question: editingActivity?.final_question || '',
     modules_count: editingActivity?.modules_count || 1,
     assignedClasses: editingActivity?.assignedClasses || [],
-    allowAllClasses: initialAllowAll
+    allowAllClasses: initialAllowAll,
+    enable_peer_evaluation: editingActivity?.enable_peer_evaluation ?? true
   });
 
   const [classScope, setClassScope] = useState<'all' | 'selected'>(initialAllowAll ? 'all' : 'selected');
@@ -68,94 +70,6 @@ const ActivityForm = ({
   const [checklist, setChecklist] = useState<ChecklistItem[]>([
     { step_number: 1, description: '' }
   ]);
-
-  useEffect(() => {
-    const fetchClasses = async () => {
-      setLoadingClasses(true);
-      try {
-        const { data, error } = await supabase
-          .from('students')
-          .select('class_name')
-          .order('class_name');
-
-        if (error) throw error;
-
-        const classes = Array.from(
-          new Set(
-            (data || [])
-              .map((item) => item.class_name)
-              .filter((className): className is string => Boolean(className))
-          )
-        );
-
-        setAvailableClasses(classes);
-      } catch (error) {
-        console.error('클래스 목록 로드 오류:', error);
-        toast({
-          title: "오류",
-          description: "클래스 목록을 불러오는데 실패했습니다.",
-          variant: "destructive"
-        });
-      } finally {
-        setLoadingClasses(false);
-      }
-    };
-
-    fetchClasses();
-  }, [toast]);
-
-  useEffect(() => {
-    setFormData({
-      title: editingActivity?.title || '',
-      type: editingActivity?.type || 'experiment',
-      final_question: editingActivity?.final_question || '',
-      modules_count: editingActivity?.modules_count || 1,
-      assignedClasses: editingActivity?.assignedClasses || [],
-      allowAllClasses: editingActivity?.allowAllClasses ?? true
-    });
-
-    setClassScope(editingActivity?.allowAllClasses === false ? 'selected' : 'all');
-    setSelectedClasses(editingActivity?.assignedClasses || []);
-  }, [editingActivity]);
-
-  // 기존 활동 데이터 로드
-  useEffect(() => {
-    if (editingActivity) {
-      loadActivityData(editingActivity.id);
-    }
-  }, [editingActivity]);
-
-  useEffect(() => {
-    if (editingActivity?.id) {
-      loadActivityDocuments(editingActivity.id);
-    } else {
-      setActivityDocuments([]);
-      setPendingUploads([]);
-    }
-  }, [editingActivity, loadActivityDocuments]);
-
-  const handleClassScopeChange = (value: 'all' | 'selected') => {
-    setClassScope(value);
-
-    if (value === 'all') {
-      setSelectedClasses([]);
-      setFormData((prev) => ({ ...prev, allowAllClasses: true, assignedClasses: [] }));
-    } else {
-      setFormData((prev) => ({ ...prev, allowAllClasses: false, assignedClasses: selectedClasses }));
-    }
-  };
-
-  const handleClassSelectionChange = (className: string, checked: boolean) => {
-    setSelectedClasses((prev) => {
-      const updated = checked
-        ? Array.from(new Set([...prev, className]))
-        : prev.filter((name) => name !== className);
-
-      setFormData((current) => ({ ...current, assignedClasses: updated }));
-
-      return updated;
-    });
-  };
 
   const loadActivityData = async (activityId: string) => {
     try {
@@ -232,6 +146,95 @@ const ActivityForm = ({
       setLoadingDocuments(false);
     }
   }, [toast]);
+
+  useEffect(() => {
+    const fetchClasses = async () => {
+      setLoadingClasses(true);
+      try {
+        const { data, error } = await supabase
+          .from('students')
+          .select('class_name')
+          .order('class_name');
+
+        if (error) throw error;
+
+        const classes = Array.from(
+          new Set(
+            (data || [])
+              .map((item) => item.class_name)
+              .filter((className): className is string => Boolean(className))
+          )
+        );
+
+        setAvailableClasses(classes);
+      } catch (error) {
+        console.error('클래스 목록 로드 오류:', error);
+        toast({
+          title: "오류",
+          description: "클래스 목록을 불러오는데 실패했습니다.",
+          variant: "destructive"
+        });
+      } finally {
+        setLoadingClasses(false);
+      }
+    };
+
+    fetchClasses();
+  }, [toast]);
+
+  useEffect(() => {
+    setFormData({
+      title: editingActivity?.title || '',
+      type: editingActivity?.type || 'experiment',
+      final_question: editingActivity?.final_question || '',
+      modules_count: editingActivity?.modules_count || 1,
+      assignedClasses: editingActivity?.assignedClasses || [],
+      allowAllClasses: editingActivity?.allowAllClasses ?? true,
+      enable_peer_evaluation: editingActivity?.enable_peer_evaluation ?? true
+    });
+
+    setClassScope(editingActivity?.allowAllClasses === false ? 'selected' : 'all');
+    setSelectedClasses(editingActivity?.assignedClasses || []);
+  }, [editingActivity]);
+
+  // 기존 활동 데이터 로드
+  useEffect(() => {
+    if (editingActivity) {
+      loadActivityData(editingActivity.id);
+    }
+  }, [editingActivity]);
+
+  useEffect(() => {
+    if (editingActivity?.id) {
+      loadActivityDocuments(editingActivity.id);
+    } else {
+      setActivityDocuments([]);
+      setPendingUploads([]);
+    }
+  }, [editingActivity, loadActivityDocuments]);
+
+  const handleClassScopeChange = (value: 'all' | 'selected') => {
+    setClassScope(value);
+
+    if (value === 'all') {
+      setSelectedClasses([]);
+      setFormData((prev) => ({ ...prev, allowAllClasses: true, assignedClasses: [] }));
+    } else {
+      setFormData((prev) => ({ ...prev, allowAllClasses: false, assignedClasses: selectedClasses }));
+    }
+  };
+
+  const handleClassSelectionChange = (className: string, checked: boolean) => {
+    setSelectedClasses((prev) => {
+      const updated = checked
+        ? Array.from(new Set([...prev, className]))
+        : prev.filter((name) => name !== className);
+
+      setFormData((current) => ({ ...current, assignedClasses: updated }));
+
+      return updated;
+    });
+  };
 
   const handlePendingFileSelection = (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -361,7 +364,8 @@ const ActivityForm = ({
         type: formData.type,
         content: {},
         final_question: formData.type === 'argumentation' ? formData.final_question : null,
-        modules_count: formData.type === 'experiment' ? modules.length : null
+        modules_count: formData.type === 'experiment' ? modules.length : null,
+        enable_peer_evaluation: formData.type === 'argumentation' ? formData.enable_peer_evaluation : false
       };
 
       let activityId: string;
@@ -474,7 +478,17 @@ const ActivityForm = ({
             </div>
             <div>
               <Label htmlFor="type">활동 유형</Label>
-              <Select value={formData.type} onValueChange={(value) => setFormData({...formData, type: value})}>
+              <Select
+                value={formData.type}
+                onValueChange={(value) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    type: value,
+                    final_question: value === 'argumentation' ? prev.final_question : '',
+                    enable_peer_evaluation: value === 'argumentation' ? prev.enable_peer_evaluation : false
+                  }))
+                }
+              >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -675,7 +689,25 @@ const ActivityForm = ({
           </div>
 
           {formData.type === 'argumentation' && (
-            <div>
+            <div className="space-y-4">
+              <div className="flex items-start justify-between rounded-md border p-4">
+                <div>
+                  <Label htmlFor="enable_peer_evaluation" className="text-sm font-medium">
+                    동료평가 활성화
+                  </Label>
+                  <p className="mt-1 text-xs text-gray-500">
+                    토글을 끄면 학생들은 논증 입력만 진행하며 동료평가 단계는 숨겨집니다.
+                  </p>
+                </div>
+                <Switch
+                  id="enable_peer_evaluation"
+                  checked={formData.enable_peer_evaluation}
+                  onCheckedChange={(checked) =>
+                    setFormData((prev) => ({ ...prev, enable_peer_evaluation: checked }))
+                  }
+                  aria-label="동료평가 활성화"
+                />
+              </div>
               <Label htmlFor="final_question">최종 질문</Label>
               <Textarea
                 id="final_question"

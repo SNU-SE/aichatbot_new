@@ -10,6 +10,7 @@ export interface Activity {
   is_hidden?: boolean;
   assignedClasses?: string[];
   allowAllClasses?: boolean;
+  enable_peer_evaluation: boolean;
   documentCount?: number;
 }
 
@@ -34,4 +35,5 @@ export interface ActivityFormData {
   modules_count: number;
   assignedClasses: string[];
   allowAllClasses: boolean;
+  enable_peer_evaluation: boolean;
 }

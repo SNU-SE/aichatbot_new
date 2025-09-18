@@ -66,10 +66,41 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
   const [evaluationsPerStudent, setEvaluationsPerStudent] = useState(2);
   const [groupOffset, setGroupOffset] = useState(1);
   const { toast } = useToast();
+  const [peerEvaluationEnabled, setPeerEvaluationEnabled] = useState(true);
+  const [activitySettingsLoading, setActivitySettingsLoading] = useState(true);
 
   useEffect(() => {
     fetchEvaluationData();
   }, [selectedActivity, selectedClass]);
+
+  useEffect(() => {
+    if (selectedActivity === 'all') {
+      setPeerEvaluationEnabled(true);
+      setActivitySettingsLoading(false);
+      return;
+    }
+
+    const loadActivitySettings = async () => {
+      setActivitySettingsLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('activities')
+          .select('enable_peer_evaluation')
+          .eq('id', selectedActivity)
+          .single();
+
+        if (error) throw error;
+        setPeerEvaluationEnabled(data?.enable_peer_evaluation !== false);
+      } catch (error) {
+        console.error('활동 설정 로드 오류:', error);
+        setPeerEvaluationEnabled(true);
+      } finally {
+        setActivitySettingsLoading(false);
+      }
+    };
+
+    loadActivitySettings();
+  }, [selectedActivity]);
 
   // 실시간 동료평가 상태 동기화
   useEffect(() => {
@@ -203,6 +234,15 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
       return;
     }
 
+    if (!peerEvaluationEnabled) {
+      toast({
+        title: "동료평가 비활성화",
+        description: "이 활동에서는 동료평가가 꺼져 있습니다. 활동 편집에서 동료평가를 활성화한 후 다시 시도해주세요.",
+        variant: "destructive"
+      });
+      return;
+    }
+
     setAssigning(true);
     try {
       // 클래스별 배정을 위해 클래스 정보를 함수에 전달
@@ -244,6 +284,15 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
       toast({
         title: "알림",
         description: `특정 배정을 진행하려면 최소 ${evaluationsPerStudent + 1}명 이상의 학생이 논증을 제출해야 합니다.`,
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (!peerEvaluationEnabled) {
+      toast({
+        title: "동료평가 비활성화",
+        description: "이 활동에서는 동료평가가 꺼져 있습니다.",
         variant: "destructive"
       });
       return;
@@ -385,6 +434,15 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
       return;
     }
 
+    if (!peerEvaluationEnabled) {
+      toast({
+        title: "동료평가 비활성화",
+        description: "이 활동에서는 동료평가가 꺼져 있습니다.",
+        variant: "destructive"
+      });
+      return;
+    }
+
     setCompleting(true);
     try {
       // 각 클래스별로 평가완료 단계 업데이트
@@ -430,7 +488,7 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
     );
   }
 
-  if (loading) {
+  if (loading || activitySettingsLoading) {
     return <div className="flex justify-center py-8">로딩 중...</div>;
   }
 
@@ -467,6 +525,16 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
           </CardTitle>
         </CardHeader>
         <CardContent>
+          {!peerEvaluationEnabled && (
+            <div className="flex items-start space-x-2 p-3 mb-6 rounded-md border border-yellow-200 bg-yellow-50">
+              <AlertCircle className="h-4 w-4 text-yellow-600 mt-0.5" />
+              <div className="text-sm text-yellow-700">
+                <p>이 활동에서는 동료평가가 비활성화되어 있습니다.</p>
+                <p>학생 배정, 결과 공개 등의 작업은 동료평가를 다시 켠 뒤에만 수행할 수 있습니다.</p>
+              </div>
+            </div>
+          )}
+
           {/* 클래스별 통계 */}
           {filteredClassStats.length > 0 && (
             <div className="mb-6">
@@ -535,7 +603,7 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
             <div className="md:col-span-2 flex items-end space-x-2">
               <Button
                 onClick={handleRandomAssign}
-                disabled={assigning || totalSubmitted < 2}
+                disabled={assigning || totalSubmitted < 2 || !peerEvaluationEnabled}
                 className="flex items-center space-x-2"
               >
                 <Shuffle className="h-4 w-4" />
@@ -544,7 +612,7 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
               
               <Button
                 onClick={handleSpecificAssign}
-                disabled={assigning || totalSubmitted < (evaluationsPerStudent + 1)}
+                disabled={assigning || totalSubmitted < (evaluationsPerStudent + 1) || !peerEvaluationEnabled}
                 variant="secondary"
                 className="flex items-center space-x-2"
               >
@@ -564,7 +632,7 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
               
               <Button
                 onClick={handleCompleteEvaluations}
-                disabled={completing}
+                disabled={completing || !peerEvaluationEnabled}
                 variant="outline"
                 className="flex items-center space-x-2"
               >

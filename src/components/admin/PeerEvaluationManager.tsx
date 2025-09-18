@@ -40,9 +40,36 @@ const PeerEvaluationManager = ({ activityId, activityTitle }: PeerEvaluationMana
   const [selectedClass, setSelectedClass] = useState<string>('');
   const [availableClasses, setAvailableClasses] = useState<string[]>([]);
   const { toast } = useToast();
+  const [peerEvaluationEnabled, setPeerEvaluationEnabled] = useState(true);
+  const [activitySettingsLoading, setActivitySettingsLoading] = useState(true);
 
   useEffect(() => {
     fetchAvailableClasses();
+  }, [activityId]);
+
+  useEffect(() => {
+    const loadActivitySettings = async () => {
+      setActivitySettingsLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('activities')
+          .select('enable_peer_evaluation')
+          .eq('id', activityId)
+          .single();
+
+        if (error) throw error;
+        setPeerEvaluationEnabled(data?.enable_peer_evaluation !== false);
+      } catch (error) {
+        console.error('활동 설정 로드 오류:', error);
+        setPeerEvaluationEnabled(true);
+      } finally {
+        setActivitySettingsLoading(false);
+      }
+    };
+
+    if (activityId) {
+      loadActivitySettings();
+    }
   }, [activityId]);
 
   useEffect(() => {
@@ -157,6 +184,15 @@ const PeerEvaluationManager = ({ activityId, activityTitle }: PeerEvaluationMana
       return;
     }
 
+    if (!peerEvaluationEnabled) {
+      toast({
+        title: "동료평가 비활성화",
+        description: "이 활동에서는 동료평가가 꺼져 있습니다. 활동 편집에서 동료평가를 활성화한 후 다시 시도해주세요.",
+        variant: "destructive"
+      });
+      return;
+    }
+
     setAssigning(true);
     try {
       const { data, error } = await supabase
@@ -212,6 +248,15 @@ const PeerEvaluationManager = ({ activityId, activityTitle }: PeerEvaluationMana
       return;
     }
 
+    if (!peerEvaluationEnabled) {
+      toast({
+        title: "동료평가 비활성화",
+        description: "이 활동에서는 동료평가가 꺼져 있습니다.",
+        variant: "destructive"
+      });
+      return;
+    }
+
     setCompleting(true);
     try {
       // 평가 완료 단계로 업데이트 (학생들이 결과를 확인할 수 있게 됨)
@@ -242,7 +287,7 @@ const PeerEvaluationManager = ({ activityId, activityTitle }: PeerEvaluationMana
     }
   };
 
-  if (loading && availableClasses.length === 0) {
+  if ((loading && availableClasses.length === 0) || activitySettingsLoading) {
     return <div className="flex justify-center py-8">로딩 중...</div>;
   }
 
@@ -276,6 +321,16 @@ const PeerEvaluationManager = ({ activityId, activityTitle }: PeerEvaluationMana
           </CardTitle>
         </CardHeader>
         <CardContent>
+          {!peerEvaluationEnabled && (
+            <div className="flex items-start space-x-2 p-3 mb-6 rounded-md border border-yellow-200 bg-yellow-50">
+              <AlertCircle className="h-4 w-4 text-yellow-600 mt-0.5" />
+              <div className="text-sm text-yellow-700">
+                <p>이 활동에서는 동료평가가 비활성화되어 있습니다.</p>
+                <p>활동 편집에서 동료평가를 다시 활성화해야 학생 배정과 결과 공개를 진행할 수 있습니다.</p>
+              </div>
+            </div>
+          )}
+
           {selectedClass && stats && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
               <div className="text-center">
@@ -301,7 +356,7 @@ const PeerEvaluationManager = ({ activityId, activityTitle }: PeerEvaluationMana
             <div className="flex space-x-2 mb-6">
               <Button
                 onClick={handleAssignEvaluations}
-                disabled={assigning || !stats?.submitted_responses || stats.submitted_responses < 2}
+                disabled={assigning || !stats?.submitted_responses || stats.submitted_responses < 2 || !peerEvaluationEnabled}
                 className="flex items-center space-x-2"
               >
                 <Shuffle className="h-4 w-4" />
@@ -310,7 +365,7 @@ const PeerEvaluationManager = ({ activityId, activityTitle }: PeerEvaluationMana
               
               <Button
                 onClick={handleCompleteEvaluations}
-                disabled={completing || !stats?.completed_evaluations}
+                disabled={completing || !stats?.completed_evaluations || !peerEvaluationEnabled}
                 variant="secondary"
                 className="flex items-center space-x-2"
               >

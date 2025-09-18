@@ -117,7 +117,19 @@ const ActivityList = ({ activities, onEdit, onDeleteSuccess }: ActivityListProps
               {activitiesWithCounts.map((activity) => (
                 <TableRow key={activity.id}>
                   <TableCell className="font-medium">{activity.title}</TableCell>
-                  <TableCell>{getTypeLabel(activity.type)}</TableCell>
+                  <TableCell>
+                    <div className="flex flex-col gap-1">
+                      <span>{getTypeLabel(activity.type)}</span>
+                      {activity.type === 'argumentation' && (
+                        <Badge
+                          variant={activity.enable_peer_evaluation ? 'secondary' : 'outline'}
+                          className="w-fit text-xs"
+                        >
+                          {activity.enable_peer_evaluation ? '동료평가 ON' : '동료평가 OFF'}
+                        </Badge>
+                      )}
+                    </div>
+                  </TableCell>
                   <TableCell>
                     {activity.allowAllClasses !== false || !activity.assignedClasses?.length ? (
                       <Badge variant="secondary">전체</Badge>

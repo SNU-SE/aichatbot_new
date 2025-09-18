@@ -46,6 +46,7 @@ export type Database = {
           file_url: string | null
           final_question: string | null
           id: string
+          enable_peer_evaluation: boolean
           is_hidden: boolean
           modules_count: number | null
           title: string
@@ -58,6 +59,7 @@ export type Database = {
           file_url?: string | null
           final_question?: string | null
           id?: string
+          enable_peer_evaluation?: boolean
           is_hidden?: boolean
           modules_count?: number | null
           title: string
@@ -70,6 +72,7 @@ export type Database = {
           file_url?: string | null
           final_question?: string | null
           id?: string
+          enable_peer_evaluation?: boolean
           is_hidden?: boolean
           modules_count?: number | null
           title?: string

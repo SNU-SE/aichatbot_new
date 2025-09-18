@@ -41,6 +41,7 @@ const ArgumentationActivity = ({
     studentId, 
     activityId: activity.id 
   });
+  const peerEvaluationEnabled = activity.enable_peer_evaluation !== false;
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -51,17 +52,23 @@ const ArgumentationActivity = ({
     if (loadDraft) {
       loadSavedDraft();
     }
+
+    if (!peerEvaluationEnabled) {
+      setEvaluationCheckEnabled(false);
+      return;
+    }
+
     // 평가 가능 여부 확인
     checkEvaluationAvailability();
     
     // 30초마다 평가 가능 여부 재확인
     const interval = setInterval(checkEvaluationAvailability, 30000);
     return () => clearInterval(interval);
-  }, [activity.id, studentId]);
+  }, [activity.id, studentId, peerEvaluationEnabled]);
 
   // 실시간 동료평가 상태 동기화
   useEffect(() => {
-    if (activity.type !== 'argumentation') return;
+    if (activity.type !== 'argumentation' || !peerEvaluationEnabled) return;
 
     const channel = supabase
       .channel('peer_evaluations_realtime')
@@ -90,7 +97,7 @@ const ArgumentationActivity = ({
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [activity.id, studentId]);
+  }, [activity.id, studentId, peerEvaluationEnabled]);
 
   const checkSubmissionStatus = async () => {
     try {
@@ -129,6 +136,10 @@ const ArgumentationActivity = ({
   };
 
   const checkEvaluationAvailability = async () => {
+    if (!peerEvaluationEnabled) {
+      setEvaluationCheckEnabled(false);
+      return;
+    }
     try {
       // 현재 학생의 클래스 정보 가져오기
       const { data: studentData, error: studentError } = await supabase
@@ -257,6 +268,9 @@ const ArgumentationActivity = ({
   const [isSubmittingEvaluation, setIsSubmittingEvaluation] = useState(false);
 
   const submitPeerEvaluation = async () => {
+    if (!peerEvaluationEnabled) {
+      return;
+    }
     if (!evaluationText.trim()) {
       toast({
         title: "오류",
@@ -346,6 +360,9 @@ const ArgumentationActivity = ({
   };
 
   const submitReflection = async () => {
+    if (!peerEvaluationEnabled) {
+      return;
+    }
     try {
       // evaluation_reflections 테이블에 성찰 및 유용성 평가 저장
       if (reflectionText.trim()) {
@@ -419,7 +436,8 @@ const ArgumentationActivity = ({
     isSubmitted,
     submitArgument,
     submitPeerEvaluation,
-    submitReflection
+    submitReflection,
+    peerEvaluationEnabled
   };
 
   if (loading) {
@@ -493,24 +511,27 @@ const ArgumentationActivity = ({
               논증 입력
             </Button>
             
-            <Button
-              onClick={() => setActiveTask('peer-evaluation')}
-              className="w-full bg-green-600 hover:bg-green-700"
-              disabled={!isSubmitted}
-            >
-              동료 평가
-            </Button>
-            
-            <Button
-              onClick={() => setActiveTask('evaluation-check')}
-              className="w-full bg-purple-600 hover:bg-purple-700"
-              disabled={!isSubmitted || !evaluationCheckEnabled}
-            >
-              결과 확인
-              {!evaluationCheckEnabled && isSubmitted && (
-                <span className="ml-2 text-xs">(대기중)</span>
-              )}
-            </Button>
+            {peerEvaluationEnabled && (
+              <>
+                <Button
+                  onClick={() => setActiveTask('peer-evaluation')}
+                  className="w-full bg-green-600 hover:bg-green-700"
+                  disabled={!isSubmitted}
+                >
+                  동료 평가
+                </Button>
+                <Button
+                  onClick={() => setActiveTask('evaluation-check')}
+                  className="w-full bg-purple-600 hover:bg-purple-700"
+                  disabled={!isSubmitted || !evaluationCheckEnabled}
+                >
+                  결과 확인
+                  {!evaluationCheckEnabled && isSubmitted && (
+                    <span className="ml-2 text-xs">(대기중)</span>
+                  )}
+                </Button>
+              </>
+            )}
           </div>
         </div>
       </div>
