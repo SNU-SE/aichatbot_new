@@ -44,7 +44,11 @@ const PeerEvaluationCancellationDialog = ({
         .update({
           is_completed: false,
           evaluation_text: null,
-          submitted_at: null
+          submitted_at: null,
+          status: 'pending',
+          locked_at: null,
+          return_reason: null,
+          returned_at: null
         })
         .eq('evaluator_id', studentId)
         .eq('activity_id', activityId);

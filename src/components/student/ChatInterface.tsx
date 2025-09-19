@@ -598,17 +598,20 @@ const ChatInterface = ({
       activeTask, 
       argumentText, 
       setArgumentText,
-      evaluationText,
-      setEvaluationText,
       reflectionText,
       setReflectionText,
       finalRevisedArgument,
       setFinalRevisedArgument,
       usefulnessRating,
       setUsefulnessRating,
-      peerResponse,
       peerEvaluations,
-      isSubmitted 
+      peerAssignments,
+      peerAssignmentsLoading,
+      peerEvaluationLocked,
+      updatePeerAssignmentDraft,
+      isSubmittingEvaluation,
+      isSubmitted,
+      peerPhaseActive
     } = argumentationContext;
 
     const currentTask = !peerEvaluationEnabled && activeTask !== 'argument'
@@ -649,15 +652,108 @@ const ChatInterface = ({
     }
 
     if (peerEvaluationEnabled && currentTask === 'peer-evaluation') {
+      const editableAssignments = (peerAssignments || []).filter(
+        (assignment: any) => assignment.status === 'pending' || assignment.status === 'returned'
+      );
+      const allEditableFilled = editableAssignments.length > 0 && editableAssignments.every((assignment: any) => assignment.draftText.trim());
+
       return (
         <Card className="mb-4">
           <CardHeader>
             <CardTitle className="text-lg">동료 평가</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-sm text-gray-600">
-              동료평가가 활성화되었습니다. AI에게 평가 방법을 요청하거나 질문을 통해 평가를 진행해보세요.
-            </p>
+          <CardContent className="space-y-6">
+            {peerAssignmentsLoading ? (
+              <div className="text-center py-8 text-gray-500">동료평가를 불러오는 중입니다...</div>
+            ) : peerAssignments && peerAssignments.length > 0 ? (
+              <>
+                <div className="text-sm text-gray-600">
+                  배정된 친구의 응답을 확인한 뒤 피드백을 작성해주세요. 한 번 제출하면 관리자 반환 전까지 수정할 수 없습니다.
+                </div>
+                <div className="space-y-5">
+                  {peerAssignments.map((assignment: any, index: number) => {
+                    const canEdit = assignment.status === 'pending' || assignment.status === 'returned';
+                    const statusLabel = assignment.status === 'submitted'
+                      ? '제출 완료'
+                      : assignment.status === 'returned'
+                      ? '반환됨'
+                      : '작성 필요';
+                    const statusClasses = assignment.status === 'submitted'
+                      ? 'border-green-200 text-green-700 bg-green-50'
+                      : assignment.status === 'returned'
+                      ? 'border-red-200 text-red-700 bg-red-50'
+                      : 'border-gray-300 text-gray-600 bg-gray-50';
+
+                    return (
+                      <div key={assignment.id} className="border rounded-lg bg-gray-50/70 p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="font-medium text-sm sm:text-base">{`${index + 1}번 친구 응답`}</div>
+                          <Badge variant="outline" className={`text-xs ${statusClasses}`}>{statusLabel}</Badge>
+                        </div>
+                        <div className="rounded-md border bg-white p-3 text-sm leading-relaxed whitespace-pre-wrap">
+                          {assignment.responseText || '응답이 아직 등록되지 않았습니다.'}
+                        </div>
+                        {assignment.status === 'returned' && (
+                          <div className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-md p-2">
+                            {assignment.returnReason
+                              ? `반환 사유: ${assignment.returnReason}`
+                              : '관리자가 수정을 요청했습니다. 내용을 확인하고 다시 작성해주세요.'}
+                          </div>
+                        )}
+                        <div>
+                          <label className="block text-sm font-medium mb-2">피드백</label>
+                          <Textarea
+                            value={assignment.draftText}
+                            onChange={(e) => updatePeerAssignmentDraft(assignment.id, e.target.value)}
+                            placeholder="친구의 논증에 대해 피드백을 작성하세요..."
+                            className="min-h-[130px]"
+                            disabled={!canEdit}
+                          />
+                          {!canEdit && (
+                            <p className="text-xs text-gray-500 mt-2">이미 제출한 평가입니다. 관리자가 반환하면 다시 수정할 수 있습니다.</p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {peerEvaluationLocked ? (
+                  <div className="mt-4 rounded-md bg-green-50 text-green-700 text-sm px-4 py-3 flex items-center space-x-2">
+                    <Check className="h-4 w-4" />
+                    <span>동료평가가 제출되었습니다. 관리자가 반환하면 다시 작성할 수 있습니다.</span>
+                  </div>
+                ) : editableAssignments.length > 0 ? (
+                  <div className="pt-4 border-t flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <p className="text-sm text-gray-600">모든 친구의 피드백을 작성한 뒤 제출 버튼을 눌러주세요.</p>
+                    <Button
+                      onClick={handlePeerEvaluationSubmit}
+                      disabled={!allEditableFilled || isSubmittingEvaluation}
+                    >
+                      {isSubmittingEvaluation ? '제출 중...' : '저장 및 전송'}
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="mt-4 rounded-md bg-yellow-50 text-yellow-700 text-sm px-4 py-3">
+                    모든 평가가 완료되었습니다. 추가 지시가 있을 때까지 기다려주세요.
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                {peerPhaseActive ? (
+                  <>
+                    <p>평가할 응답이 아직 준비되지 않았습니다.</p>
+                    <p className="text-sm mt-2">잠시 후 다시 시도하거나 새로고침 해주세요.</p>
+                  </>
+                ) : (
+                  <>
+                    <p>현재 할당된 동료평가가 없습니다.</p>
+                    <p className="text-sm mt-2">교사가 배정을 완료하면 이곳에서 친구의 응답을 확인할 수 있습니다.</p>
+                  </>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
       );

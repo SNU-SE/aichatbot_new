@@ -790,6 +790,10 @@ export type Database = {
           evaluator_id: string
           id: string
           is_completed: boolean | null
+          locked_at: string | null
+          return_reason: string | null
+          returned_at: string | null
+          status: 'pending' | 'submitted' | 'returned'
           submitted_at: string | null
           target_response_id: string
         }
@@ -800,6 +804,10 @@ export type Database = {
           evaluator_id: string
           id?: string
           is_completed?: boolean | null
+          locked_at?: string | null
+          return_reason?: string | null
+          returned_at?: string | null
+          status?: 'pending' | 'submitted' | 'returned'
           submitted_at?: string | null
           target_response_id: string
         }
@@ -810,6 +818,10 @@ export type Database = {
           evaluator_id?: string
           id?: string
           is_completed?: boolean | null
+          locked_at?: string | null
+          return_reason?: string | null
+          returned_at?: string | null
+          status?: 'pending' | 'submitted' | 'returned'
           submitted_at?: string | null
           target_response_id?: string
         }

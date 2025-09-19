@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -18,6 +18,19 @@ interface ArgumentationActivityProps {
   loadDraft?: (studentId: string, activityId: string, workType: string) => Promise<any>;
 }
 
+interface PeerAssignment {
+  id: string;
+  label: string;
+  responseText: string;
+  draftText: string;
+  status: 'pending' | 'submitted' | 'returned';
+  returnReason: string | null;
+  submittedAt: string | null;
+  returnedAt: string | null;
+  lockedAt: string | null;
+}
+
+
 const ArgumentationActivity = ({ 
   activity, 
   studentId, 
@@ -29,7 +42,6 @@ const ArgumentationActivity = ({
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [activeTask, setActiveTask] = useState<'none' | 'argument' | 'peer-evaluation' | 'evaluation-check'>('none');
-  const [evaluationText, setEvaluationText] = useState('');
   const [reflectionText, setReflectionText] = useState('');
   const [finalRevisedArgument, setFinalRevisedArgument] = useState('');
   const [usefulnessRating, setUsefulnessRating] = useState(1);
@@ -37,13 +49,79 @@ const ArgumentationActivity = ({
   const [peerEvaluations, setPeerEvaluations] = useState<any[]>([]);
   const [evaluationCheckEnabled, setEvaluationCheckEnabled] = useState(false);
   const [peerAssignmentReady, setPeerAssignmentReady] = useState(false);
+  const [peerAssignments, setPeerAssignments] = useState<PeerAssignment[]>([]);
+  const [peerAssignmentsLoading, setPeerAssignmentsLoading] = useState(false);
+  const [peerEvaluationLocked, setPeerEvaluationLocked] = useState(false);
+  const [peerPhaseActive, setPeerPhaseActive] = useState(false);
   const { toast } = useToast();
   const { items, loading, toggleItem } = useChecklistProgress({ 
     studentId, 
     activityId: activity.id 
   });
   const peerEvaluationEnabled = activity.enable_peer_evaluation !== false;
-  const peerEvaluationAvailable = peerEvaluationEnabled && peerAssignmentReady;
+  const peerEvaluationAvailable = peerEvaluationEnabled && peerAssignmentReady && !peerEvaluationLocked;
+
+  const loadPeerAssignments = useCallback(async () => {
+    if (!peerEvaluationEnabled) {
+      return;
+    }
+
+    setPeerAssignmentsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('peer_evaluations')
+        .select(`
+          id,
+          evaluation_text,
+          status,
+          is_completed,
+          submitted_at,
+          locked_at,
+          return_reason,
+          returned_at,
+          target_response:argumentation_responses!peer_evaluations_target_response_id_fkey(
+            id,
+            response_text
+          )
+        `)
+        .eq('activity_id', activity.id)
+        .eq('evaluator_id', studentId)
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+
+      const assignments: PeerAssignment[] = (data || []).map((item: any, index: number) => {
+        const rawStatus = (item.status ?? (item.is_completed ? 'submitted' : 'pending')) as string;
+        const normalizedStatus: 'pending' | 'submitted' | 'returned' =
+          rawStatus === 'returned' ? 'returned' : rawStatus === 'submitted' ? 'submitted' : 'pending';
+
+        return {
+          id: item.id,
+          label: `${index + 1}번 친구 응답`,
+          responseText: item.target_response?.response_text || '',
+          draftText: item.evaluation_text || '',
+          status: normalizedStatus,
+          returnReason: item.return_reason || null,
+          submittedAt: item.submitted_at || null,
+          returnedAt: item.returned_at || null,
+          lockedAt: item.locked_at || null
+        };
+      });
+
+      const hasEditable = assignments.some((item) => item.status === 'pending' || item.status === 'returned');
+
+      setPeerAssignments(assignments);
+      setPeerAssignmentReady(hasEditable);
+      setPeerEvaluationLocked(!hasEditable && assignments.length > 0);
+    } catch (error) {
+      console.error('배정된 동료평가 로드 오류:', error);
+      setPeerAssignments([]);
+      setPeerAssignmentReady(false);
+      setPeerEvaluationLocked(false);
+    } finally {
+      setPeerAssignmentsLoading(false);
+    }
+  }, [activity.id, peerEvaluationEnabled, studentId]);
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -58,6 +136,9 @@ const ArgumentationActivity = ({
     if (!peerEvaluationEnabled) {
       setPeerAssignmentReady(false);
       setEvaluationCheckEnabled(false);
+      setPeerAssignments([]);
+      setPeerEvaluationLocked(false);
+      setPeerPhaseActive(false);
       return;
     }
 
@@ -68,6 +149,14 @@ const ArgumentationActivity = ({
     const interval = setInterval(checkEvaluationAvailability, 30000);
     return () => clearInterval(interval);
   }, [activity.id, studentId, peerEvaluationEnabled]);
+
+  useEffect(() => {
+    if (!peerEvaluationEnabled || !peerPhaseActive) {
+      return;
+    }
+
+    loadPeerAssignments();
+  }, [loadPeerAssignments, peerEvaluationEnabled, peerPhaseActive]);
 
   // 실시간 동료평가 상태 동기화
   useEffect(() => {
@@ -86,9 +175,8 @@ const ArgumentationActivity = ({
         (payload) => {
           console.log('동료평가 실시간 업데이트:', payload);
           
-          // 현재 학생의 평가가 업데이트된 경우 또는 받은 평가가 업데이트된 경우
           if (payload.new?.evaluator_id === studentId) {
-            // 평가를 완료한 경우 화면 새로고침
+            loadPeerAssignments();
             if (payload.new?.is_completed) {
               setActiveTask('none');
             }
@@ -100,7 +188,7 @@ const ArgumentationActivity = ({
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [activity.id, studentId, peerEvaluationEnabled]);
+  }, [activity.id, loadPeerAssignments, peerEvaluationEnabled, studentId]);
 
   const checkSubmissionStatus = async () => {
     try {
@@ -142,6 +230,9 @@ const ArgumentationActivity = ({
     if (!peerEvaluationEnabled) {
       setPeerAssignmentReady(false);
       setEvaluationCheckEnabled(false);
+      setPeerAssignments([]);
+      setPeerEvaluationLocked(false);
+      setPeerPhaseActive(false);
       return;
     }
     try {
@@ -185,12 +276,25 @@ const ArgumentationActivity = ({
       }
 
       const phaseValue = phaseRecord?.phase;
-      const hasAssignment = phaseValue === 'peer-evaluation' || phaseValue === 'evaluation-check';
-      setPeerAssignmentReady(hasAssignment);
+      const phaseAllowsEvaluation = phaseValue === 'peer-evaluation';
+
+      setPeerPhaseActive(phaseAllowsEvaluation);
+
+      if (!phaseAllowsEvaluation) {
+        setPeerAssignments([]);
+        setPeerAssignmentReady(false);
+        setPeerEvaluationLocked(phaseValue === 'evaluation-check');
+        return;
+      }
+
+      await loadPeerAssignments();
     } catch (error) {
       console.error('평가 가능 여부 확인 오류:', error);
       setEvaluationCheckEnabled(false);
       setPeerAssignmentReady(false);
+      setPeerAssignments([]);
+      setPeerEvaluationLocked(false);
+      setPeerPhaseActive(false);
     }
   };
 
@@ -296,85 +400,81 @@ const ArgumentationActivity = ({
   const [isSubmittingEvaluation, setIsSubmittingEvaluation] = useState(false);
 
   const submitPeerEvaluation = async () => {
-    if (!peerEvaluationAvailable) {
+    if (!peerEvaluationEnabled || peerEvaluationLocked) {
       return;
     }
-    if (!evaluationText.trim()) {
+
+    const editableAssignments = peerAssignments.filter(
+      (assignment) => assignment.status === 'pending' || assignment.status === 'returned'
+    );
+
+    if (editableAssignments.length === 0) {
       toast({
-        title: "오류",
-        description: "평가 내용을 작성해주세요.",
+        title: "알림",
+        description: "제출할 동료평가가 없습니다.",
         variant: "destructive"
       });
       return;
     }
 
-    if (isSubmittingEvaluation) return; // 중복 제출 방지
+    const hasEmptyFeedback = editableAssignments.some((assignment) => !assignment.draftText.trim());
+    if (hasEmptyFeedback) {
+      toast({
+        title: "오류",
+        description: "모든 동료에 대한 피드백을 입력해주세요.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (isSubmittingEvaluation) return;
 
     try {
       setIsSubmittingEvaluation(true);
-      
-      // 현재 학생이 평가해야 할 대상 찾기
-      const { data: evaluationTarget, error: targetError } = await supabase
+      const submittedAt = new Date().toISOString();
+
+      const updates = editableAssignments.map((assignment) => ({
+        id: assignment.id,
+        evaluation_text: assignment.draftText,
+        is_completed: true,
+        status: 'submitted',
+        submitted_at: submittedAt,
+        locked_at: submittedAt,
+        return_reason: null,
+        returned_at: null
+      }));
+
+      const { error } = await supabase
         .from('peer_evaluations')
-        .select('*')
-        .eq('activity_id', activity.id)
-        .eq('evaluator_id', studentId)
-        .eq('is_completed', false)
-        .limit(1)
-        .single();
+        .upsert(updates, { onConflict: 'id' });
 
-      if (targetError) throw targetError;
-
-      if (!evaluationTarget) {
-        toast({
-          title: "알림",
-          description: "평가할 대상이 없거나 이미 모든 평가를 완료했습니다.",
-          variant: "destructive"
-        });
-        return;
+      if (error) {
+        throw error;
       }
 
-      const { data: peerEvaluationData, error: peerEvaluationError } = await supabase
-        .from('peer_evaluations')
-        .update({
-          evaluation_text: evaluationText,
-          is_completed: true,
-          submitted_at: new Date().toISOString()
+      setPeerAssignments((prev) =>
+        prev.map((assignment) => {
+          const updated = editableAssignments.find((item) => item.id === assignment.id);
+          if (!updated) return assignment;
+          return {
+            ...assignment,
+            draftText: updated.draftText,
+            status: 'submitted',
+            returnReason: null,
+            returnedAt: null,
+            lockedAt: submittedAt
+          };
         })
-        .eq('id', evaluationTarget.id)
-        .eq('is_completed', false) // 아직 완료되지 않은 것만 업데이트
-        .select()
-        .single();
+      );
 
-      if (peerEvaluationError) {
-        if (peerEvaluationError.code === '23505') { // 유니크 제약조건 위반
-          toast({
-            title: "알림",
-            description: "이미 제출된 평가입니다.",
-            variant: "destructive"
-          });
-          return;
-        }
-        throw peerEvaluationError;
-      }
-
-      if (!peerEvaluationData) {
-        toast({
-          title: "알림", 
-          description: "이미 제출된 평가입니다.",
-          variant: "destructive"
-        });
-        return;
-      }
-
-      setEvaluationText('');
+      setPeerEvaluationLocked(true);
+      setPeerAssignmentReady(false);
       setActiveTask('none');
 
       toast({
         title: "성공",
         description: "동료평가가 제출되었습니다."
       });
-
     } catch (error) {
       console.error('동료평가 제출 오류:', error);
       toast({
@@ -385,6 +485,14 @@ const ArgumentationActivity = ({
     } finally {
       setIsSubmittingEvaluation(false);
     }
+  };
+
+  const updatePeerAssignmentDraft = (assignmentId: string, value: string) => {
+    setPeerAssignments((prev) =>
+      prev.map((assignment) =>
+        assignment.id === assignmentId ? { ...assignment, draftText: value } : assignment
+      )
+    );
   };
 
   const submitReflection = async () => {
@@ -451,8 +559,6 @@ const ArgumentationActivity = ({
     setActiveTask,
     argumentText: argument,
     setArgumentText: setArgument,
-    evaluationText,
-    setEvaluationText,
     reflectionText,
     setReflectionText,
     finalRevisedArgument,
@@ -461,12 +567,20 @@ const ArgumentationActivity = ({
     setUsefulnessRating,
     peerResponse,
     peerEvaluations,
+    setPeerEvaluations,
+    peerAssignments,
+    peerAssignmentsLoading,
+    peerEvaluationLocked,
+    updatePeerAssignmentDraft,
+    isSubmittingEvaluation,
     isSubmitted,
     submitArgument,
     submitPeerEvaluation,
     submitReflection,
     peerEvaluationEnabled: peerEvaluationAvailable,
-    peerAssignmentReady
+    peerAssignmentReady,
+    peerPhaseActive,
+    refreshPeerAssignments: loadPeerAssignments
   };
 
   useEffect(() => {
@@ -551,7 +665,7 @@ const ArgumentationActivity = ({
                 <Button
                   onClick={() => setActiveTask('peer-evaluation')}
                   className="w-full bg-green-600 hover:bg-green-700"
-                  disabled={!isSubmitted || !peerAssignmentReady}
+                  disabled={!isSubmitted || !peerAssignmentReady || peerEvaluationLocked}
                 >
                   동료 평가
                 </Button>
@@ -565,10 +679,13 @@ const ArgumentationActivity = ({
                     <span className="ml-2 text-xs">(대기중)</span>
                   )}
                 </Button>
-                {!peerAssignmentReady && (
+                {!peerAssignmentReady && !peerEvaluationLocked && (
                   <p className="text-xs text-gray-500 text-center">
                     교사가 동료평가를 배정하면 사용할 수 있습니다.
                   </p>
+                )}
+                {peerEvaluationLocked && (
+                  <p className="text-xs text-green-600 text-center">동료평가를 제출했습니다.</p>
                 )}
               </>
             )}

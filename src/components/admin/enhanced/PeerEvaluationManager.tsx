@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import ResponseCancellationDialog from './ResponseCancellationDialog';
 import PeerEvaluationCancellationDialog from './PeerEvaluationCancellationDialog';
+import PeerEvaluationReviewDialog from './PeerEvaluationReviewDialog';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -754,7 +755,7 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
                         )}
                       </div>
                       
-                      <div className="flex items-center space-x-1">
+                      <div className="flex items-center space-x-2">
                         <Badge variant={student.completed_evaluations === student.assigned_evaluations && student.assigned_evaluations > 0 ? "default" : "secondary"}>
                           평가: {student.completed_evaluations}/{student.assigned_evaluations}
                         </Badge>
@@ -764,6 +765,14 @@ const PeerEvaluationManager = ({ selectedClass, selectedActivity, activityTitle 
                           activityId={selectedActivity}
                           activityTitle={activityTitle}
                           completedEvaluations={student.completed_evaluations}
+                          onRefresh={fetchEvaluationData}
+                        />
+                        <PeerEvaluationReviewDialog
+                          studentId={student.student_id}
+                          studentName={student.name}
+                          activityId={selectedActivity}
+                          activityTitle={activityTitle}
+                          disabled={student.assigned_evaluations === 0}
                           onRefresh={fetchEvaluationData}
                         />
                       </div>
